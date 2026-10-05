@@ -26,10 +26,15 @@ Soothia is a Chrome MV3 extension (floating orb on every page) backed by a Cloud
 - `GET /markets/` takes `category`, `status` (the market phase: `primary`, `secondary`, `resolved`, `cancelled`), `cursor`, and `limit` (max 50). It returns `{ items, nextCursor }`.
 - The docs say list rows have null prices and `GET /markets/{marketId}/` fills `yesPrice` and `noPrice`. Observed on 2026-10-05: list rows did carry prices, some list rows had a blank `title` that the detail endpoint filled, and detail calls made in a quick burst sometimes came back with blank titles and null prices. Merge list and detail data instead of trusting either alone.
 - `GET /categories/` returned 8 slugs, but live markets use others too (`stocks`, `commodities`, `pop-culture`, `macroeconomics`, `business`, `gaming`, `space-universe`). Do not treat the categories list as complete.
+- Creating a market costs 50 USDC (from the live quote). Full rules are in `docs/panta-create-rules.md`.
+- The question, resolution rule, and sources are stored in the create transaction, which must fit in 1232 bytes. Panta does not check this; `worker/src/pantaRules.ts` does (`ONCHAIN_TEXT_BUDGET_BYTES`).
+- Market page: `https://www.panta.market/market/<marketId>`.
 - Catalog reads are rate limited to about 120 requests per 60 seconds. Honor `Retry-After` on 429.
 
 ## Commands
 
 - Extension: `cd extension && npm install && npm run build` (also `npm run typecheck`)
-- Worker: `cd worker && npm install && npm run dev` (local), `npm run deploy` (production), `npm run typecheck`
+- Worker: `cd worker && npm install && npm run dev` (local), `npm run deploy` (production), `npm run typecheck`, `npm test`
+- Extension tests: `cd extension && npm test`
+- Category images: `cd scripts && npm run make-category-images` (writes `worker/public/img`)
 - Catalog check: `cd scripts && npm install && npm run catalog-check`

@@ -4,7 +4,8 @@ import { test } from "node:test";
 import { assembleV0 } from "../src/assemble";
 import { decodeBase58, encodeBase58, isAddress, isSignature } from "../src/base58";
 import { validateDraft, type MarketDraft } from "../src/pantaRules";
-import { deadlineUtc, resolutionRule, sourcesOfTruth } from "../src/resolution";
+import { ONCHAIN_TEXT_BUDGET_BYTES } from "../src/pantaRules";
+import { deadlineUtc, onchainTextBytes, resolutionRule, sourcesOfTruth } from "../src/resolution";
 
 const NOW = Date.parse("2026-10-05T12:00:00Z");
 const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
@@ -31,12 +32,10 @@ test("base58 round-trips Solana addresses, including leading zero bytes", () => 
   assert.equal(isSignature(USDC_MINT), false);
 });
 
-test("sources always start with the page, then the category defaults", () => {
-  assert.deepEqual(sourcesOfTruth(draft), [
-    draft.pageUrl,
-    "https://www.coingecko.com",
-    "https://www.coingecko.com/en/coins/bitcoin",
-  ]);
+test("sources start with the page, then the category default", () => {
+  assert.deepEqual(sourcesOfTruth(draft), [draft.pageUrl, "https://www.coingecko.com/en/coins/bitcoin"]);
+  const unknownCoin = { ...draft, question: "Will FARTCOIN trade above $2 by December 31, 2026?" };
+  assert.deepEqual(sourcesOfTruth(unknownCoin), [draft.pageUrl, "https://www.coingecko.com"]);
   const sports = { ...draft, category: "sports" as const, question: "Will Arsenal beat Liverpool on October 10, 2026?" };
   assert.deepEqual(sourcesOfTruth(sports), [draft.pageUrl, "https://www.premierleague.com"]);
   const unknownLeague = { ...sports, question: "Will Wrexham win promotion by May 2, 2027?" };
@@ -44,16 +43,35 @@ test("sources always start with the page, then the category defaults", () => {
   assert.deepEqual(sourcesOfTruth({ ...draft, category: "politics" }), [draft.pageUrl, "https://www.reuters.com"]);
 });
 
-test("the rule states the question, the UTC deadline, and the sources, within Panta's limit", () => {
+test("a long page URL is shortened so it cannot use up the transaction", () => {
+  const long = `https://news.example.com/world/a-story?utm_source=${"x".repeat(300)}`;
+  assert.equal(sourcesOfTruth({ ...draft, pageUrl: long })[0], "https://news.example.com/world/a-story");
+  const longPath = `https://news.example.com/${"p".repeat(300)}`;
+  assert.equal(sourcesOfTruth({ ...draft, pageUrl: longPath })[0], "https://news.example.com");
+});
+
+test("the rule states the UTC deadline and always fits the transaction's text budget", () => {
   const sources = sourcesOfTruth(draft);
-  const rule = resolutionRule(draft, sources);
+  const rule = resolutionRule(draft, sources)!;
   assert.equal(deadlineUtc(draft.endTime), "2026-12-31 23:59 UTC");
-  assert.ok(rule.includes(draft.question));
+  assert.ok(rule.includes("Resolves YES") && rule.includes("Otherwise NO"));
   assert.ok(rule.includes("2026-12-31 23:59 UTC"));
-  assert.ok(rule.includes("resolves YES") && rule.includes("resolves NO"));
-  assert.ok(rule.includes("https://www.coingecko.com/en/coins/bitcoin"));
-  assert.ok(rule.length <= 2048);
-  assert.ok(resolutionRule({ ...draft, details: "x".repeat(5000) }, sources).length <= 2048);
+  assert.ok(rule.includes("USD price"));
+  assert.ok(onchainTextBytes(draft.question, rule, sources) <= ONCHAIN_TEXT_BUDGET_BYTES);
+
+  // Drafted detail is used when it fits and left out when it does not.
+  const short = resolutionRule({ ...draft, details: "CoinGecko BTC/USD." }, sources)!;
+  assert.ok(short.includes("CoinGecko BTC/USD."));
+  const huge = resolutionRule({ ...draft, details: "x".repeat(5000) }, sources)!;
+  assert.ok(!huge.includes("xxxx"));
+
+  // The longest allowed question, in multi-byte characters, with a long URL.
+  const worst = { ...draft, question: `Will ${"\u00e9".repeat(194)}?`, pageUrl: `https://a.example/${"p".repeat(100)}` };
+  const worstSources = sourcesOfTruth(worst);
+  const worstRule = resolutionRule(worst, worstSources);
+  if (worstRule !== null) {
+    assert.ok(onchainTextBytes(worst.question, worstRule, worstSources) <= ONCHAIN_TEXT_BUDGET_BYTES);
+  }
 });
 
 test("draft validation enforces Panta's categories, lengths, and the end-time window", () => {
@@ -64,7 +82,7 @@ test("draft validation enforces Panta's categories, lengths, and the end-time wi
   };
   assert.equal(field({ category: "stocks" }), "category");
   assert.equal(field({ question: "Too short" }), "question");
-  assert.equal(field({ question: "Will ".padEnd(600, "x") }), "question");
+  assert.equal(field({ question: "Will ".padEnd(201, "x") }), "question");
   assert.equal(field({ endTime: "2026-10-05T13:00:00Z" }), "endTime");
   assert.equal(field({ endTime: "2027-12-31T23:59:59Z" }), "endTime");
   assert.equal(field({ pageUrl: "javascript:alert(1)" }), "pageUrl");

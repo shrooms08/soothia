@@ -65,6 +65,12 @@ Optional:
 
 ## Length limits
 
+**LIVE, and more important than the documented limits below:** `question`, `resolutionRule`, and every entry of `sourcesOfTruth` are written into the create transaction, and a Solana transaction cannot exceed 1232 bytes. Panta's quote and build do not check this. A draft with a 55-character question, a 612-character rule, and three sources quoted and built without error, but the transaction was 1539 bytes and could never be signed (`@solana/web3.js` fails with "encoding overruns Uint8Array") or sent.
+
+Measured: everything else in the transaction takes about 725 bytes, each source costs 4 extra bytes, leaving about 495 UTF-8 bytes for question + rule + sources together. Soothia budgets 470 (`ONCHAIN_TEXT_BUDGET_BYTES`), caps the question at 200 characters, writes a short rule that does not repeat the question or sources, uses two sources, and refuses any built transaction over 1232 bytes. With that budget, a normal draft builds to 1194 bytes and a worst-case one to 1193.
+
+The documented limits, which the transaction size makes unreachable:
+
 - `question`: max 512.
 - `resolutionRule`: max 2048.
 - `sourcesOfTruth`: 1 to 20 entries. Per-entry length **UNCLEAR**.
@@ -178,6 +184,10 @@ Response:
 
 "Do not change instruction accounts or fee amounts." If the blockhash expires, call build again with the same `createId`; if the session expired, quote again.
 
+**LIVE:** build's `expiresAt` is not the session expiry. A quote with `expiresAt` 15:19:06 produced a build with `expiresAt` 15:15:47, about a minute after the build call. It tracks the blockhash. Use the quote's `expiresAt` for the session.
+
+**LIVE:** the built transaction has one signature slot (the wallet) and three instructions: compute budget, associated token account, and Panta's program `6gM5afTQBq5VZCfgpGqcsqzfWd5maLSCKWtGjbEobZMp`.
+
 ### 3. Sign and broadcast
 
 The playground deserializes with `VersionedTransaction.deserialize(Buffer.from(base64, "base64"))`, calls the wallet's `signTransaction`, and sends with `connection.sendRawTransaction(signed.serialize(), { skipPreflight: false, preflightCommitment: "confirmed" })` on its own RPC.
@@ -220,6 +230,10 @@ Verification is "fail-closed (transaction presence and success, program, account
 | Any | `RATE_LIMITED` | Quote 30 per 60s, build 20 per 60s, register 40 per 60s, per account. | Honor `Retry-After`. |
 
 **UNCLEAR, and the main risk in this flow:** whether register still succeeds when the transaction confirmed but the 5-minute session ran out before register was called. The docs list `CREATE_EXPIRED` for register. If so, a slow signer could pay 50 USDC for a market that is on-chain but not in the catalog. Soothia refuses to send a signed transaction when the session has under 45 seconds left, and asks for a fresh signature on a new quote instead.
+
+**LIVE:** the transient quote failure (`unexpected create quote failure — check server logs`) showed up on roughly one quote in three during the P2 build and cleared within a few seconds each time. Soothia's Worker retries twice (after 1.5s and 4s).
+
+**LIVE:** Panta's quote accepted an `imageUrl` hosted on the Soothia Worker (`https://soothia-proxy.heylana.workers.dev/img/crypto.png`). The Cloudinary upload flow was not needed.
 
 **UNCLEAR:** the required commitment for register (`confirmed` or `finalized`).
 

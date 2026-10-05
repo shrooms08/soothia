@@ -81,6 +81,19 @@ export const START_BUFFER_SEC = 300;
 // resolutionTime = endTime + this, as in Panta's own quote example.
 export const RESOLUTION_DELAY_SEC = 3600;
 export const DRAFT_QUESTION_MIN_LENGTH = 10;
+
+// The real ceiling on text is Solana's transaction size, not Panta's field
+// limits. The question, resolutionRule, and sourcesOfTruth are all written
+// into the create transaction, which must fit in 1232 bytes. Measured live:
+// everything else in the transaction takes 725 bytes, each source costs 4
+// more, and the two strings cost 4 each, leaving about 495 bytes of text.
+export const MAX_TRANSACTION_BYTES = 1232;
+// UTF-8 bytes for question + resolutionRule + every source (plus 4 per source), with a margin.
+export const ONCHAIN_TEXT_BUDGET_BYTES = 470;
+// So a question always leaves room for a rule and sources.
+export const DRAFT_QUESTION_MAX_LENGTH = 200;
+// A longer page URL is cut back to its origin and path, then to its origin.
+export const PAGE_SOURCE_MAX_BYTES = 120;
 export const DESCRIPTION_MAX_LENGTH = 500;
 export const PAGE_URL_MAX_LENGTH = 2048;
 
@@ -114,8 +127,8 @@ export function validateDraft(raw: unknown, nowMs: number): DraftValidation {
   if (!isString(input.question)) return bad("question", "Write a question.");
   const question = input.question.trim().replace(/\s+/g, " ");
   if (question.length < DRAFT_QUESTION_MIN_LENGTH) return bad("question", "The question is too short.");
-  if (question.length > QUESTION_MAX_LENGTH) {
-    return bad("question", `The question can be at most ${QUESTION_MAX_LENGTH} characters.`);
+  if (question.length > DRAFT_QUESTION_MAX_LENGTH) {
+    return bad("question", `The question can be at most ${DRAFT_QUESTION_MAX_LENGTH} characters.`);
   }
 
   if (!isString(input.category) || !CATEGORIES.includes(input.category as Category)) {
@@ -235,7 +248,7 @@ export function validateClaim(raw: unknown, pageText: string, nowMs: number): Va
   if (!isString(input.question)) return drop("question_format");
   const question = input.question.trim().replace(/\s+/g, " ");
   if (!/^Will\s.+\?$/.test(question)) return drop("question_format");
-  if (question.length > QUESTION_MAX_LENGTH) return drop("question_too_long");
+  if (question.length > DRAFT_QUESTION_MAX_LENGTH) return drop("question_too_long");
 
   if (!isString(input.category)) return drop("category_not_allowed");
   const category = input.category as Category;

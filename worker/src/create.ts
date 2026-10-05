@@ -9,6 +9,7 @@ import {
   DESCRIPTION_MAX_LENGTH,
   DRAFT_MARKET_TYPE,
   MARKET_PAGE_BASE,
+  MAX_TRANSACTION_BYTES,
   MIN_START_DELAY_SEC,
   RESOLUTION_DELAY_SEC,
   START_BUFFER_SEC,
@@ -19,11 +20,11 @@ import { resolutionRule, sourcesOfTruth } from "./resolution";
 import { rpc, RpcError } from "./rpc";
 
 const QUOTE_TTL_SEC = 24 * 3600;
+const TOO_LONG = "The question is too long to fit in one Solana transaction. Shorten it.";
 const TRANSIENT_QUOTE_FAILURE = "unexpected create quote failure";
 const TRANSIENT_QUOTE_RETRY_WAITS_MS = [1500, 4000];
-// Panta's create transaction is about 1540 bytes (2052 base64 characters),
-// above the classic 1232-byte packet. Allow up to 4096 bytes.
-const MAX_TX_BASE64 = 5600;
+// A serialized transaction is at most 1232 bytes: 1644 base64 characters.
+const MAX_TX_BASE64 = 1700;
 const POLL_INTERVAL_MS = 2500;
 const SEND_CONFIRM_WAIT_MS = 60_000;
 const RETRY_CONFIRM_WAIT_MS = 20_000;
@@ -135,6 +136,7 @@ export async function handleQuote(request: Request, env: Env): Promise<Response>
   const endTime = Math.floor(Date.parse(draft.endTime) / 1000);
   const sources = sourcesOfTruth(draft);
   const rule = resolutionRule(draft, sources);
+  if (!rule) return json(request, { error: "invalid_draft", field: "question", message: TOO_LONG }, 400);
   // Served by this same Worker from its static assets.
   const imageUrl = `${new URL(request.url).origin}/img/${draft.category}.png`;
 
@@ -214,6 +216,12 @@ export async function handleBuild(request: Request, env: Env): Promise<Response>
   const build = result.data;
 
   if (build.transaction) {
+    // Panta builds whatever was quoted, even when the text makes the
+    // transaction too big to ever be signed or sent. Catch that here.
+    const bytes = Math.floor((build.transaction.replace(/=+$/, "").length * 3) / 4);
+    if (bytes > MAX_TRANSACTION_BYTES) {
+      return json(request, { error: "transaction_too_large", message: TOO_LONG, bytes }, 400);
+    }
     return json(request, {
       txBase64: build.transaction,
       recentBlockhash: build.recentBlockhash ?? null,

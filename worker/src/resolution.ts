@@ -1,20 +1,31 @@
 // Writes the resolution rule and sources of truth for a market draft.
 // Deterministic, so the review sheet shows exactly what Panta will receive.
 import {
+  ONCHAIN_TEXT_BUDGET_BYTES,
+  PAGE_SOURCE_MAX_BYTES,
   RESOLUTION_RULE_MAX_LENGTH,
   SOURCES_OF_TRUTH_MAX,
   type MarketDraft,
   type ResolutionType,
 } from "./pantaRules";
 
+// Kept short on purpose: this text is paid for in transaction bytes.
 const HOW_DECIDED: Record<ResolutionType, string> = {
-  price_threshold:
-    "The price is the asset's USD price as published by the price source listed below. Reaching the level at any moment up to the deadline counts, unless the question names a specific time.",
-  sports_result:
-    "The result is the official final result published by the competition's organiser. If the event is postponed past the deadline, cancelled, or abandoned, this market resolves NO.",
-  official_outcome:
-    "The outcome must be confirmed by an official or authoritative public source, such as those listed below, on or before the deadline.",
+  price_threshold: "Judged by the USD price on the listed price source. Touching the level at any time before the deadline counts.",
+  sports_result: "Judged by the official final result. Postponed past the deadline, cancelled or abandoned resolves NO.",
+  official_outcome: "Must be confirmed by an official or authoritative public source.",
 };
+
+const encoder = new TextEncoder();
+
+export function utf8Bytes(text: string): number {
+  return encoder.encode(text).length;
+}
+
+/** UTF-8 bytes this text takes in the create transaction. */
+export function onchainTextBytes(question: string, rule: string, sources: string[]): number {
+  return utf8Bytes(question) + utf8Bytes(rule) + sources.reduce((sum, source) => sum + utf8Bytes(source) + 4, 0);
+}
 
 // CoinGecko page per asset, matched on whole words in the question.
 const COINGECKO: [RegExp, string][] = [
@@ -51,14 +62,26 @@ function firstMatch(text: string, table: [RegExp, string][]): string | null {
   return table.find(([pattern]) => pattern.test(text))?.[1] ?? null;
 }
 
+/** The page URL as a source, shortened if it would eat the transaction's text budget. */
+function pageSource(pageUrl: string): string {
+  if (utf8Bytes(pageUrl) <= PAGE_SOURCE_MAX_BYTES) return pageUrl;
+  try {
+    const url = new URL(pageUrl);
+    const withoutQuery = url.origin + url.pathname;
+    return utf8Bytes(withoutQuery) <= PAGE_SOURCE_MAX_BYTES ? withoutQuery : url.origin;
+  } catch {
+    return pageUrl.slice(0, PAGE_SOURCE_MAX_BYTES);
+  }
+}
+
 /** The page the claim came from, then the category's standard sources. */
 export function sourcesOfTruth(draft: MarketDraft): string[] {
-  const sources = [draft.pageUrl];
+  const sources = [pageSource(draft.pageUrl)];
   switch (draft.category) {
     case "crypto": {
-      sources.push("https://www.coingecko.com");
+      // The asset's own page when known, otherwise the price site's front page.
       const asset = firstMatch(draft.question, COINGECKO);
-      if (asset) sources.push(`https://www.coingecko.com/en/coins/${asset}`);
+      sources.push(asset ? `https://www.coingecko.com/en/coins/${asset}` : "https://www.coingecko.com");
       break;
     }
     case "sports":
@@ -75,15 +98,18 @@ export function deadlineUtc(endTime: string): string {
   return `${new Date(endTime).toISOString().slice(0, 16).replace("T", " ")} UTC`;
 }
 
-export function resolutionRule(draft: MarketDraft, sources: string[]): string {
-  const rule = [
-    `This market asks: "${draft.question}"`,
-    `It resolves YES if that happens on or before the deadline of ${deadlineUtc(draft.endTime)}. Otherwise it resolves NO.`,
-    draft.details ? `How YES is decided: ${draft.details}` : "",
-    HOW_DECIDED[draft.resolutionType],
-    `Sources of truth: ${sources.join(", ")}.`,
-  ]
-    .filter(Boolean)
-    .join(" ");
+/**
+ * The rule sent to Panta. It does not repeat the question or the sources
+ * (both are stored beside it), and it adds detail only while the whole text
+ * still fits in one transaction. Returns null when even the core sentence
+ * does not fit: the question is too long.
+ */
+export function resolutionRule(draft: MarketDraft, sources: string[]): string | null {
+  const room = ONCHAIN_TEXT_BUDGET_BYTES - onchainTextBytes(draft.question, "", sources);
+  let rule = `Resolves YES if this happens on or before ${deadlineUtc(draft.endTime)}, as shown by the listed sources. Otherwise NO.`;
+  if (utf8Bytes(rule) > room) return null;
+  for (const extra of [draft.details, HOW_DECIDED[draft.resolutionType]]) {
+    if (extra && utf8Bytes(`${rule} ${extra}`) <= room) rule = `${rule} ${extra}`;
+  }
   return rule.slice(0, RESOLUTION_RULE_MAX_LENGTH);
 }
