@@ -41,6 +41,15 @@ export function endDate(iso: string): string {
   return Number.isNaN(date.getTime()) ? "" : END_DATE.format(date);
 }
 
+/** "coingecko.com" for "https://www.coingecko.com/en/coins/bitcoin". */
+export function domainName(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}
+
 /** "7xKX…3fPq" */
 export function shortAddress(address: string): string {
   return address.length > 10 ? `${address.slice(0, 4)}…${address.slice(-4)}` : address;

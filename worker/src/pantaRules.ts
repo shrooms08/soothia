@@ -86,9 +86,10 @@ export const DRAFT_QUESTION_MIN_LENGTH = 10;
 // limits. The question, resolutionRule, and sourcesOfTruth are all written
 // into the create transaction, and a transaction cannot exceed 1232 bytes.
 export const SOLANA_MAX_TRANSACTION_BYTES = 1232;
-// Soothia refuses a built create transaction above this, leaving room for
-// the compute-budget and priority-fee instructions a wallet may add when signing.
-export const MAX_BUILT_TRANSACTION_BYTES = 1100;
+// Soothia refuses a built create transaction above this. The 82 bytes left
+// are for compute-budget and priority-fee instructions a wallet may add when
+// signing (Phantom was seen adding one instruction, 12 bytes).
+export const MAX_BUILT_TRANSACTION_BYTES = 1150;
 // Measured live, twice: transaction bytes = 737 + UTF-8 bytes of the
 // question and rule + (bytes + 4) for each source.
 export const TRANSACTION_FIXED_BYTES = 737;
@@ -116,8 +117,6 @@ export interface MarketDraft {
   /** The page the claim came from; always the first source of truth. */
   pageUrl: string;
   resolutionType: ResolutionType;
-  /** The drafted "how YES is decided" sentence, when the question is unedited. */
-  details?: string;
 }
 
 export type DraftValidation =
@@ -159,11 +158,7 @@ export function validateDraft(raw: unknown, nowMs: number): DraftValidation {
     if ((RESOLUTION_TYPES[wanted].categories as readonly string[]).includes(category)) resolutionType = wanted;
   }
 
-  const details = isString(input.details) ? input.details.trim().slice(0, 1000) : "";
-  return {
-    ok: true,
-    draft: { question, category, endTime, pageUrl: input.pageUrl, resolutionType, ...(details ? { details } : {}) },
-  };
+  return { ok: true, draft: { question, category, endTime, pageUrl: input.pageUrl, resolutionType } };
 }
 
 // ---- Claim shape ----

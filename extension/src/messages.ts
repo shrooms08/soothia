@@ -158,7 +158,9 @@ export interface Quote {
   marketId: string;
   /** The question as sent to Panta: trimmed if it had to be. */
   question: string;
-  /** What was shrunk to fit the transaction: one_source, minimal_rule, question_trimmed. */
+  /** The data source the market resolves on; always the first source of truth. */
+  authority: { name: string; url: string };
+  /** What was shrunk to fit the transaction: page_link_dropped, minimal_rule, question_trimmed. */
   adjustments: string[];
   predictedBytes: number;
   resolutionRule: string;

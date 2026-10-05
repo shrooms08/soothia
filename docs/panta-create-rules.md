@@ -71,11 +71,13 @@ Measured twice: transaction bytes = 737 + the UTF-8 bytes of the question and ru
 
 Soothia's rules (in `worker/src/pantaRules.ts` and `worker/src/resolution.ts`):
 
-- A built create transaction over **1100 bytes** is refused (`MAX_BUILT_TRANSACTION_BYTES`). The 132 bytes of headroom are for compute-budget or priority-fee instructions a wallet may add when signing.
-- That leaves 355 bytes of text (`ONCHAIN_TEXT_BUDGET_BYTES`). The question is capped at 200 characters. The rule never repeats the question or the sources.
-- A draft that does not fit is shrunk in this order, stopping as soon as it fits: (1) one source of truth, the page URL; (2) the minimal rule, "YES if this happens by <deadline UTC>, per the listed source. Otherwise NO."; (3) the question trimmed to 150 characters on a word boundary. The quote response lists what was done in `adjustments` and returns the final `question`.
-- `/create/build` measures the real transaction. If it is over 1100 bytes it shrinks one more step, quotes again, rebuilds, and returns the new quote so the user can review the changed text before signing.
-- **LIVE:** a normal draft (55-character question, two sources, drafted detail in the rule) builds to 1056 bytes. A long draft (196-character question, 119-character page URL, 370 characters of detail) is shrunk through all three steps and builds to 1088 bytes.
+- A built create transaction over **1150 bytes** is refused (`MAX_BUILT_TRANSACTION_BYTES`). The 82 bytes of headroom are for compute-budget or priority-fee instructions a wallet adds when signing. **LIVE:** Phantom added one compute-budget instruction, 12 bytes (938 built, 950 signed).
+- That leaves 405 bytes of text (`ONCHAIN_TEXT_BUDGET_BYTES`). The question is capped at 200 characters.
+- **Every market keeps one authoritative data source, listed first and never dropped:** crypto uses the asset's CoinGecko page (else `https://www.coingecko.com`); sports uses the league's official site (else `https://www.espn.com`); every other category uses `https://www.reuters.com`. The page the claim came from is the second source when there is room.
+- The rule names that source: "YES if this happens by <deadline UTC>, per CoinGecko's BTC/USD price. Otherwise NO.", plus one fixed sentence per resolution type when there is room. The rule is never written from model-drafted wording, which can carry numbers that are not on the page.
+- A draft that does not fit is shrunk in this order, stopping as soon as it fits: (a) drop the page link; (b) the minimal rule (the first sentence only); (c) the question trimmed to 150 characters on a word boundary. The quote response lists what was done in `adjustments` (`page_link_dropped`, `minimal_rule`, `question_trimmed`) and returns the final `question` and the `authority`.
+- `/create/build` measures the real transaction. If it is over the cap it shrinks one more step, quotes again, rebuilds, and returns the new quote so the user can review the changed text before signing.
+- **LIVE:** "Will Bitcoin reach a new all-time high by December 31, 2026?" with an X post as the page keeps both sources and builds to 1051 bytes. A 196-character question with a 119-character page URL drops the page link and builds to 1103 bytes. A 200-character question in mixed Latin and Cyrillic needs all three steps and builds to 1084 bytes.
 - The extension checks the signed transaction before sending: it must be at most 1232 bytes, and identical to the built one except for added or changed compute-budget instructions (`extension/src/tx-check.ts`).
 
 The documented limits, which the transaction size makes unreachable:

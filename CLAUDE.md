@@ -27,7 +27,7 @@ Soothia is a Chrome MV3 extension (floating orb on every page) backed by a Cloud
 - The docs say list rows have null prices and `GET /markets/{marketId}/` fills `yesPrice` and `noPrice`. Observed on 2026-10-05: list rows did carry prices, some list rows had a blank `title` that the detail endpoint filled, and detail calls made in a quick burst sometimes came back with blank titles and null prices. Merge list and detail data instead of trusting either alone.
 - `GET /categories/` returned 8 slugs, but live markets use others too (`stocks`, `commodities`, `pop-culture`, `macroeconomics`, `business`, `gaming`, `space-universe`). Do not treat the categories list as complete.
 - Creating a market costs 50 USDC (from the live quote). Full rules are in `docs/panta-create-rules.md`.
-- The question, resolution rule, and sources are stored in the create transaction, which must fit in 1232 bytes. Panta does not check this. The Worker refuses built create transactions over 1100 bytes and shrinks the text to fit (`worker/src/pantaRules.ts`, `worker/src/resolution.ts`).
+- The question, resolution rule, and sources are stored in the create transaction, which must fit in 1232 bytes. Panta does not check this. The Worker refuses built create transactions over 1150 bytes and shrinks the text to fit, always keeping one authoritative source (CoinGecko, the league site or ESPN, or Reuters) (`worker/src/pantaRules.ts`, `worker/src/resolution.ts`).
 - Market page: `https://www.panta.market/market/<marketId>`.
 - Catalog reads are rate limited to about 120 requests per 60 seconds. Honor `Retry-After` on 429.
 

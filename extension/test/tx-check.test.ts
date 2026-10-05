@@ -32,9 +32,9 @@ function variant(
   return toBase64(tx.serialize());
 }
 
-test("the fixture is the real Panta create transaction, under Soothia's 1,100-byte limit", () => {
+test("the fixture is the real Panta create transaction, under Soothia's 1,150-byte limit", () => {
   const bytes = Buffer.from(unsigned, "base64").length;
-  assert.ok(bytes <= 1100, `fixture is ${bytes} bytes`);
+  assert.ok(bytes <= 1150, `fixture is ${bytes} bytes`);
 });
 
 test("the same transaction, signed, passes", () => {
@@ -122,7 +122,7 @@ test("an unsigned, oversized, or garbage result is refused", () => {
   const notSigned = checkSignedTransaction(unsigned, variant(undefined, { sign: false }));
   assert.equal(!notSigned.ok && notSigned.problem, "not_signed");
 
-  const padded = Buffer.concat([Buffer.from(variant(), "base64"), Buffer.alloc(300)]);
+  const padded = Buffer.concat([Buffer.from(variant(), "base64"), Buffer.alloc(400)]);
   assert.ok(padded.length > 1232);
   const tooLarge = checkSignedTransaction(unsigned, toBase64(padded));
   assert.equal(!tooLarge.ok && tooLarge.problem, "too_large");

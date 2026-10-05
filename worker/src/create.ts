@@ -200,7 +200,9 @@ async function issueQuote(
       question: fitted.question,
       resolutionRule: fitted.resolutionRule,
       sourcesOfTruth: fitted.sourcesOfTruth,
-      // What was shrunk to fit the transaction: one_source, minimal_rule, question_trimmed.
+      // The data source the market resolves on. Always the first source of truth.
+      authority: { name: fitted.authority.name, url: fitted.authority.url },
+      // What was shrunk to fit the transaction: page_link_dropped, minimal_rule, question_trimmed.
       adjustments: fitted.adjustments,
       predictedBytes: fitted.predictedBytes,
       imageUrl,

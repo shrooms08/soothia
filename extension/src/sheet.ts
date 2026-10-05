@@ -2,7 +2,7 @@
 // market. It owns the create flow: quote -> build -> simulate -> Phantom
 // signs -> send -> confirm -> register. Money moves only in the send step,
 // and only when Dry run is off.
-import { button, el, endDate, externalLink, shortAddress } from "./dom";
+import { button, domainName, el, externalLink, shortAddress } from "./dom";
 import type {
   ApiError,
   ApiPath,
@@ -300,17 +300,26 @@ export function openSheet(host: SheetHost): Sheet {
       question = next.question;
       questionInput.value = next.question;
     }
+    const link = /(^|\.)(x|twitter)\.com$/.test(domainName(host.pageUrl)) ? "post" : "page";
     const changes = [
-      next.adjustments.includes("one_source") ? "used one source" : "",
+      next.adjustments.includes("page_link_dropped")
+        ? `kept ${next.authority.name} as the source and left out the ${link} link`
+        : "",
       next.adjustments.includes("minimal_rule") ? "shortened the rule" : "",
       next.adjustments.includes("question_trimmed") ? "trimmed the question" : "",
     ].filter(Boolean);
-    fitNote.textContent = changes.length ? `To fit in one Solana transaction, I ${changes.join(", ")}.` : "";
+    const listed = changes.length > 1 ? `${changes.slice(0, -1).join(", ")} and ${changes[changes.length - 1]}` : changes[0];
+    fitNote.textContent = changes.length ? `To fit in one Solana transaction, I ${listed}.` : "";
     ruleText.textContent = next.resolutionRule;
     sources.replaceChildren(
       ...next.sourcesOfTruth.map((url) => {
+        // Shown by domain ("coingecko.com"); the link and tooltip carry the full address.
         const item = el("li", "source");
-        item.append(/^https?:\/\//i.test(url) ? externalLink(url, url, "link") : url);
+        if (/^https?:\/\//i.test(url)) {
+          const link = externalLink(domainName(url), url, "link");
+          link.title = url;
+          item.append(link);
+        } else item.append(url);
         return item;
       }),
     );
@@ -335,8 +344,6 @@ export function openSheet(host: SheetHost): Sheet {
       endTime,
       pageUrl: host.pageUrl,
       resolutionType: claim.resolution.type,
-      // The drafted wording only describes the question as drafted.
-      ...(question === claim.question ? { details: claim.resolution.details } : {}),
     };
   }
 
