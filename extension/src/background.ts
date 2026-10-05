@@ -5,14 +5,18 @@ import {
   DETECT_REQUEST,
   HEALTH_REQUEST,
   type Claim,
+  type DetectDebug,
+  type DetectRequestMessage,
   type DetectResult,
+  type DroppedClaim,
   type HealthResponse,
   type MatchedMarket,
   type PageContext,
 } from "./messages";
 
 const INSTALL_KEY = "soothia:installId";
-const RESULT_PREFIX = "soothia:detect:";
+// v2: results now carry a debug block.
+const RESULT_PREFIX = "soothia:detect:v2:";
 // A URL is detected at most once in this window; repeats get the stored result.
 const RESULT_TTL_MS = 10 * 60 * 1000;
 // A failed attempt cost nothing, so it only holds off retries briefly.
@@ -43,22 +47,40 @@ async function installId(): Promise<string> {
   return created;
 }
 
-async function post(path: string, body: unknown): Promise<Response> {
+async function post(path: string, body: unknown, refresh = false): Promise<Response> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    "X-Soothia-Install": await installId(),
+  };
+  if (refresh) headers["X-Soothia-Refresh"] = "1";
   return fetch(`${WORKER_URL}${path}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "X-Soothia-Install": await installId() },
+    headers,
     body: JSON.stringify(body),
     signal: AbortSignal.timeout(40_000),
   });
 }
 
-async function detect(page: PageContext): Promise<DetectResult> {
+async function detect(page: PageContext, refresh: boolean): Promise<DetectResult> {
+  const debug: DetectDebug = {
+    httpStatus: null,
+    cache: null,
+    fromClientCache: false,
+    claimsReturned: 0,
+    dropped: [],
+  };
   try {
-    const detected = await post("/detect", page);
-    if (detected.status === 429) return { status: "error", reason: "limit" };
-    if (!detected.ok) return { status: "error", reason: "unavailable" };
-    const { claims } = (await detected.json()) as { claims: Claim[] };
-    if (claims.length === 0) return { status: "ok", tiles: [] };
+    const detected = await post("/detect", page, refresh);
+    debug.httpStatus = detected.status;
+    const cache = detected.headers.get("X-Soothia-Cache");
+    debug.cache = cache === "HIT" || cache === "MISS" ? cache : null;
+    if (detected.status === 429) return { status: "error", reason: "limit", debug };
+    if (!detected.ok) return { status: "error", reason: "unavailable", debug };
+    const body = (await detected.json()) as { claims: Claim[]; dropped?: DroppedClaim[] };
+    const claims = body.claims;
+    debug.claimsReturned = claims.length;
+    debug.dropped = body.dropped ?? [];
+    if (claims.length === 0) return { status: "ok", tiles: [], debug };
 
     // A failed match is not an error: the claims still show, unmatched.
     const markets = new Map<string, MatchedMarket | null>();
@@ -73,9 +95,10 @@ async function detect(page: PageContext): Promise<DetectResult> {
     } catch {
       // Leave every claim unmatched.
     }
-    return { status: "ok", tiles: claims.map((claim) => ({ claim, market: markets.get(claim.id) ?? null })) };
+    const tiles = claims.map((claim) => ({ claim, market: markets.get(claim.id) ?? null }));
+    return { status: "ok", tiles, debug };
   } catch {
-    return { status: "error", reason: "unavailable" };
+    return { status: "error", reason: "unavailable", debug };
   }
 }
 
@@ -93,16 +116,20 @@ async function pruneResults(now: number): Promise<void> {
 // Two tabs on the same URL share one request.
 const inFlight = new Map<string, Promise<DetectResult>>();
 
-async function detectOnce(page: PageContext): Promise<DetectResult> {
+async function detectOnce(page: PageContext, refresh: boolean): Promise<DetectResult> {
   const key = RESULT_PREFIX + page.url;
   const now = Date.now();
-  const stored = (await chrome.storage.session.get(key))[key] as StoredResult | undefined;
-  if (isLive(stored, now)) return stored.result;
+  if (!refresh) {
+    const stored = (await chrome.storage.session.get(key))[key] as StoredResult | undefined;
+    if (isLive(stored, now)) {
+      return { ...stored.result, debug: { ...stored.result.debug, fromClientCache: true } };
+    }
+  }
 
   const running = inFlight.get(key);
   if (running) return running;
 
-  const request = detect(page)
+  const request = detect(page, refresh)
     .then(async (result) => {
       await chrome.storage.session.set({ [key]: { at: Date.now(), result } satisfies StoredResult });
       await pruneResults(Date.now());
@@ -113,14 +140,21 @@ async function detectOnce(page: PageContext): Promise<DetectResult> {
   return request;
 }
 
+const FAILED: DetectResult = {
+  status: "error",
+  reason: "unavailable",
+  debug: { httpStatus: null, cache: null, fromClientCache: false, claimsReturned: 0, dropped: [] },
+};
+
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   switch (message?.type) {
     case HEALTH_REQUEST:
       checkHealth().then(sendResponse);
       return true; // keep the channel open for the async response
     case DETECT_REQUEST:
-      detectOnce(message.page as PageContext).then(sendResponse, () =>
-        sendResponse({ status: "error", reason: "unavailable" } satisfies DetectResult),
+      detectOnce((message as DetectRequestMessage).page, (message as DetectRequestMessage).refresh === true).then(
+        sendResponse,
+        () => sendResponse(FAILED),
       );
       return true;
   }

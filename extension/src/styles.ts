@@ -85,8 +85,32 @@ export const STYLES = `
 /* Orb states: idle is the base pulse above. */
 
 .orb[data-state="thinking"] {
-  opacity: 0.6;
   animation: soothia-pulse-thinking 5.5s ease-in-out infinite;
+}
+
+/* Thinking ring: a thin arc circling just outside the orb. One half is
+   violet and the other white, with a dark hairline shadow, so some part of
+   it contrasts with any page, light or dark. */
+.ring {
+  position: absolute;
+  inset: -8px;
+  border: 3px solid transparent;
+  border-top-color: #7c4dff;
+  border-right-color: #ffffff;
+  border-radius: 50%;
+  filter: drop-shadow(0 0 1.5px rgba(0, 0, 0, 0.7));
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 150ms ease-out;
+}
+
+.orb[data-state="thinking"] .ring {
+  opacity: 1;
+  animation: soothia-ring-spin 0.9s linear infinite;
+}
+
+@keyframes soothia-ring-spin {
+  to { transform: rotate(360deg); }
 }
 
 .orb[data-state="found"] {
@@ -260,6 +284,12 @@ export const STYLES = `
   cursor: pointer;
 }
 
+.button.small {
+  margin: 2px 0 8px;
+  padding: 4px 12px;
+  font-size: 12px;
+}
+
 .button.primary {
   border-color: transparent;
   background: #7c4dff;
@@ -288,6 +318,26 @@ export const STYLES = `
   cursor: pointer;
   user-select: none;
   -webkit-user-select: none;
+}
+
+.scan {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 3px 10px;
+  margin: 0 0 8px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.scan-name {
+  color: #8b84a3;
+}
+
+.scan-value {
+  margin: 0;
+  color: #d9ccff;
+  overflow-wrap: anywhere;
 }
 
 .debug .status {
@@ -321,7 +371,8 @@ export const STYLES = `
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .orb, .orb[data-state], .card {
+  /* The ring still appears while thinking; it just does not spin. */
+  .orb, .orb[data-state], .orb[data-state="thinking"] .ring, .card {
     animation: none;
     transition: none;
   }

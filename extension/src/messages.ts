@@ -34,6 +34,8 @@ export interface PageContext {
 export interface DetectRequestMessage {
   type: typeof DETECT_REQUEST;
   page: PageContext;
+  /** "Scan again": skip the 10-minute rule here and the Worker's URL cache. */
+  refresh: boolean;
 }
 
 // Mirrors the Worker's Claim (worker/src/pantaRules.ts).
@@ -61,6 +63,25 @@ export interface Tile {
   market: MatchedMarket | null;
 }
 
-export type DetectResult =
+/** A draft the Worker's validation refused. */
+export interface DroppedClaim {
+  question: string;
+  reason: string;
+}
+
+/** What happened on the way to the Worker, for the debug footer. */
+export interface DetectDebug {
+  /** /detect HTTP status, or null when the request never completed. */
+  httpStatus: number | null;
+  /** X-Soothia-Cache from the Worker. */
+  cache: "HIT" | "MISS" | null;
+  /** True when the 10-minute rule answered and no request was made. */
+  fromClientCache: boolean;
+  claimsReturned: number;
+  dropped: DroppedClaim[];
+}
+
+export type DetectResult = { debug: DetectDebug } & (
   | { status: "ok"; tiles: Tile[] }
-  | { status: "error"; reason: "limit" | "unavailable" };
+  | { status: "error"; reason: "limit" | "unavailable" }
+);

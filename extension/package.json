@@ -4,10 +4,15 @@
   "type": "module",
   "scripts": {
     "build": "node build.mjs",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test test/*.test.ts"
   },
   "devDependencies": {
     "@types/chrome": "^0.1.0",
+    "@types/jsdom": "^30.0.0",
+    "@types/node": "^26.6.4",
+    "jsdom": "^29.1.1",
+    "tsx": "^4.23.15",
     "typescript": "^5",
     "vite": "^7"
   }

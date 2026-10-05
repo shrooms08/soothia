@@ -1,6 +1,7 @@
 // Extracts what the reader is looking at as { url, site, title, text }.
 // Read-only: nothing here changes the page.
 import type { PageContext } from "./messages";
+import { findFocalTweet, readTweetArticle, statusIdFromPath } from "./x-reader";
 
 const TEXT_MAX_CHARS = 4000;
 // Below this there is not enough on the page to draft a market from.
@@ -9,12 +10,25 @@ const MIN_ARTICLE_CHARS = 200;
 const MIN_TWEET_CHARS = 30;
 const MIN_PARAGRAPH_CHARS = 60;
 
-export type ReadResult =
+/** What the reader saw, for the debug footer. Stays in the page; never sent anywhere. */
+export interface ReadInfo {
+  site: string;
+  chars: number;
+  preview: string;
+}
+
+export type ReadResult = { info: ReadInfo } & (
   | { kind: "page"; page: PageContext }
   // Not enough text yet. Dynamic pages may fill in, so the caller can retry.
-  | { kind: "thin" }
+  | { kind: "thin"; reason: string }
   // A page Soothia never reads.
-  | { kind: "skip" };
+  | { kind: "skip"; reason: string }
+);
+
+interface Found {
+  title: string;
+  text: string;
+}
 
 function isSkippedLocation(): boolean {
   if (location.protocol !== "http:" && location.protocol !== "https:") return true;
@@ -42,35 +56,36 @@ function isX(): boolean {
   return /(^|\.)(x|twitter)\.com$/.test(location.hostname);
 }
 
-function mainTweet(): HTMLElement | null {
-  const articles = [...document.querySelectorAll<HTMLElement>('article[data-testid="tweet"]')].filter(isVisible);
-  if (articles.length === 0) return null;
-
-  // On a status page the main tweet links to its own id (timestamp, analytics).
-  const statusId = /\/status\/(\d+)/.exec(location.pathname)?.[1];
+function mainTweet(): { article: Element; statusId?: string } | null {
+  const statusId = statusIdFromPath(location.pathname);
   if (statusId) {
-    const own = articles.find((article) => article.querySelector(`a[href*="/status/${statusId}"]`));
-    if (own) return own;
+    const article = findFocalTweet(document, statusId);
+    return article && { article, statusId };
   }
 
+  // Timelines: the tweet nearest the middle of the viewport.
+  const articles = [...document.querySelectorAll<HTMLElement>('article[data-testid="tweet"]')].filter(isVisible);
+  if (articles.length === 0) return null;
   const middle = window.innerHeight / 2;
   const distance = (article: HTMLElement): number => {
     const rect = article.getBoundingClientRect();
     return Math.abs(rect.top + rect.height / 2 - middle);
   };
-  return articles.reduce((best, article) => (distance(article) < distance(best) ? article : best));
+  return { article: articles.reduce((best, article) => (distance(article) < distance(best) ? article : best)) };
 }
 
-function readTweet(): { title: string; text: string } | null {
-  const article = mainTweet();
-  if (!article) return null;
-  // The first tweetText is the tweet's own; a quoted tweet's comes later.
-  const body = clean(article.querySelector('[data-testid="tweetText"]')?.textContent);
-  if (body.length < MIN_TWEET_CHARS) return null;
-  const handle = /@\w{1,15}/.exec(article.querySelector('[data-testid="User-Name"]')?.textContent ?? "")?.[0];
+function readTweet(): Found | string {
+  const main = mainTweet();
+  if (!main) return "no tweet on the page yet";
+  const tweet = readTweetArticle(main.article, main.statusId);
+  if (!tweet) return "tweet has no text";
+  if (tweet.text.length < MIN_TWEET_CHARS) return `tweet text is ${tweet.text.length} chars, need ${MIN_TWEET_CHARS}`;
+
+  const who = tweet.handle ?? "unknown author";
+  const posted = tweet.postedAt ? ` (posted ${tweet.postedAt.slice(0, 10)})` : "";
   return {
-    title: handle ? `Post by ${handle} on X` : "Post on X",
-    text: handle ? `${handle}: ${body}` : body,
+    title: tweet.handle ? `Post by ${tweet.handle} on X` : "Post on X",
+    text: `${who}${posted}: ${tweet.text}`,
   };
 }
 
@@ -152,24 +167,25 @@ function headline(): string {
   return clean(og) || clean(document.title);
 }
 
-function readArticle(): { title: string; text: string } | null {
+function readArticle(): Found | string {
   const body = articleParagraphs().join("\n");
-  if (body.length < MIN_ARTICLE_CHARS) return null;
+  if (body.length < MIN_ARTICLE_CHARS) return `article text is ${body.length} chars, need ${MIN_ARTICLE_CHARS}`;
   const title = headline();
   return { title, text: title ? `${title}\n\n${body}` : body };
 }
 
 export function readPage(): ReadResult {
-  if (isSkippedLocation()) return { kind: "skip" };
+  const site = location.hostname.replace(/^www\./, "");
+  if (isSkippedLocation()) {
+    return { kind: "skip", reason: "local or non-web page", info: { site, chars: 0, preview: "" } };
+  }
   const found = isX() ? readTweet() : readArticle();
-  if (!found) return { kind: "thin" };
+  if (typeof found === "string") return { kind: "thin", reason: found, info: { site, chars: 0, preview: "" } };
+
+  const text = found.text.slice(0, TEXT_MAX_CHARS);
   return {
     kind: "page",
-    page: {
-      url: location.href.split("#")[0],
-      site: location.hostname.replace(/^www\./, ""),
-      title: found.title.slice(0, 300),
-      text: found.text.slice(0, TEXT_MAX_CHARS),
-    },
+    info: { site, chars: text.length, preview: text.slice(0, 80) },
+    page: { url: location.href.split("#")[0], site, title: found.title.slice(0, 300), text },
   };
 }

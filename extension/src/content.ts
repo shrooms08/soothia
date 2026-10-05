@@ -6,12 +6,13 @@ import {
   NAV_CHANGED,
   WALLET_REQUEST,
   WALLET_STATUS,
+  type DetectDebug,
   type DetectRequestMessage,
   type DetectResult,
   type HealthResponse,
   type Tile,
 } from "./messages";
-import { readPage } from "./reader";
+import { readPage, type ReadInfo } from "./reader";
 import {
   CARD_GAP,
   CARD_WIDTH,
@@ -28,9 +29,12 @@ const DRAG_THRESHOLD = 4;
 
 // Detection runs this long after the page (or a new URL) settles.
 const SETTLE_MS = 2000;
-// Dynamic pages can still be filling in; look again a few times before giving up.
-const THIN_RETRY_MS = 1500;
-const THIN_RETRIES = 3;
+// X and other dynamic pages render after load: look again up to five times
+// over about four seconds before deciding there is nothing to read.
+const THIN_RETRY_MS = 800;
+const THIN_RETRIES = 5;
+// The thinking ring stays at least this long so it never just flickers.
+const MIN_THINKING_MS = 600;
 
 type OrbState = "idle" | "thinking" | "found";
 
@@ -39,7 +43,15 @@ type View =
   | { kind: "thinking" }
   | { kind: "tiles"; tiles: Tile[] }
   | { kind: "empty" }
+  | { kind: "skipped" }
   | { kind: "error"; reason: "limit" | "unavailable" };
+
+// Everything the debug footer shows about the last scan of this URL.
+interface ScanDebug {
+  read: ReadInfo | null;
+  state: string;
+  detect: DetectDebug | null;
+}
 
 const END_DATE = new Intl.DateTimeFormat(undefined, {
   month: "short",
@@ -173,7 +185,7 @@ async function mount(): Promise<void> {
   orb.dataset.state = "idle";
   const badge = el("span", "badge");
   badge.hidden = true;
-  orb.append(badge);
+  orb.append(el("span", "ring"), badge);
 
   const card = el("div", "card");
   card.hidden = true;
@@ -183,7 +195,10 @@ async function mount(): Promise<void> {
   const proxyRow = statusRow();
   const body = el("div", "body");
   const debug = el("details", "debug");
-  debug.append(el("summary", "debug-summary", "debug"), phantomRow.row, proxyRow.row);
+  const scanInfo = el("dl", "scan");
+  const scanAgain = el("button", "button small", "Scan again");
+  scanAgain.type = "button";
+  debug.append(el("summary", "debug-summary", "debug"), scanInfo, scanAgain, phantomRow.row, proxyRow.row);
   card.append(el("h2", "title", "Soothia"), body, debug);
 
   shadow.append(style, orb, card);
@@ -270,6 +285,13 @@ async function mount(): Promise<void> {
     return el("p", "line", text);
   }
 
+  function rescanButton(): HTMLButtonElement {
+    const button = el("button", "button", "Scan again");
+    button.type = "button";
+    button.addEventListener("click", rescan);
+    return button;
+  }
+
   function render(view: View): void {
     switch (view.kind) {
       case "watching":
@@ -288,66 +310,126 @@ async function mount(): Promise<void> {
         setOrb("idle");
         body.replaceChildren(line("Nothing to call here."));
         break;
+      case "skipped":
+        setOrb("idle");
+        body.replaceChildren(line("Not enough to read on this page."));
+        break;
       case "error":
         setOrb("idle");
-        body.replaceChildren(
-          line(
-            view.reason === "limit"
-              ? "That's all my calls for today. I'll be back tomorrow."
-              : "I couldn't read this one just now. Try again in a minute.",
-          ),
-        );
+        if (view.reason === "limit") {
+          body.replaceChildren(line("That's all my calls for today. I'll be back tomorrow."));
+        } else {
+          body.replaceChildren(line("I couldn't read this one just now."), rescanButton());
+        }
         break;
     }
     layout();
   }
 
+  // ---- Debug footer ----
+
+  let scan: ScanDebug = { read: null, state: "waiting for the page to settle", detect: null };
+
+  function renderDebug(): void {
+    const rows: [string, string][] = [
+      ["site", scan.read?.site ?? location.hostname.replace(/^www\./, "")],
+      ["extracted", scan.read ? `${scan.read.chars} chars` : "\u2013"],
+      ["text", scan.read?.preview || "\u2013"],
+      ["detect", scan.state],
+    ];
+    const detect = scan.detect;
+    if (detect) {
+      const worker = detect.cache ?? "\u2013";
+      rows.push(
+        ["http", detect.httpStatus === null ? "no response" : String(detect.httpStatus)],
+        ["cache", detect.fromClientCache ? `client 10-min rule (worker said ${worker})` : worker],
+        ["claims", `${detect.claimsReturned} returned, ${detect.dropped.length} dropped`],
+      );
+      for (const dropped of detect.dropped) {
+        rows.push(["dropped", `${dropped.reason}: ${dropped.question || "(no question)"}`]);
+      }
+    }
+    scanInfo.replaceChildren(
+      ...rows.flatMap(([name, value]) => [el("dt", "scan-name", name), el("dd", "scan-value", value)]),
+    );
+    if (!card.hidden) layout();
+  }
+
+  function setScan(update: Partial<ScanDebug>): void {
+    scan = { ...scan, ...update };
+    renderDebug();
+  }
+
+  // ---- Detection ----
+
   let watchedUrl = currentUrl();
   let detectTimer: ReturnType<typeof setTimeout> | undefined;
 
-  async function runDetect(url: string, retriesLeft: number): Promise<void> {
+  async function runDetect(url: string, retriesLeft: number, refresh: boolean): Promise<void> {
     // The reader left for another URL while this one was waiting.
     if (url !== watchedUrl) return;
 
     const read = readPage();
     if (read.kind === "thin" && retriesLeft > 0) {
-      detectTimer = setTimeout(() => void runDetect(url, retriesLeft - 1), THIN_RETRY_MS);
+      const attempt = THIN_RETRIES - retriesLeft + 1;
+      setScan({ read: read.info, state: `waiting for text, try ${attempt} of ${THIN_RETRIES} (${read.reason})` });
+      detectTimer = setTimeout(() => void runDetect(url, retriesLeft - 1, refresh), THIN_RETRY_MS);
       return;
     }
     if (read.kind !== "page") {
-      render({ kind: "empty" });
+      setScan({ read: read.info, state: `skipped (${read.reason})`, detect: null });
+      render({ kind: "skipped" });
       return;
     }
 
+    setScan({ read: read.info, state: refresh ? "running (scan again)" : "running", detect: null });
     render({ kind: "thinking" });
-    let result: DetectResult;
+    const started = Date.now();
+    let result: DetectResult | undefined;
+    let relayError = "";
     try {
-      const message: DetectRequestMessage = { type: DETECT_REQUEST, page: read.page };
-      result = ((await chrome.runtime.sendMessage(message)) as DetectResult | undefined) ?? {
-        status: "error",
-        reason: "unavailable",
-      };
+      const message: DetectRequestMessage = { type: DETECT_REQUEST, page: read.page, refresh };
+      result = (await chrome.runtime.sendMessage(message)) as DetectResult | undefined;
+      if (!result) relayError = "background gave no answer";
     } catch {
-      result = { status: "error", reason: "unavailable" };
+      relayError = "background unreachable; reload this tab";
     }
+    const remaining = MIN_THINKING_MS - (Date.now() - started);
+    if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining));
     if (url !== watchedUrl) return;
 
-    if (result.status === "error") render({ kind: "error", reason: result.reason });
-    else if (result.tiles.length === 0) render({ kind: "empty" });
-    else render({ kind: "tiles", tiles: result.tiles.slice(0, 3) });
+    if (!result) {
+      setScan({ state: `error (${relayError})`, detect: null });
+      render({ kind: "error", reason: "unavailable" });
+    } else if (result.status === "error") {
+      setScan({ state: `error (${result.reason})`, detect: result.debug });
+      render({ kind: "error", reason: result.reason });
+    } else {
+      setScan({ state: "done", detect: result.debug });
+      if (result.tiles.length === 0) render({ kind: "empty" });
+      else render({ kind: "tiles", tiles: result.tiles.slice(0, 3) });
+    }
   }
+
+  // "Scan again": runs now, past the 10-minute rule and the Worker's URL cache.
+  function rescan(): void {
+    clearTimeout(detectTimer);
+    void runDetect(watchedUrl, THIN_RETRIES, true);
+  }
+  scanAgain.addEventListener("click", rescan);
 
   // Debounced: a burst of URL changes ends in one detection for the last URL.
   function scheduleDetect(): void {
     clearTimeout(detectTimer);
     const url = watchedUrl;
-    detectTimer = setTimeout(() => void runDetect(url, THIN_RETRIES), SETTLE_MS);
+    detectTimer = setTimeout(() => void runDetect(url, THIN_RETRIES, false), SETTLE_MS);
   }
 
   function onUrlMaybeChanged(): void {
     const url = currentUrl();
     if (url === watchedUrl) return;
     watchedUrl = url;
+    setScan({ read: null, state: "waiting for the page to settle", detect: null });
     render({ kind: "watching" });
     scheduleDetect();
   }
@@ -447,6 +529,7 @@ async function mount(): Promise<void> {
 
   renderPhantom();
   proxyRow.set("Proxy: checking…", "idle");
+  renderDebug();
   render({ kind: "watching" });
   document.documentElement.append(host);
 
