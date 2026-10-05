@@ -137,3 +137,100 @@ Errors are JSON: `{ "code", "message", "field" }` or `{ "code", "message", "fiel
 Rate limits per account: quote 30 per 60s, build 20 per 60s, register 40 per 60s, upload 10 per 60s, catalog reads 120 per 60s. Honor `Retry-After` on 429.
 
 **UNCLEAR:** in the first probe batch, four valid-looking quotes failed with `INVALID_MARKET_PARAMS` and the message `unexpected create quote failure — check server logs`. The same parameters succeeded a minute later. Treat that message as a transient upstream failure and retry once.
+
+## Create flow
+
+Re-read 2026-10-05 for the P2 build: Quote a market, Build create transaction, Register market, Upload market image, How it works, Errors, Trade status, List creates, and the playground's `CreateMarketFlow.tsx` and `src/lib/solana.ts`. The order is quote, build, sign, broadcast, register. Panta never signs and never broadcasts.
+
+### 1. Quote: `POST /markets/create/quote/`
+
+Request: the fields in "Quote fields" above.
+
+Response:
+
+| Field | Type | Meaning |
+| - | - | - |
+| `createId` | string | Session id (`cr_…`) for build and register. |
+| `expectedEventPda` | string | The market's on-chain address. Becomes `marketId`. |
+| `paymentUsdc` | string | Total fee, USDC base units (6 decimals). |
+| `liquidityInjectionUsdc` | string | Liquidity part of the fee, base units. |
+| `platformRevenueUsdc` | string | Platform part of the fee, base units. |
+| `marketType` | string | `standard` or `breaking`. |
+| `expiresAt` | string | Session expiry, ISO-8601. |
+| `blockhashExpiryHintSec` | integer | `60`. |
+
+**LIVE:** the response also carries `userId` and `apiKeyId`. Soothia does not pass these on.
+
+### 2. Build: `POST /markets/create/build/`
+
+Request: `createId` (required), `wallet` (optional; if set it must equal the quote's wallet).
+
+Response:
+
+| Field | Type | Meaning |
+| - | - | - |
+| `transaction` | string | Base64 unsigned `VersionedTransaction`. Create build returns a whole transaction, not an instruction list. (Primary buy and claim builds return `instructions`; create does not.) |
+| `recentBlockhash` | string | Blockhash inside the transaction. |
+| `lastValidBlockHeight` | integer | Last block height at which that blockhash is valid. |
+| `buildFingerprint` | string | Integrity fingerprint, "checked at register". |
+| `derived` | object | Addresses the transaction uses: `event`, `vaultAuthority`, `marketConfig`, … |
+| `createId`, `expectedEventPda`, `paymentUsdc`, `liquidityInjectionUsdc`, `platformRevenueUsdc`, `marketType`, `expiresAt`, `blockhashExpiryHintSec` | | Echoed from the quote. |
+
+"Do not change instruction accounts or fee amounts." If the blockhash expires, call build again with the same `createId`; if the session expired, quote again.
+
+### 3. Sign and broadcast
+
+The playground deserializes with `VersionedTransaction.deserialize(Buffer.from(base64, "base64"))`, calls the wallet's `signTransaction`, and sends with `connection.sendRawTransaction(signed.serialize(), { skipPreflight: false, preflightCommitment: "confirmed" })` on its own RPC.
+
+### 4. Register: `POST /markets/register/`
+
+Request: `createId` and `signature` (base58), both required. Nothing else.
+
+Response:
+
+| Field | Type | Meaning |
+| - | - | - |
+| `marketId` | string | "Event address used as the market id in later APIs." |
+| `status` | string | `registered` on success. |
+| `images` | string[] | One entry: the quoted `imageUrl`. |
+| `createId`, `signature`, `category`, `title` | | Echoed. |
+
+Verification is "fail-closed (transaction presence and success, program, accounts, fee match)". Repeating the same `createId` + `signature` is idempotent. After success, a `createId` cannot register a different signature.
+
+### Session lifetimes
+
+| Thing | Lifetime |
+| - | - |
+| Create session (`createId`) | about 5 minutes (`expiresAt`) |
+| Build blockhash | about 60 seconds (`blockhashExpiryHintSec`) |
+| Image upload signature | about 5 minutes |
+
+### Failure modes
+
+| Where | Code | Meaning | What Soothia does |
+| - | - | - | - |
+| Quote | `INVALID_MARKET_PARAMS` with `field` or `fields` | A field failed validation. | Show the message. |
+| Quote | `INVALID_MARKET_PARAMS`, message `unexpected create quote failure — check server logs` | Transient (seen live). | Retry once. |
+| Quote | `DUPLICATE_MARKET` | This wallet already made a market with this question. | Tell the user; nothing is charged. |
+| Quote, upload | `CREATE_NOT_PERMITTED` | Permission disabled on the account. | Show an error. |
+| Build, register | `CREATE_EXPIRED` | "`createId` missing, expired, or consumed". | Before signing: quote again. After a confirmed transaction: see the risk below. |
+| Register | `TX_NOT_FOUND` | "Signature not observed at required commitment". | Wait and retry register. |
+| Register | `TX_FAILED` | The transaction failed on-chain. | Nothing was created; report it. |
+| Register | `TX_MISMATCH`, `TX_FEE_MISMATCH` | The transaction is not the one that was built. | Report it. |
+| Any | `RATE_LIMITED` | Quote 30 per 60s, build 20 per 60s, register 40 per 60s, per account. | Honor `Retry-After`. |
+
+**UNCLEAR, and the main risk in this flow:** whether register still succeeds when the transaction confirmed but the 5-minute session ran out before register was called. The docs list `CREATE_EXPIRED` for register. If so, a slow signer could pay 50 USDC for a market that is on-chain but not in the catalog. Soothia refuses to send a signed transaction when the session has under 45 seconds left, and asks for a fresh signature on a new quote instead.
+
+**UNCLEAR:** the required commitment for register (`confirmed` or `finalized`).
+
+### After creation
+
+- `GET /account/creates/` lists this API account's create sessions with `status` `pending` (quote reserved), `built`, or `registered`, plus `eventPda` and `signature`. It is the fallback record if Soothia loses track of a paid market.
+- `GET /markets/?createdBy=me` lists catalog rows for markets this account created.
+- `GET /trades/{signature}/` reports attribution for primary buys and win claims. It does not cover create transactions.
+
+### Market page URL
+
+`https://www.panta.market/market/<marketId>`
+
+**LIVE:** `https://www.panta.market/market/4J6WxFGuCw9deMJ6pQ7gwpVXCvLorMrz28icSnCYWeGB` returns HTTP 200 with the page title "Manchester United will win against Spurs with 2 or more goals | Panta Market". The same id under `/markets/`, `/event/`, `/events/`, and `/m/` returns 404. The pattern is not in the docs or the playground; it was found by testing the site.

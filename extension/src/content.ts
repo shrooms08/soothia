@@ -53,12 +53,13 @@ interface ScanDebug {
   detect: DetectDebug | null;
 }
 
-const END_DATE = new Intl.DateTimeFormat(undefined, {
+// A market's end date is a UTC calendar date ("Dec 31, 2026"), the same for
+// every reader. Local time would push a 23:59 UTC deadline into the next day.
+export const END_DATE = new Intl.DateTimeFormat("en-US", {
   month: "short",
   day: "numeric",
   year: "numeric",
-  hour: "numeric",
-  minute: "2-digit",
+  timeZone: "UTC",
 });
 
 function currentUrl(): string {
