@@ -112,17 +112,27 @@ async function main(): Promise<void> {
   const byStatus = countBy(markets, (m) => m.status);
   const byCategory = countBy(markets, (m) => m.category);
 
-  // List rows carry no prices, so look up each sample for its YES price.
+  // The docs say list rows carry no prices and the detail endpoint fills them,
+  // but in practice either side can come back with blank titles or null prices.
+  // Look up each sample and keep whichever side has the value.
   // Prefer tradable markets; fall back to the rest if there are few.
   const pool = [...tradableNotEnded, ...markets.filter((m) => !tradableNotEnded.includes(m))];
   const samples: Market[] = [];
   for (const m of pool.slice(0, SAMPLE_COUNT)) {
+    let detail: Partial<Market> = {};
     try {
-      samples.push(await pantaGet<Market>(apiKey, `/markets/${encodeURIComponent(m.marketId)}/`));
+      detail = await pantaGet<Market>(apiKey, `/markets/${encodeURIComponent(m.marketId)}/`);
     } catch {
-      samples.push(m);
+      // Keep the list row as-is.
     }
+    samples.push({
+      ...m,
+      title: m.title?.trim() || detail.title?.trim() || "(untitled)",
+      yesPrice: detail.yesPrice ?? m.yesPrice,
+    });
+    await sleep(300);
   }
+  const untitled = markets.filter((m) => !m.title?.trim()).length;
 
   const report = [
     "# Panta catalog check",
@@ -134,6 +144,7 @@ async function main(): Promise<void> {
     `- Total markets: **${markets.length}**`,
     `- Tradable now (phase primary or secondary, not resolved): **${tradable.length}**`,
     `- Tradable and not past end time: **${tradableNotEnded.length}**`,
+    `- List rows with a blank title: **${untitled}**`,
     "",
     "## By phase",
     "",

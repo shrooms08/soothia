@@ -24,7 +24,8 @@ Soothia is a Chrome MV3 extension (floating orb on every page) backed by a Cloud
 
 - Auth header is `X-Api-Key`. Keys in query strings are rejected.
 - `GET /markets/` takes `category`, `status` (the market phase: `primary`, `secondary`, `resolved`, `cancelled`), `cursor`, and `limit` (max 50). It returns `{ items, nextCursor }`.
-- List rows have null prices. `GET /markets/{marketId}/` fills `yesPrice` and `noPrice`.
+- The docs say list rows have null prices and `GET /markets/{marketId}/` fills `yesPrice` and `noPrice`. Observed on 2026-10-05: list rows did carry prices, some list rows had a blank `title` that the detail endpoint filled, and detail calls made in a quick burst sometimes came back with blank titles and null prices. Merge list and detail data instead of trusting either alone.
+- `GET /categories/` returned 8 slugs, but live markets use others too (`stocks`, `commodities`, `pop-culture`, `macroeconomics`, `business`, `gaming`, `space-universe`). Do not treat the categories list as complete.
 - Catalog reads are rate limited to about 120 requests per 60 seconds. Honor `Retry-After` on 429.
 
 ## Commands

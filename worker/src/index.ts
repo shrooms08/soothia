@@ -44,7 +44,9 @@ async function proxyPanta(
   path: string,
   query?: URLSearchParams,
 ): Promise<Response> {
-  if (!env.PANTA_API_KEY) return json(request, { error: "proxy_misconfigured" }, 500);
+  // Trim so a stray space or newline pasted with the secret does not break auth.
+  const apiKey = env.PANTA_API_KEY?.trim();
+  if (!apiKey) return json(request, { error: "proxy_misconfigured" }, 500);
 
   const qs = query?.toString();
   const url = `${PANTA_BASE}${path}${qs ? `?${qs}` : ""}`;
@@ -52,7 +54,7 @@ async function proxyPanta(
   let upstream: Response;
   try {
     upstream = await fetch(url, {
-      headers: { "X-Api-Key": env.PANTA_API_KEY, Accept: "application/json" },
+      headers: { "X-Api-Key": apiKey, Accept: "application/json" },
     });
   } catch {
     return json(request, { error: "upstream_unavailable" }, 502);
