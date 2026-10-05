@@ -1,0 +1,3 @@
+# Copy this file to .dev.vars (same folder) and paste your Panta API key after the = sign.
+# .dev.vars is gitignored. Never commit a real key.
+PANTA_API_KEY=

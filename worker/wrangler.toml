@@ -1,0 +1,7 @@
+name = "soothia-proxy"
+main = "src/index.ts"
+compatibility_date = "2025-10-01"
+workers_dev = true
+
+# Secrets (never put values here):
+#   PANTA_API_KEY: local in .dev.vars, deployed via `npx wrangler secret put PANTA_API_KEY`
