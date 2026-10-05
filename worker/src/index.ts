@@ -1,10 +1,30 @@
 // soothia-proxy: keeps the Panta and Claude API keys server-side and exposes
-// a small surface to the extension: catalog reads, /detect, and /match.
+// a small surface to the extension: catalog reads, /detect, /match, wallet
+// balances, and the market create flow. /img/* is served from static assets.
 
+import {
+  handleBuild,
+  handleCreatorMarkets,
+  handleQuote,
+  handleRegisterRetry,
+  handleSend,
+  handleSimulate,
+} from "./create";
 import { handleDetect } from "./detect";
-import { corsHeaders, json, type Env } from "./http";
+import { corsHeaders, installId, json, type Env } from "./http";
 import { PANTA_BASE } from "./markets";
 import { handleMatch } from "./match";
+import { handleBalances } from "./wallet";
+
+// Wallet and create routes: POST, and only from a Soothia install.
+const INSTALL_ROUTES: Record<string, (request: Request, env: Env) => Promise<Response>> = {
+  "/wallet/balances": handleBalances,
+  "/create/quote": handleQuote,
+  "/create/build": handleBuild,
+  "/create/simulate": handleSimulate,
+  "/create/send": handleSend,
+  "/create/register-retry": handleRegisterRetry,
+};
 
 // Query params documented for GET /markets/ (Panta names the phase filter `status`).
 const MARKET_PARAMS = ["limit", "cursor", "category", "status"] as const;
@@ -64,6 +84,11 @@ export default {
     const path = url.pathname.replace(/\/+$/, "") || "/";
 
     if (request.method === "POST") {
+      const installRoute = INSTALL_ROUTES[path];
+      if (installRoute) {
+        if (!installId(request)) return json(request, { error: "missing_install" }, 400);
+        return installRoute(request, env);
+      }
       switch (path) {
         case "/detect":
           return handleDetect(request, env);
@@ -84,6 +109,8 @@ export default {
         return proxyPanta(request, env, "/markets/", marketsQuery(url));
       case "/panta/categories":
         return proxyPanta(request, env, "/categories/");
+      case "/creator/markets":
+        return handleCreatorMarkets(request, env);
       default:
         return json(request, { error: "not_found" }, 404);
     }

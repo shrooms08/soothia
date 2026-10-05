@@ -69,6 +69,85 @@ export const RESOLUTION_TYPES = {
 export type ResolutionType = keyof typeof RESOLUTION_TYPES;
 export const RESOLUTION_TYPE_NAMES = Object.keys(RESOLUTION_TYPES) as ResolutionType[];
 
+// ---- Creating a market ----
+
+export const USDC_DECIMALS = 6;
+// Mainnet USDC mint.
+export const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
+
+// startTime is set this far past Panta's minimum so a quote made now is
+// still valid when Panta checks it.
+export const START_BUFFER_SEC = 300;
+// resolutionTime = endTime + this, as in Panta's own quote example.
+export const RESOLUTION_DELAY_SEC = 3600;
+export const DRAFT_QUESTION_MIN_LENGTH = 10;
+export const DESCRIPTION_MAX_LENGTH = 500;
+export const PAGE_URL_MAX_LENGTH = 2048;
+
+// A wallet needs at least this much SOL for network fees and account rent.
+export const MIN_SOL_FOR_CREATE = 0.01;
+
+export const MARKET_PAGE_BASE = "https://www.panta.market/market/";
+
+/** What the review sheet sends to /create/quote. */
+export interface MarketDraft {
+  question: string;
+  category: Category;
+  /** ISO-8601 UTC. */
+  endTime: string;
+  /** The page the claim came from; always the first source of truth. */
+  pageUrl: string;
+  resolutionType: ResolutionType;
+  /** The drafted "how YES is decided" sentence, when the question is unedited. */
+  details?: string;
+}
+
+export type DraftValidation =
+  | { ok: true; draft: MarketDraft }
+  | { ok: false; field: string; message: string };
+
+export function validateDraft(raw: unknown, nowMs: number): DraftValidation {
+  const bad = (field: string, message: string): DraftValidation => ({ ok: false, field, message });
+  if (typeof raw !== "object" || raw === null) return bad("draft", "Missing market details.");
+  const input = raw as Record<string, unknown>;
+
+  if (!isString(input.question)) return bad("question", "Write a question.");
+  const question = input.question.trim().replace(/\s+/g, " ");
+  if (question.length < DRAFT_QUESTION_MIN_LENGTH) return bad("question", "The question is too short.");
+  if (question.length > QUESTION_MAX_LENGTH) {
+    return bad("question", `The question can be at most ${QUESTION_MAX_LENGTH} characters.`);
+  }
+
+  if (!isString(input.category) || !CATEGORIES.includes(input.category as Category)) {
+    return bad("category", "Pick one of the listed categories.");
+  }
+  const category = input.category as Category;
+
+  if (!isString(input.endTime)) return bad("endTime", "Pick an end date.");
+  const timeProblem = endTimeProblem(input.endTime, nowMs);
+  if (timeProblem === "end_time_too_soon") return bad("endTime", "The end date must be at least 2 hours from now.");
+  if (timeProblem === "end_time_too_far") return bad("endTime", "The end date can be at most 365 days from now.");
+  if (timeProblem) return bad("endTime", "Pick a valid end date.");
+  const endTime = new Date(Date.parse(input.endTime)).toISOString();
+
+  if (!isString(input.pageUrl) || !/^https?:\/\//i.test(input.pageUrl) || input.pageUrl.length > PAGE_URL_MAX_LENGTH) {
+    return bad("pageUrl", "Missing the page this market came from.");
+  }
+
+  // A type that does not fit the (possibly edited) category falls back to the general one.
+  let resolutionType: ResolutionType = "official_outcome";
+  if (isString(input.resolutionType) && RESOLUTION_TYPE_NAMES.includes(input.resolutionType as ResolutionType)) {
+    const wanted = input.resolutionType as ResolutionType;
+    if ((RESOLUTION_TYPES[wanted].categories as readonly string[]).includes(category)) resolutionType = wanted;
+  }
+
+  const details = isString(input.details) ? input.details.trim().slice(0, 1000) : "";
+  return {
+    ok: true,
+    draft: { question, category, endTime, pageUrl: input.pageUrl, resolutionType, ...(details ? { details } : {}) },
+  };
+}
+
 // ---- Claim shape ----
 
 export interface Claim {

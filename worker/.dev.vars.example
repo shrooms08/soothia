@@ -3,3 +3,5 @@
 PANTA_API_KEY=
 # Claude API key, used by /detect and /match.
 ANTHROPIC_API_KEY=
+# Helius mainnet RPC URL, used for balances, simulation, and sending. The URL contains a key.
+HELIUS_RPC_URL=

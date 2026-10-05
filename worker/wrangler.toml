@@ -2,10 +2,17 @@ name = "soothia-proxy"
 main = "src/index.ts"
 compatibility_date = "2025-10-01"
 workers_dev = true
+# @solana/web3.js (used only to assemble a transaction from instructions) needs Buffer.
+compatibility_flags = ["nodejs_compat"]
+
+# Static files: the category placeholder images at /img/<category>.png.
+[assets]
+directory = "./public"
 
 # Secrets (never put values here):
 #   PANTA_API_KEY: local in .dev.vars, deployed via `npx wrangler secret put PANTA_API_KEY`
 #   ANTHROPIC_API_KEY: local in .dev.vars, deployed via `npx wrangler secret put ANTHROPIC_API_KEY`
+#   HELIUS_RPC_URL: Solana mainnet RPC URL (it contains an API key), same two places
 
 # Detect results, the open-market list, and per-install daily counters.
 [[kv_namespaces]]

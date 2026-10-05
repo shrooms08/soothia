@@ -3,6 +3,8 @@
 export interface Env {
   PANTA_API_KEY: string;
   ANTHROPIC_API_KEY: string;
+  /** Solana mainnet RPC URL. Contains an API key: never log it or return it. */
+  HELIUS_RPC_URL: string;
   SOOTHIA_CACHE: KVNamespace;
 }
 
@@ -62,4 +64,12 @@ export async function readJsonObject(request: Request): Promise<Record<string, u
 export async function sha256Hex(input: string): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(input));
   return [...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** The X-Soothia-Install header, if it is a well-formed install id. */
+export function installId(request: Request): string | null {
+  const value = request.headers.get("X-Soothia-Install") ?? "";
+  return UUID.test(value) ? value : null;
 }

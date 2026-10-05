@@ -1,7 +1,7 @@
 // POST /detect: drafts up to three market-ready claims from a page's text.
 // Page text is never logged and never stored; only validated claims are cached.
 import { AnthropicError, callTool, type ToolSpec } from "./anthropic";
-import { json, readJsonObject, sha256Hex, type Env } from "./http";
+import { installId, json, readJsonObject, sha256Hex, type Env } from "./http";
 import {
   CATEGORIES,
   MAX_CLAIMS,
@@ -21,7 +21,6 @@ const TITLE_MAX_CHARS = 300;
 const URL_MAX_CHARS = 2048;
 const CACHE_TTL_SEC = 30 * 60;
 const DAILY_CAP = 200;
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /** A draft the model produced that validation refused. Never contains page text. */
 interface Dropped {
@@ -124,8 +123,8 @@ function field(body: Record<string, unknown>, name: string, max: number): string
 }
 
 export async function handleDetect(request: Request, env: Env): Promise<Response> {
-  const installId = request.headers.get("X-Soothia-Install") ?? "";
-  if (!UUID.test(installId)) return json(request, { error: "missing_install" }, 400);
+  const install = installId(request);
+  if (!install) return json(request, { error: "missing_install" }, 400);
 
   const body = await readJsonObject(request);
   if (!body) return json(request, { error: "bad_request" }, 400);
@@ -136,7 +135,7 @@ export async function handleDetect(request: Request, env: Env): Promise<Response
   if (!/^https?:\/\//i.test(url) || !text) return json(request, { error: "bad_request" }, 400);
 
   const now = Date.now();
-  if (!(await underDailyCap(env, installId, now))) {
+  if (!(await underDailyCap(env, install, now))) {
     return json(request, { error: "daily_limit" }, 429);
   }
 

@@ -4,10 +4,12 @@
   "type": "module",
   "scripts": {
     "catalog-check": "tsx catalog-check.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "make-category-images": "tsx make-category-images.ts"
   },
   "devDependencies": {
     "@types/node": "^24",
+    "sharp": "^0.35.5",
     "tsx": "^4",
     "typescript": "^5"
   }
