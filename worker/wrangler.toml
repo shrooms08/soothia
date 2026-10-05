@@ -5,3 +5,9 @@ workers_dev = true
 
 # Secrets (never put values here):
 #   PANTA_API_KEY: local in .dev.vars, deployed via `npx wrangler secret put PANTA_API_KEY`
+#   ANTHROPIC_API_KEY: local in .dev.vars, deployed via `npx wrangler secret put ANTHROPIC_API_KEY`
+
+# Detect results, the open-market list, and per-install daily counters.
+[[kv_namespaces]]
+binding = "SOOTHIA_CACHE"
+id = "603952ecd4ea42f3b372051b7fe789ff"
