@@ -3,6 +3,8 @@
 import {
   ONCHAIN_TEXT_BUDGET_BYTES,
   PAGE_SOURCE_MAX_BYTES,
+  TRANSACTION_FIXED_BYTES,
+  TRIMMED_QUESTION_MAX_LENGTH,
   RESOLUTION_RULE_MAX_LENGTH,
   SOURCES_OF_TRUTH_MAX,
   type MarketDraft,
@@ -98,18 +100,73 @@ export function deadlineUtc(endTime: string): string {
   return `${new Date(endTime).toISOString().slice(0, 16).replace("T", " ")} UTC`;
 }
 
+/** Cuts a question to at most `max` characters without splitting a word, keeping it a question. */
+export function trimQuestion(question: string, max: number): string {
+  if (question.length <= max) return question;
+  // One character is kept back for the closing question mark.
+  const room = question.slice(0, max - 1);
+  const endsOnWord = question[max - 1] === " ";
+  const cut = endsOnWord || !room.includes(" ") ? room : room.slice(0, room.lastIndexOf(" "));
+  return `${cut.replace(/[\s,;:.!?\-\u2013\u2014]+$/, "")}?`;
+}
+
+export type Adjustment = "one_source" | "minimal_rule" | "question_trimmed";
+
+/** The exact text Panta will be sent, sized to fit the create transaction. */
+export interface FittedDraft {
+  question: string;
+  resolutionRule: string;
+  sourcesOfTruth: string[];
+  /** 0 is the full draft; each level applies one more adjustment. */
+  level: number;
+  adjustments: Adjustment[];
+  /** Transaction size this text is expected to build to. */
+  predictedBytes: number;
+}
+
+export const MAX_FIT_LEVEL = 3;
+
 /**
- * The rule sent to Panta. It does not repeat the question or the sources
- * (both are stored beside it), and it adds detail only while the whole text
- * still fits in one transaction. Returns null when even the core sentence
- * does not fit: the question is too long.
+ * Sizes a draft's text to fit the create transaction. The rule never repeats
+ * the question or the sources (both are stored beside it). When the full
+ * text is too big it is shrunk in a fixed order, stopping as soon as it fits:
+ * one source of truth, then the minimal rule, then the question trimmed to
+ * 150 characters. `minLevel` forces at least that much shrinking, for when a
+ * real build came out larger than predicted. Returns null if nothing fits.
  */
-export function resolutionRule(draft: MarketDraft, sources: string[]): string | null {
-  const room = ONCHAIN_TEXT_BUDGET_BYTES - onchainTextBytes(draft.question, "", sources);
-  let rule = `Resolves YES if this happens on or before ${deadlineUtc(draft.endTime)}, as shown by the listed sources. Otherwise NO.`;
-  if (utf8Bytes(rule) > room) return null;
-  for (const extra of [draft.details, HOW_DECIDED[draft.resolutionType]]) {
-    if (extra && utf8Bytes(`${rule} ${extra}`) <= room) rule = `${rule} ${extra}`;
+export function fitDraft(draft: MarketDraft, minLevel = 0): FittedDraft | null {
+  const deadline = deadlineUtc(draft.endTime);
+  const allSources = sourcesOfTruth(draft);
+  const minimal = (count: number): string =>
+    `YES if this happens by ${deadline}, per the listed ${count === 1 ? "source" : "sources"}. Otherwise NO.`;
+
+  for (let level = minLevel; level <= MAX_FIT_LEVEL; level++) {
+    const sources = level >= 1 ? allSources.slice(0, 1) : allSources;
+    const question = level >= 3 ? trimQuestion(draft.question, TRIMMED_QUESTION_MAX_LENGTH) : draft.question;
+    const rule =
+      level >= 2
+        ? minimal(sources.length)
+        : `${minimal(sources.length)} ${draft.details ?? HOW_DECIDED[draft.resolutionType]}`.slice(
+            0,
+            RESOLUTION_RULE_MAX_LENGTH,
+          );
+    // A question with one enormous "word" would trim down to nothing useful.
+    if (question !== draft.question && question.length < TRIMMED_QUESTION_MAX_LENGTH / 2) continue;
+    const textBytes = onchainTextBytes(question, rule, sources);
+    if (textBytes > ONCHAIN_TEXT_BUDGET_BYTES) continue;
+
+    const adjustments: Adjustment[] = [];
+    if (sources.length < allSources.length) adjustments.push("one_source");
+    if (level >= 2) adjustments.push("minimal_rule");
+    if (question !== draft.question) adjustments.push("question_trimmed");
+    return {
+      question,
+      resolutionRule: rule,
+      sourcesOfTruth: sources,
+      level,
+      adjustments,
+      predictedBytes: TRANSACTION_FIXED_BYTES + textBytes,
+    };
   }
-  return rule.slice(0, RESOLUTION_RULE_MAX_LENGTH);
+  return null;
 }

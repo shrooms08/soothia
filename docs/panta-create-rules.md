@@ -67,7 +67,16 @@ Optional:
 
 **LIVE, and more important than the documented limits below:** `question`, `resolutionRule`, and every entry of `sourcesOfTruth` are written into the create transaction, and a Solana transaction cannot exceed 1232 bytes. Panta's quote and build do not check this. A draft with a 55-character question, a 612-character rule, and three sources quoted and built without error, but the transaction was 1539 bytes and could never be signed (`@solana/web3.js` fails with "encoding overruns Uint8Array") or sent.
 
-Measured: everything else in the transaction takes about 725 bytes, each source costs 4 extra bytes, leaving about 495 UTF-8 bytes for question + rule + sources together. Soothia budgets 470 (`ONCHAIN_TEXT_BUDGET_BYTES`), caps the question at 200 characters, writes a short rule that does not repeat the question or sources, uses two sources, and refuses any built transaction over 1232 bytes. With that budget, a normal draft builds to 1194 bytes and a worst-case one to 1193.
+Measured twice: transaction bytes = 737 + the UTF-8 bytes of the question and rule + (bytes + 4) for each source. The prediction matched the real build exactly both times.
+
+Soothia's rules (in `worker/src/pantaRules.ts` and `worker/src/resolution.ts`):
+
+- A built create transaction over **1100 bytes** is refused (`MAX_BUILT_TRANSACTION_BYTES`). The 132 bytes of headroom are for compute-budget or priority-fee instructions a wallet may add when signing.
+- That leaves 355 bytes of text (`ONCHAIN_TEXT_BUDGET_BYTES`). The question is capped at 200 characters. The rule never repeats the question or the sources.
+- A draft that does not fit is shrunk in this order, stopping as soon as it fits: (1) one source of truth, the page URL; (2) the minimal rule, "YES if this happens by <deadline UTC>, per the listed source. Otherwise NO."; (3) the question trimmed to 150 characters on a word boundary. The quote response lists what was done in `adjustments` and returns the final `question`.
+- `/create/build` measures the real transaction. If it is over 1100 bytes it shrinks one more step, quotes again, rebuilds, and returns the new quote so the user can review the changed text before signing.
+- **LIVE:** a normal draft (55-character question, two sources, drafted detail in the rule) builds to 1056 bytes. A long draft (196-character question, 119-character page URL, 370 characters of detail) is shrunk through all three steps and builds to 1088 bytes.
+- The extension checks the signed transaction before sending: it must be at most 1232 bytes, and identical to the built one except for added or changed compute-budget instructions (`extension/src/tx-check.ts`).
 
 The documented limits, which the transaction size makes unreachable:
 

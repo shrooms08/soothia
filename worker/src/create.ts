@@ -9,14 +9,15 @@ import {
   DESCRIPTION_MAX_LENGTH,
   DRAFT_MARKET_TYPE,
   MARKET_PAGE_BASE,
-  MAX_TRANSACTION_BYTES,
+  MAX_BUILT_TRANSACTION_BYTES,
   MIN_START_DELAY_SEC,
   RESOLUTION_DELAY_SEC,
   START_BUFFER_SEC,
   USDC_DECIMALS,
   validateDraft,
+  type MarketDraft,
 } from "./pantaRules";
-import { resolutionRule, sourcesOfTruth } from "./resolution";
+import { fitDraft, MAX_FIT_LEVEL } from "./resolution";
 import { rpc, RpcError } from "./rpc";
 
 const QUOTE_TTL_SEC = 24 * 3600;
@@ -36,7 +37,11 @@ const MAX_CREATOR_MARKETS = 100;
 /** What we remember about a quote so a paid market can always be finished. */
 interface QuoteRecord {
   wallet: string;
+  /** The question as sent to Panta (it may have been trimmed to fit). */
   question: string;
+  /** The draft and shrink level behind this quote, so build can shrink further. */
+  draft?: MarketDraft;
+  level?: number;
   expectedEventPda: string;
   expiresAt: string;
   signature?: string;
@@ -122,29 +127,34 @@ interface PantaQuote {
   expiresAt: string;
 }
 
-export async function handleQuote(request: Request, env: Env): Promise<Response> {
-  const body = await readJsonObject(request);
-  if (!body || !isAddress(body.wallet)) return json(request, { error: "bad_wallet" }, 400);
-  const now = Date.now();
-  const checked = validateDraft(body.draft, now);
-  if (!checked.ok) {
-    return json(request, { error: "invalid_draft", field: checked.field, message: checked.message }, 400);
-  }
-  const draft = checked.draft;
+type Issued = { ok: true; payload: Record<string, unknown> } | { ok: false; response: Response };
 
-  const nowSec = Math.floor(now / 1000);
+/** Fits the draft's text, quotes it with Panta, and records the quote. */
+async function issueQuote(
+  request: Request,
+  env: Env,
+  wallet: string,
+  draft: MarketDraft,
+  minLevel: number,
+): Promise<Issued> {
+  const fitted = fitDraft(draft, minLevel);
+  if (!fitted) {
+    return {
+      ok: false,
+      response: json(request, { error: "invalid_draft", field: "question", message: TOO_LONG }, 400),
+    };
+  }
+
+  const nowSec = Math.floor(Date.now() / 1000);
   const endTime = Math.floor(Date.parse(draft.endTime) / 1000);
-  const sources = sourcesOfTruth(draft);
-  const rule = resolutionRule(draft, sources);
-  if (!rule) return json(request, { error: "invalid_draft", field: "question", message: TOO_LONG }, 400);
   // Served by this same Worker from its static assets.
   const imageUrl = `${new URL(request.url).origin}/img/${draft.category}.png`;
 
   const pantaRequest = {
-    wallet: body.wallet,
-    question: draft.question,
-    resolutionRule: rule,
-    sourcesOfTruth: sources,
+    wallet,
+    question: fitted.question,
+    resolutionRule: fitted.resolutionRule,
+    sourcesOfTruth: fitted.sourcesOfTruth,
     category: draft.category,
     startTime: nowSec + MIN_START_DELAY_SEC + START_BUFFER_SEC,
     endTime,
@@ -162,34 +172,54 @@ export async function handleQuote(request: Request, env: Env): Promise<Response>
     await sleep(waitMs);
     result = await pantaPost<PantaQuote>(env, "/markets/create/quote/", pantaRequest);
   }
-  if (!result.ok) return pantaFailure(request, result);
+  if (!result.ok) return { ok: false, response: pantaFailure(request, result) };
   const quote = result.data;
 
   const record: QuoteRecord = {
-    wallet: body.wallet,
-    question: draft.question,
+    wallet,
+    question: fitted.question,
+    draft,
+    level: fitted.level,
     expectedEventPda: quote.expectedEventPda,
     expiresAt: quote.expiresAt,
   };
   await env.SOOTHIA_CACHE.put(quoteKey(quote.createId), JSON.stringify(record), { expirationTtl: QUOTE_TTL_SEC });
 
-  return json(request, {
-    quoteId: quote.createId,
-    paymentUsdc: usdc(quote.paymentUsdc),
-    breakdown: {
-      liquidityUsdc: usdc(quote.liquidityInjectionUsdc),
-      platformFeeUsdc: usdc(quote.platformRevenueUsdc),
+  return {
+    ok: true,
+    payload: {
+      quoteId: quote.createId,
+      paymentUsdc: usdc(quote.paymentUsdc),
+      breakdown: {
+        liquidityUsdc: usdc(quote.liquidityInjectionUsdc),
+        platformFeeUsdc: usdc(quote.platformRevenueUsdc),
+      },
+      expiresAt: quote.expiresAt,
+      marketId: quote.expectedEventPda,
+      // Exactly what Panta was sent, so the review sheet can show it.
+      question: fitted.question,
+      resolutionRule: fitted.resolutionRule,
+      sourcesOfTruth: fitted.sourcesOfTruth,
+      // What was shrunk to fit the transaction: one_source, minimal_rule, question_trimmed.
+      adjustments: fitted.adjustments,
+      predictedBytes: fitted.predictedBytes,
+      imageUrl,
+      startTime: new Date(pantaRequest.startTime * 1000).toISOString(),
+      endTime: draft.endTime,
+      resolutionTime: new Date(pantaRequest.resolutionTime * 1000).toISOString(),
     },
-    expiresAt: quote.expiresAt,
-    marketId: quote.expectedEventPda,
-    // Exactly what Panta was sent, so the review sheet can show it.
-    resolutionRule: rule,
-    sourcesOfTruth: sources,
-    imageUrl,
-    startTime: new Date(pantaRequest.startTime * 1000).toISOString(),
-    endTime: draft.endTime,
-    resolutionTime: new Date(pantaRequest.resolutionTime * 1000).toISOString(),
-  });
+  };
+}
+
+export async function handleQuote(request: Request, env: Env): Promise<Response> {
+  const body = await readJsonObject(request);
+  if (!body || !isAddress(body.wallet)) return json(request, { error: "bad_wallet" }, 400);
+  const checked = validateDraft(body.draft, Date.now());
+  if (!checked.ok) {
+    return json(request, { error: "invalid_draft", field: checked.field, message: checked.message }, 400);
+  }
+  const issued = await issueQuote(request, env, body.wallet, checked.draft, 0);
+  return issued.ok ? json(request, issued.payload) : issued.response;
 }
 
 // ---- POST /create/build ----
@@ -202,53 +232,70 @@ interface PantaBuild {
   expiresAt?: string;
 }
 
+function base64Bytes(base64: string): number {
+  return Math.floor((base64.replace(/=+$/, "").length * 3) / 4);
+}
+
 export async function handleBuild(request: Request, env: Env): Promise<Response> {
   const body = await readJsonObject(request);
   if (!body || !isAddress(body.wallet) || !isQuoteId(body.quoteId)) {
     return json(request, { error: "bad_request" }, 400);
   }
+  const wallet = body.wallet;
+  let quoteId = body.quoteId;
+  // Set when the first build came out too big and the draft was shrunk and re-quoted.
+  let requote: Record<string, unknown> | null = null;
 
-  const result = await pantaPost<PantaBuild>(env, "/markets/create/build/", {
-    createId: body.quoteId,
-    wallet: body.wallet,
-  });
-  if (!result.ok) return pantaFailure(request, result);
-  const build = result.data;
+  for (;;) {
+    const result = await pantaPost<PantaBuild>(env, "/markets/create/build/", { createId: quoteId, wallet });
+    if (!result.ok) return pantaFailure(request, result);
+    const build = result.data;
 
-  if (build.transaction) {
+    let txBase64 = build.transaction ?? null;
+    let recentBlockhash = build.recentBlockhash ?? null;
+    let lastValidBlockHeight = build.lastValidBlockHeight ?? null;
+    if (!txBase64 && Array.isArray(build.instructions) && build.instructions.length > 0) {
+      try {
+        const latest = await rpc<{ value: { blockhash: string; lastValidBlockHeight: number } }>(
+          env,
+          "getLatestBlockhash",
+          [{ commitment: "confirmed" }],
+        );
+        txBase64 = await assembleV0(build.instructions, wallet, latest.value.blockhash);
+        recentBlockhash = latest.value.blockhash;
+        lastValidBlockHeight = latest.value.lastValidBlockHeight;
+      } catch {
+        return json(request, { error: "build_failed", message: "Could not assemble the transaction." }, 502);
+      }
+    }
+    if (!txBase64) return json(request, { error: "build_failed", message: "Panta returned no transaction." }, 502);
+
+    const bytes = base64Bytes(txBase64);
+    if (bytes <= MAX_BUILT_TRANSACTION_BYTES) {
+      return json(request, {
+        txBase64,
+        bytes,
+        recentBlockhash,
+        lastValidBlockHeight,
+        // Not the session expiry: this one tracks the blockhash, about a minute out.
+        txExpiresAt: build.expiresAt ?? null,
+        // Present only when the text had to be shrunk further: the quote now in force.
+        quote: requote,
+      });
+    }
+
     // Panta builds whatever was quoted, even when the text makes the
-    // transaction too big to ever be signed or sent. Catch that here.
-    const bytes = Math.floor((build.transaction.replace(/=+$/, "").length * 3) / 4);
-    if (bytes > MAX_TRANSACTION_BYTES) {
+    // transaction too big. Shrink one more step, quote again, and rebuild.
+    const record = await loadQuote(env, quoteId);
+    const nextLevel = (record?.level ?? MAX_FIT_LEVEL) + 1;
+    if (!record?.draft || nextLevel > MAX_FIT_LEVEL) {
       return json(request, { error: "transaction_too_large", message: TOO_LONG, bytes }, 400);
     }
-    return json(request, {
-      txBase64: build.transaction,
-      recentBlockhash: build.recentBlockhash ?? null,
-      lastValidBlockHeight: build.lastValidBlockHeight ?? null,
-      // Not the session expiry: this one tracks the blockhash, about a minute out.
-      txExpiresAt: build.expiresAt ?? null,
-    });
+    const issued = await issueQuote(request, env, wallet, record.draft, nextLevel);
+    if (!issued.ok) return issued.response;
+    requote = issued.payload;
+    quoteId = issued.payload.quoteId as string;
   }
-
-  if (Array.isArray(build.instructions) && build.instructions.length > 0) {
-    try {
-      const latest = await rpc<{ value: { blockhash: string; lastValidBlockHeight: number } }>(
-        env,
-        "getLatestBlockhash",
-        [{ commitment: "confirmed" }],
-      );
-      return json(request, {
-        txBase64: await assembleV0(build.instructions, body.wallet, latest.value.blockhash),
-        recentBlockhash: latest.value.blockhash,
-        lastValidBlockHeight: latest.value.lastValidBlockHeight,
-        txExpiresAt: build.expiresAt ?? null,
-      });
-    } catch {
-      return json(request, { error: "build_failed", message: "Could not assemble the transaction." }, 502);
-    }
-  }
-  return json(request, { error: "build_failed", message: "Panta returned no transaction." }, 502);
 }
 
 // ---- POST /create/simulate ----

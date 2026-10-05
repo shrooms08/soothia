@@ -21,6 +21,7 @@ import {
   MIN_SOL_FOR_CREATE,
   QUESTION_MAX_LENGTH,
 } from "./rules";
+import { checkSignedTransaction } from "./tx-check";
 import { wallet } from "./wallet-client";
 
 /** Lines the debug footer shows about the create flow. */
@@ -167,6 +168,8 @@ export function openSheet(host: SheetHost): Sheet {
   image.hidden = true;
 
   const walletRow = el("div", "wallet");
+  // Says what was shortened so the text fits in one Solana transaction.
+  const fitNote = el("p", "muted fit-note");
   const missing = el("p", "warn");
   const fee = el("div", "fee");
   const createButton = button("Create market", "button primary wide", () => void create());
@@ -196,6 +199,7 @@ export function openSheet(host: SheetHost): Sheet {
     imageRow,
     walletRow,
     fee,
+    fitNote,
     missing,
     createButton,
   );
@@ -291,6 +295,17 @@ export function openSheet(host: SheetHost): Sheet {
   }
 
   function showQuoteDetails(next: Quote): void {
+    // The Worker may have trimmed the question; show exactly what the market will say.
+    if (next.question !== question) {
+      question = next.question;
+      questionInput.value = next.question;
+    }
+    const changes = [
+      next.adjustments.includes("one_source") ? "used one source" : "",
+      next.adjustments.includes("minimal_rule") ? "shortened the rule" : "",
+      next.adjustments.includes("question_trimmed") ? "trimmed the question" : "",
+    ].filter(Boolean);
+    fitNote.textContent = changes.length ? `To fit in one Solana transaction, I ${changes.join(", ")}.` : "";
     ruleText.textContent = next.resolutionRule;
     sources.replaceChildren(
       ...next.sourcesOfTruth.map((url) => {
@@ -341,7 +356,9 @@ export function openSheet(host: SheetHost): Sheet {
       quote = next;
       quoteError = "";
       showQuoteDetails(next);
-      host.debug({ quote: `${amount(next.paymentUsdc)} USDC, expires ${next.expiresAt.slice(11, 19)} UTC` });
+      host.debug({
+        quote: `${amount(next.paymentUsdc)} USDC, expires ${next.expiresAt.slice(11, 19)} UTC, about ${next.predictedBytes} bytes${next.adjustments.length ? ` (${next.adjustments.join(", ")})` : ""}`,
+      });
       expiryTimer = setTimeout(onQuoteExpiring, Math.max(1000, msLeft(next) - QUOTE_REFRESH_BEFORE_MS));
     } else {
       quote = null;
@@ -467,7 +484,16 @@ export function openSheet(host: SheetHost): Sheet {
         setStatus("I couldn't prepare the transaction. Nothing was sent. Try again in a moment.");
         return;
       }
-      const { txBase64 } = built.body as Build;
+      const { txBase64, bytes: builtBytes, quote: requoted } = built.body as Build;
+      if (requoted) {
+        // The text was shrunk after the review. Show it and let the user decide again.
+        clearTimeout(expiryTimer);
+        quote = requoted;
+        showQuoteDetails(requoted);
+        render();
+        setStatus("I had to shorten this to fit in one Solana transaction. Check it, then press Create again.");
+        return;
+      }
 
       const simulated = await host.api<Simulation>("/create/simulate", { txBase64 });
       if (disposed) return;
@@ -476,8 +502,8 @@ export function openSheet(host: SheetHost): Sheet {
         simulate: !simulation
           ? `could not simulate (${simulated.status})`
           : simulation.ok
-            ? `ok, ${simulation.unitsConsumed ?? "?"} compute units`
-            : `failed: ${simulation.logLine ?? JSON.stringify(simulation.err)}`,
+            ? `built ${builtBytes} bytes; ok, ${simulation.unitsConsumed ?? "?"} compute units`
+            : `built ${builtBytes} bytes; failed: ${simulation.logLine ?? JSON.stringify(simulation.err)}`,
       });
       if (!simulation?.ok && !lax) {
         setStatus(simulation?.reason ?? "I couldn't test this transaction, so nothing was sent. Try again in a moment.");
@@ -500,9 +526,27 @@ export function openSheet(host: SheetHost): Sheet {
         return;
       }
 
+      // Before anything is sent: is this the transaction we built, and can Solana carry it?
+      const checked = checkSignedTransaction(txBase64, signed.signedTxBase64);
+      if (!checked.ok) {
+        host.debug({ signature: `refused, not sent: ${checked.problem} (${checked.detail})` });
+        showSteps(null);
+        setStatus(
+          checked.problem === "too_large"
+            ? `Phantom's signed transaction is ${checked.bytes} bytes, over Solana's 1,232-byte limit. Nothing was sent.`
+            : checked.problem === "not_signed"
+              ? "Phantom returned the transaction without a signature. Nothing was sent."
+              : "The transaction Phantom signed is not the one Soothia built. Nothing was sent.",
+        );
+        return;
+      }
+
       if (dryRun) {
         // The signed transaction is dropped here and never leaves this function.
-        host.debug({ signature: `${signed.signature} (dry run, not sent)`, register: "not attempted (dry run)" });
+        host.debug({
+          signature: `${signed.signature} (dry run, not sent; ${checked.bytes} bytes signed, ${checked.addedComputeBudget} compute-budget added)`,
+          register: "not attempted (dry run)",
+        });
         showSteps(null);
         setStatus("Dry run complete: Phantom signed it, nothing was sent.");
         return;
@@ -516,7 +560,7 @@ export function openSheet(host: SheetHost): Sheet {
 
       showSteps("Sending");
       setStatus("Sending to Solana…");
-      host.debug({ signature: signed.signature, register: "sending" });
+      host.debug({ signature: `${signed.signature} (${checked.bytes} bytes)`, register: "sending" });
       host.savePending({ quoteId: current.quoteId, signature: signed.signature, question });
       const sent = await host.api<FinishResult>("/create/send", {
         signedTxBase64: signed.signedTxBase64,

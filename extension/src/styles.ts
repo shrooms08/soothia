@@ -493,6 +493,14 @@ a.button {
   color: #ffffff;
 }
 
+.fit-note {
+  margin: 8px 0 0;
+}
+
+.fit-note:empty {
+  display: none;
+}
+
 .warn {
   margin: 8px 0 0;
   color: #fbbf24;

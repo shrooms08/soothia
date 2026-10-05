@@ -84,14 +84,19 @@ export const DRAFT_QUESTION_MIN_LENGTH = 10;
 
 // The real ceiling on text is Solana's transaction size, not Panta's field
 // limits. The question, resolutionRule, and sourcesOfTruth are all written
-// into the create transaction, which must fit in 1232 bytes. Measured live:
-// everything else in the transaction takes 725 bytes, each source costs 4
-// more, and the two strings cost 4 each, leaving about 495 bytes of text.
-export const MAX_TRANSACTION_BYTES = 1232;
-// UTF-8 bytes for question + resolutionRule + every source (plus 4 per source), with a margin.
-export const ONCHAIN_TEXT_BUDGET_BYTES = 470;
-// So a question always leaves room for a rule and sources.
+// into the create transaction, and a transaction cannot exceed 1232 bytes.
+export const SOLANA_MAX_TRANSACTION_BYTES = 1232;
+// Soothia refuses a built create transaction above this, leaving room for
+// the compute-budget and priority-fee instructions a wallet may add when signing.
+export const MAX_BUILT_TRANSACTION_BYTES = 1100;
+// Measured live, twice: transaction bytes = 737 + UTF-8 bytes of the
+// question and rule + (bytes + 4) for each source.
+export const TRANSACTION_FIXED_BYTES = 737;
+// What is left for that text, with a few bytes spare.
+export const ONCHAIN_TEXT_BUDGET_BYTES = MAX_BUILT_TRANSACTION_BYTES - TRANSACTION_FIXED_BYTES - 8;
 export const DRAFT_QUESTION_MAX_LENGTH = 200;
+// The last resort when a draft does not fit: trim the question to this, on a word boundary.
+export const TRIMMED_QUESTION_MAX_LENGTH = 150;
 // A longer page URL is cut back to its origin and path, then to its origin.
 export const PAGE_SOURCE_MAX_BYTES = 120;
 export const DESCRIPTION_MAX_LENGTH = 500;

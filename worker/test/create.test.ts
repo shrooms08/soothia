@@ -4,8 +4,8 @@ import { test } from "node:test";
 import { assembleV0 } from "../src/assemble";
 import { decodeBase58, encodeBase58, isAddress, isSignature } from "../src/base58";
 import { validateDraft, type MarketDraft } from "../src/pantaRules";
-import { ONCHAIN_TEXT_BUDGET_BYTES } from "../src/pantaRules";
-import { deadlineUtc, onchainTextBytes, resolutionRule, sourcesOfTruth } from "../src/resolution";
+import { MAX_BUILT_TRANSACTION_BYTES, TRANSACTION_FIXED_BYTES, TRIMMED_QUESTION_MAX_LENGTH } from "../src/pantaRules";
+import { deadlineUtc, fitDraft, onchainTextBytes, sourcesOfTruth, trimQuestion } from "../src/resolution";
 
 const NOW = Date.parse("2026-10-05T12:00:00Z");
 const USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
@@ -50,28 +50,68 @@ test("a long page URL is shortened so it cannot use up the transaction", () => {
   assert.equal(sourcesOfTruth({ ...draft, pageUrl: longPath })[0], "https://news.example.com");
 });
 
-test("the rule states the UTC deadline and always fits the transaction's text budget", () => {
-  const sources = sourcesOfTruth(draft);
-  const rule = resolutionRule(draft, sources)!;
+test("a normal draft keeps two sources and its drafted detail, under 1,100 bytes", () => {
+  const fitted = fitDraft({ ...draft, details: "Bitcoin's USD price is above 105,000 at any time before the deadline." })!;
   assert.equal(deadlineUtc(draft.endTime), "2026-12-31 23:59 UTC");
-  assert.ok(rule.includes("Resolves YES") && rule.includes("Otherwise NO"));
-  assert.ok(rule.includes("2026-12-31 23:59 UTC"));
-  assert.ok(rule.includes("USD price"));
-  assert.ok(onchainTextBytes(draft.question, rule, sources) <= ONCHAIN_TEXT_BUDGET_BYTES);
+  assert.equal(fitted.level, 0);
+  assert.deepEqual(fitted.adjustments, []);
+  assert.equal(fitted.sourcesOfTruth.length, 2);
+  assert.ok(fitted.resolutionRule.startsWith("YES if this happens by 2026-12-31 23:59 UTC"));
+  assert.ok(fitted.resolutionRule.includes("above 105,000"));
+  assert.ok(fitted.predictedBytes <= MAX_BUILT_TRANSACTION_BYTES);
+});
 
-  // Drafted detail is used when it fits and left out when it does not.
-  const short = resolutionRule({ ...draft, details: "CoinGecko BTC/USD." }, sources)!;
-  assert.ok(short.includes("CoinGecko BTC/USD."));
-  const huge = resolutionRule({ ...draft, details: "x".repeat(5000) }, sources)!;
-  assert.ok(!huge.includes("xxxx"));
+test("a long draft is shrunk in order and lands under 1,100 bytes", () => {
+  const long: MarketDraft = {
+    question:
+      "Will the United States Federal Reserve announce a cut of at least fifty basis points to the federal funds target range at or before its scheduled December 2026 meeting, according to its statement?",
+    category: "finance",
+    endTime: "2026-12-16T23:59:59.000Z",
+    pageUrl: "https://www.example-news.com/markets/2026/10/05/fed-officials-signal-larger-cuts-are-on-the-table-as-labour-market-cools",
+    resolutionType: "official_outcome",
+    details: "The Federal Open Market Committee statement published after the meeting lowers the target range by 50 basis points or more. ".repeat(3),
+  };
+  assert.ok(long.question.length > TRIMMED_QUESTION_MAX_LENGTH && long.question.length <= 200);
 
-  // The longest allowed question, in multi-byte characters, with a long URL.
-  const worst = { ...draft, question: `Will ${"\u00e9".repeat(194)}?`, pageUrl: `https://a.example/${"p".repeat(100)}` };
-  const worstSources = sourcesOfTruth(worst);
-  const worstRule = resolutionRule(worst, worstSources);
-  if (worstRule !== null) {
-    assert.ok(onchainTextBytes(worst.question, worstRule, worstSources) <= ONCHAIN_TEXT_BUDGET_BYTES);
-  }
+  // Unshrunk, this text would build to far more than Solana allows.
+  const fullRule = `YES if this happens by 2026-12-16 23:59 UTC, per the listed sources. Otherwise NO. ${long.details}`;
+  const unshrunk = TRANSACTION_FIXED_BYTES + onchainTextBytes(long.question, fullRule, sourcesOfTruth(long));
+  assert.ok(unshrunk > 1232, `unshrunk is ${unshrunk}`);
+
+  const fitted = fitDraft(long)!;
+  assert.deepEqual(fitted.adjustments, ["one_source", "minimal_rule", "question_trimmed"]);
+  assert.deepEqual(fitted.sourcesOfTruth, [long.pageUrl]);
+  assert.equal(fitted.resolutionRule, "YES if this happens by 2026-12-16 23:59 UTC, per the listed source. Otherwise NO.");
+  assert.ok(fitted.predictedBytes <= MAX_BUILT_TRANSACTION_BYTES, `predicted ${fitted.predictedBytes}`);
+  assert.equal(
+    fitted.predictedBytes,
+    TRANSACTION_FIXED_BYTES + onchainTextBytes(fitted.question, fitted.resolutionRule, fitted.sourcesOfTruth),
+  );
+
+  // The question is cut on a word boundary and is still a question.
+  assert.ok(fitted.question.length <= TRIMMED_QUESTION_MAX_LENGTH);
+  assert.ok(fitted.question.endsWith("?"));
+  const kept = fitted.question.slice(0, -1);
+  assert.ok(long.question.startsWith(kept));
+  assert.equal(long.question[kept.length], " ");
+});
+
+test("shrinking stops at the first step that fits, and can be forced further", () => {
+  const medium = { ...draft, details: "x".repeat(150) };
+  assert.deepEqual(fitDraft(medium)!.adjustments, ["one_source"]);
+  const longer = { ...draft, details: "x".repeat(260) };
+  assert.deepEqual(fitDraft(longer)!.adjustments, ["one_source", "minimal_rule"]);
+  // A real build that came out too big asks for the next level.
+  assert.deepEqual(fitDraft(draft, 1)!.adjustments, ["one_source"]);
+  assert.deepEqual(fitDraft(draft, 2)!.adjustments, ["one_source", "minimal_rule"]);
+  // Multi-byte text that cannot fit even when trimmed is refused, not truncated mid-character.
+  assert.equal(fitDraft({ ...draft, question: `Will ${"\u6f22".repeat(190)}?` }), null);
+});
+
+test("trimming a question never cuts a word", () => {
+  assert.equal(trimQuestion("Will it rain?", 150), "Will it rain?");
+  assert.equal(trimQuestion("Will Bitcoin trade above one hundred thousand dollars?", 30), "Will Bitcoin trade above one?");
+  assert.equal(trimQuestion("Will prices rise, fall, or stay flat this year?", 24), "Will prices rise, fall?");
 });
 
 test("draft validation enforces Panta's categories, lengths, and the end-time window", () => {

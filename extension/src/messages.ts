@@ -156,6 +156,11 @@ export interface Quote {
   breakdown: { liquidityUsdc: number; platformFeeUsdc: number };
   expiresAt: string;
   marketId: string;
+  /** The question as sent to Panta: trimmed if it had to be. */
+  question: string;
+  /** What was shrunk to fit the transaction: one_source, minimal_rule, question_trimmed. */
+  adjustments: string[];
+  predictedBytes: number;
   resolutionRule: string;
   sourcesOfTruth: string[];
   imageUrl: string;
@@ -163,6 +168,9 @@ export interface Quote {
 
 export interface Build {
   txBase64: string;
+  bytes: number;
+  /** Set when the build came out too big and the Worker shrank and re-quoted the draft. */
+  quote: Quote | null;
 }
 
 export interface Simulation {
