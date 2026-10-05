@@ -76,6 +76,7 @@ ${rulesForPrompt(nowMs)}
 Writing each claim:
 - Phrase the question as "Will ... by <date>?" with the subject, the exact threshold or result, and the date written out. It must make sense to someone who has not seen the page.
 - endTime is the moment the question closes: the deadline named in the question, or the scheduled start of the match or event.
+- endTime is in UTC. Convert any local time on the page before writing it: 17:30 BST is 16:30 UTC, 8pm ET is 00:00 UTC the next day (01:00 UTC in winter). When the page names a day but no time, use 23:59:59 UTC on that day.
 - Use only facts the page supports. Never invent a number, team, date, or name. If the page gives a price target, use that target; do not pick your own.
 - sourceQuote is the phrase from the page that the claim rests on, copied word for word.
 - Prefer the claims most central to the page, and do not return two claims about the same outcome.

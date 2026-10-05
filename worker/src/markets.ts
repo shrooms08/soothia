@@ -85,7 +85,7 @@ async function fetchOpenRows(env: Env, nowMs: number): Promise<CatalogRow[] | nu
   return [...rows.values()];
 }
 
-async function refresh(env: Env, nowMs: number): Promise<OpenMarket[] | null> {
+async function refresh(env: Env, nowMs: number, previous: OpenMarket[]): Promise<OpenMarket[] | null> {
   const rows = await fetchOpenRows(env, nowMs);
   if (!rows) return null;
 
@@ -96,12 +96,14 @@ async function refresh(env: Env, nowMs: number): Promise<OpenMarket[] | null> {
       const detail = await pantaGet<CatalogRow>(env, `/markets/${encodeURIComponent(row.marketId!)}/`);
       const title = (detail?.title || row.title || detail?.description || row.description || "").trim();
       if (!title) return null; // Nothing to match a claim against.
+      // Panta returns null prices when its RPC is unavailable; keep the last ones seen.
+      const last = previous.find((market) => market.id === row.marketId);
       return {
         id: row.marketId!,
         title,
         category: detail?.category ?? row.category ?? "other",
-        yesPrice: price(detail?.yesPrice),
-        noPrice: price(detail?.noPrice),
+        yesPrice: price(detail?.yesPrice) ?? last?.yesPrice ?? null,
+        noPrice: price(detail?.noPrice) ?? last?.noPrice ?? null,
         endTime: new Date(row.endTime! * 1000).toISOString(),
       };
     }),
@@ -114,7 +116,7 @@ export async function getOpenMarkets(env: Env): Promise<OpenMarket[]> {
   const stored = (await env.SOOTHIA_CACHE.get(LIST_KEY, "json")) as StoredList | null;
   if (stored && now - stored.fetchedAt < FRESH_MS) return stored.markets;
 
-  const markets = await refresh(env, now);
+  const markets = await refresh(env, now, stored?.markets ?? []);
   // Panta is down or rate limiting us: an older list beats no list.
   if (!markets) return stored?.markets ?? [];
 
