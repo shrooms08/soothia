@@ -1,18 +1,27 @@
 // Isolated-world content script: mounts the orb and card inside one closed
 // shadow root. Nothing here touches the page's own DOM or styles.
+import { button, el, endDate, externalLink } from "./dom";
 import {
+  API_REQUEST,
   DETECT_REQUEST,
+  IMAGE_REQUEST,
   HEALTH_REQUEST,
   NAV_CHANGED,
   WALLET_REQUEST,
   WALLET_STATUS,
+  type ApiError,
+  type ApiPath,
+  type ApiRequestMessage,
+  type ApiResponse,
   type DetectDebug,
   type DetectRequestMessage,
   type DetectResult,
+  type FinishResult,
   type HealthResponse,
   type Tile,
 } from "./messages";
 import { readPage, type ReadInfo } from "./reader";
+import { openSheet, type CreateDebug, type PendingCreate, type Sheet } from "./sheet";
 import {
   CARD_GAP,
   CARD_WIDTH,
@@ -26,6 +35,11 @@ import {
 const HOST_ID = "soothia-host";
 const POSITION_KEY = "soothia:orbPosition";
 const DRAG_THRESHOLD = 4;
+// Debug toggles. Dry run starts ON: nothing is sent until it is turned off.
+const DRY_RUN_KEY = "soothia:dryRun";
+const SKIP_CHECKS_KEY = "soothia:skipChecks";
+// A sent transaction whose market has not been seen registered yet.
+const PENDING_KEY = "soothia:pendingCreate";
 
 // Detection runs this long after the page (or a new URL) settles.
 const SETTLE_MS = 2000;
@@ -52,15 +66,6 @@ interface ScanDebug {
   state: string;
   detect: DetectDebug | null;
 }
-
-// A market's end date is a UTC calendar date ("Dec 31, 2026"), the same for
-// every reader. Local time would push a 23:59 UTC deadline into the next day.
-export const END_DATE = new Intl.DateTimeFormat("en-US", {
-  month: "short",
-  day: "numeric",
-  year: "numeric",
-  timeZone: "UTC",
-});
 
 function currentUrl(): string {
   return location.href.split("#")[0];
@@ -103,45 +108,37 @@ function savePosition(position: OrbPosition): void {
   chrome.storage.local.set({ [POSITION_KEY]: position }).catch(() => {});
 }
 
-function el<K extends keyof HTMLElementTagNameMap>(
-  tag: K,
-  className: string,
-  text?: string,
-): HTMLElementTagNameMap[K] {
-  const node = document.createElement(tag);
-  node.className = className;
-  if (text) node.textContent = text;
-  return node;
-}
-
 // A button that looks present but does nothing yet. aria-disabled (not
 // disabled) keeps the hover tooltip working.
 function comingNext(label: string, className: string): HTMLButtonElement {
-  const button = el("button", className, label);
-  button.type = "button";
-  button.title = "Coming next";
-  button.setAttribute("aria-disabled", "true");
-  return button;
+  const node = button(label, className);
+  node.title = "Coming next";
+  node.setAttribute("aria-disabled", "true");
+  return node;
 }
 
-function tileNode({ claim, market }: Tile): HTMLElement {
+/** A market the user created from a claim on this page. */
+interface LiveMarket {
+  marketUrl: string;
+}
+
+function tileNode({ claim, market }: Tile, live: LiveMarket | undefined, onMake: () => void): HTMLElement {
   const tile = el("div", "tile");
 
   const meta = el("div", "meta");
-  const end = new Date(claim.endTime);
-  meta.append(
-    el("span", "chip", claim.category),
-    el("span", "ends", Number.isNaN(end.getTime()) ? "" : `Ends ${END_DATE.format(end)}`),
-  );
+  const ends = endDate(claim.endTime);
+  meta.append(el("span", "chip", claim.category), el("span", "ends", ends ? `Ends ${ends}` : ""));
 
   const actions = el("div", "actions");
-  if (market) {
+  if (live) {
+    actions.append(externalLink("Live on Panta", live.marketUrl, "link"), comingNext("Bet", "button primary"));
+  } else if (market) {
     const odds = market.yesPrice === null ? "YES \u2013" : `YES ${Math.round(market.yesPrice * 100)}%`;
     const oddsNode = el("span", "odds", odds);
     oddsNode.title = market.title;
     actions.append(oddsNode, comingNext("Bet", "button primary"));
   } else {
-    actions.append(comingNext("Make it a market", "button"));
+    actions.append(button("Make it a market", "button", onMake));
   }
 
   tile.append(
@@ -199,8 +196,35 @@ async function mount(): Promise<void> {
   const scanInfo = el("dl", "scan");
   const scanAgain = el("button", "button small", "Scan again");
   scanAgain.type = "button";
-  debug.append(el("summary", "debug-summary", "debug"), scanInfo, scanAgain, phantomRow.row, proxyRow.row);
+
+  function toggle(label: string): { row: HTMLElement; box: HTMLInputElement } {
+    const row = el("label", "toggle");
+    const box = el("input", "toggle-box");
+    box.type = "checkbox";
+    row.append(box, el("span", "toggle-label", label));
+    return { row, box };
+  }
+  const dryRunToggle = toggle("Dry run (sign only, never send)");
+  const skipChecksToggle = toggle("In dry run, skip balance and simulation checks");
+  const createInfo = el("dl", "scan");
+
+  debug.append(
+    el("summary", "debug-summary", "debug"),
+    scanInfo,
+    scanAgain,
+    dryRunToggle.row,
+    skipChecksToggle.row,
+    createInfo,
+    phantomRow.row,
+    proxyRow.row,
+  );
   card.append(el("h2", "title", "Soothia"), body, debug);
+
+  // Typing in the sheet must not trigger the page's keyboard shortcuts (X
+  // has many). Escape still closes the card: that listener runs in capture.
+  for (const type of ["keydown", "keypress", "keyup"] as const) {
+    card.addEventListener(type, (event) => event.stopPropagation());
+  }
 
   shadow.append(style, orb, card);
 
@@ -293,7 +317,61 @@ async function mount(): Promise<void> {
     return button;
   }
 
+  // ---- Review sheet ----
+
+  let tiles: Tile[] = [];
+  let sheet: Sheet | null = null;
+  const liveMarkets = new Map<string, LiveMarket>();
+
+  function closeSheet(): void {
+    sheet?.dispose();
+    sheet = null;
+  }
+
+  function showTiles(): void {
+    closeSheet();
+    setOrb("found", tiles.length);
+    body.replaceChildren(...tiles.map((tile) => tileNode(tile, liveMarkets.get(tile.claim.id), () => review(tile))));
+    layout();
+  }
+
+  async function api<T>(path: ApiPath, payload: unknown): Promise<ApiResponse<T | ApiError>> {
+    try {
+      const message: ApiRequestMessage = { type: API_REQUEST, path, body: payload };
+      const response = (await chrome.runtime.sendMessage(message)) as ApiResponse<T | ApiError> | undefined;
+      return response ?? { ok: false, status: 0, body: null };
+    } catch {
+      return { ok: false, status: 0, body: null };
+    }
+  }
+
+  function review(tile: Tile): void {
+    closeSheet();
+    sheet = openSheet({
+      tile,
+      pageUrl: watchedUrl,
+      api,
+      image: async (category) => {
+        try {
+          return ((await chrome.runtime.sendMessage({ type: IMAGE_REQUEST, category })) as string | null) ?? null;
+        } catch {
+          return null;
+        }
+      },
+      settings: () => ({ dryRun: dryRunToggle.box.checked, skipChecks: skipChecksToggle.box.checked }),
+      debug: setCreateDebug,
+      layout,
+      isVisible: () => !card.hidden && document.visibilityState === "visible",
+      back: showTiles,
+      created: (market) => liveMarkets.set(tile.claim.id, { marketUrl: market.marketUrl }),
+      savePending,
+    });
+    body.replaceChildren(sheet.node);
+    layout();
+  }
+
   function render(view: View): void {
+    closeSheet();
     switch (view.kind) {
       case "watching":
         setOrb("idle");
@@ -304,8 +382,8 @@ async function mount(): Promise<void> {
         body.replaceChildren(line("Reading this page\u2026"));
         break;
       case "tiles":
-        setOrb("found", view.tiles.length);
-        body.replaceChildren(...view.tiles.map(tileNode));
+        tiles = view.tiles;
+        showTiles();
         break;
       case "empty":
         setOrb("idle");
@@ -360,6 +438,78 @@ async function mount(): Promise<void> {
     scan = { ...scan, ...update };
     renderDebug();
   }
+
+  let createDebug: CreateDebug = { wallet: "\u2013", quote: "\u2013", simulate: "\u2013", signature: "\u2013", register: "\u2013" };
+
+  function setCreateDebug(update: Partial<CreateDebug>): void {
+    createDebug = { ...createDebug, ...update };
+    const rows: [string, string][] = [
+      ["wallet", createDebug.wallet],
+      ["quote", createDebug.quote],
+      ["simulate", createDebug.simulate],
+      ["signature", createDebug.signature],
+      ["register", createDebug.register],
+    ];
+    createInfo.replaceChildren(
+      ...rows.flatMap(([name, value]) => [el("dt", "scan-name", name), el("dd", "scan-value", value)]),
+    );
+    if (!card.hidden) layout();
+  }
+
+  function savePending(pending: PendingCreate | null): void {
+    const done = pending
+      ? chrome.storage.local.set({ [PENDING_KEY]: pending })
+      : chrome.storage.local.remove(PENDING_KEY);
+    done.catch(() => {});
+  }
+
+  // If the tab closed after a transaction was sent, finish registering it now.
+  async function resumePending(): Promise<void> {
+    let pending: PendingCreate | undefined;
+    try {
+      pending = (await chrome.storage.local.get(PENDING_KEY))[PENDING_KEY] as PendingCreate | undefined;
+    } catch {
+      return;
+    }
+    if (!pending?.signature || !pending.quoteId) return;
+    setCreateDebug({ signature: pending.signature, register: "resuming an unfinished market\u2026" });
+    const response = await api<FinishResult>("/create/register-retry", {
+      signature: pending.signature,
+      quoteId: pending.quoteId,
+    });
+    const result = response.ok ? (response.body as FinishResult) : null;
+    if (result?.registered) {
+      savePending(null);
+      setCreateDebug({ register: `registered (resumed): ${result.marketUrl}` });
+    } else if (result?.status === "failed") {
+      savePending(null);
+      setCreateDebug({ register: "transaction failed on-chain (resumed)" });
+    } else {
+      setCreateDebug({ register: `unfinished: ${result?.registerError ?? result?.status ?? "no answer"}` });
+    }
+  }
+
+  async function loadSettings(): Promise<void> {
+    dryRunToggle.box.checked = true;
+    try {
+      const stored = await chrome.storage.local.get([DRY_RUN_KEY, SKIP_CHECKS_KEY]);
+      dryRunToggle.box.checked = stored[DRY_RUN_KEY] !== false;
+      skipChecksToggle.box.checked = stored[SKIP_CHECKS_KEY] === true;
+    } catch {
+      // Storage unavailable: stay in dry run.
+    }
+    skipChecksToggle.box.disabled = !dryRunToggle.box.checked;
+  }
+
+  dryRunToggle.box.addEventListener("change", () => {
+    skipChecksToggle.box.disabled = !dryRunToggle.box.checked;
+    chrome.storage.local.set({ [DRY_RUN_KEY]: dryRunToggle.box.checked }).catch(() => {});
+    sheet?.refresh();
+  });
+  skipChecksToggle.box.addEventListener("change", () => {
+    chrome.storage.local.set({ [SKIP_CHECKS_KEY]: skipChecksToggle.box.checked }).catch(() => {});
+    sheet?.refresh();
+  });
 
   // ---- Detection ----
 
@@ -453,6 +603,7 @@ async function mount(): Promise<void> {
     renderPhantom();
     window.postMessage({ type: WALLET_REQUEST }, window.location.origin);
     void refreshProxy();
+    sheet?.refresh();
     layout();
   }
 
@@ -531,6 +682,9 @@ async function mount(): Promise<void> {
   renderPhantom();
   proxyRow.set("Proxy: checking…", "idle");
   renderDebug();
+  setCreateDebug({});
+  await loadSettings();
+  void resumePending();
   render({ kind: "watching" });
   document.documentElement.append(host);
 

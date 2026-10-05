@@ -21,11 +21,14 @@ import { rpc, RpcError } from "./rpc";
 const QUOTE_TTL_SEC = 24 * 3600;
 const TRANSIENT_QUOTE_FAILURE = "unexpected create quote failure";
 const TRANSIENT_QUOTE_RETRY_WAITS_MS = [1500, 4000];
-// A serialized transaction is at most 1232 bytes: 1644 base64 characters.
-const MAX_TX_BASE64 = 1700;
+// Panta's create transaction is about 1540 bytes (2052 base64 characters),
+// above the classic 1232-byte packet. Allow up to 4096 bytes.
+const MAX_TX_BASE64 = 5600;
 const POLL_INTERVAL_MS = 2500;
 const SEND_CONFIRM_WAIT_MS = 60_000;
 const RETRY_CONFIRM_WAIT_MS = 20_000;
+// Work after the response is sent may run for about 30 seconds.
+const BACKGROUND_FINISH_WAIT_MS = 22_000;
 const REGISTER_ATTEMPTS = 3;
 const MAX_CREATOR_MARKETS = 100;
 
@@ -215,7 +218,8 @@ export async function handleBuild(request: Request, env: Env): Promise<Response>
       txBase64: build.transaction,
       recentBlockhash: build.recentBlockhash ?? null,
       lastValidBlockHeight: build.lastValidBlockHeight ?? null,
-      expiresAt: build.expiresAt ?? null,
+      // Not the session expiry: this one tracks the blockhash, about a minute out.
+      txExpiresAt: build.expiresAt ?? null,
     });
   }
 
@@ -230,7 +234,7 @@ export async function handleBuild(request: Request, env: Env): Promise<Response>
         txBase64: await assembleV0(build.instructions, body.wallet, latest.value.blockhash),
         recentBlockhash: latest.value.blockhash,
         lastValidBlockHeight: latest.value.lastValidBlockHeight,
-        expiresAt: build.expiresAt ?? null,
+        txExpiresAt: build.expiresAt ?? null,
       });
     } catch {
       return json(request, { error: "build_failed", message: "Could not assemble the transaction." }, 502);
@@ -427,7 +431,7 @@ function firstSignature(signedTxBase64: string): string | null {
   return encodeBase58(signature);
 }
 
-export async function handleSend(request: Request, env: Env): Promise<Response> {
+export async function handleSend(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const body = await readJsonObject(request);
   if (!body || !isTxBase64(body.signedTxBase64) || !isQuoteId(body.quoteId)) {
     return json(request, { error: "bad_request" }, 400);
@@ -478,7 +482,10 @@ export async function handleSend(request: Request, env: Env): Promise<Response> 
   // finishes with /create/register-retry. The extension does this because a
   // browser service worker cannot hold one request open for a minute.
   if (body.confirm === false) {
-    return json(request, { ...(await finish(env, body.quoteId, record, signature, 0)) });
+    // Also finish in the background, so the market still gets registered if
+    // the user closes the tab right after paying.
+    ctx.waitUntil(finish(env, body.quoteId, record, signature, BACKGROUND_FINISH_WAIT_MS).catch(() => {}));
+    return json(request, await finish(env, body.quoteId, record, signature, 0));
   }
   return json(request, await finish(env, body.quoteId, record, signature, SEND_CONFIRM_WAIT_MS));
 }

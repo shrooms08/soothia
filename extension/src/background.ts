@@ -2,8 +2,14 @@
 // origin and get blocked by CORS, so network calls to the Worker go through here.
 import { WORKER_URL } from "./config";
 import {
+  API_REQUEST,
+  API_ROUTES,
   DETECT_REQUEST,
   HEALTH_REQUEST,
+  IMAGE_REQUEST,
+  INJECT_SIGNER,
+  type ApiRequestMessage,
+  type ApiResponse,
   type Claim,
   type DetectDebug,
   type DetectRequestMessage,
@@ -57,7 +63,8 @@ async function post(path: string, body: unknown, refresh = false): Promise<Respo
     method: "POST",
     headers,
     body: JSON.stringify(body),
-    signal: AbortSignal.timeout(40_000),
+    // Chrome stops a service worker whose fetch takes over 30 seconds.
+    signal: AbortSignal.timeout(28_000),
   });
 }
 
@@ -146,7 +153,45 @@ const FAILED: DetectResult = {
   debug: { httpStatus: null, cache: null, fromClientCache: false, claimsReturned: 0, dropped: [] },
 };
 
-chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+// Relays one wallet or create call to the Worker. Bodies (which can hold a
+// signed transaction) pass straight through and are never logged or stored.
+async function relay(message: ApiRequestMessage): Promise<ApiResponse> {
+  if (!Object.hasOwn(API_ROUTES, message.path)) return { ok: false, status: 0, body: null };
+  try {
+    const response = await post(message.path, message.body);
+    return { ok: response.ok, status: response.status, body: await response.json().catch(() => null) };
+  } catch {
+    return { ok: false, status: 0, body: null };
+  }
+}
+
+// Pages with a strict CSP (X, for one) block images from other hosts, so the
+// category image is fetched here and handed over as a data: URL.
+async function categoryImage(category: unknown): Promise<string | null> {
+  if (typeof category !== "string" || !/^[a-z-]{1,30}$/.test(category)) return null;
+  try {
+    const response = await fetch(`${WORKER_URL}/img/${category}.png`, { signal: AbortSignal.timeout(10_000) });
+    if (!response.ok) return null;
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    let binary = "";
+    for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    return `data:image/png;base64,${btoa(binary)}`;
+  } catch {
+    return null;
+  }
+}
+
+async function injectSigner(tabId: number | undefined): Promise<boolean> {
+  if (tabId === undefined) return false;
+  try {
+    await chrome.scripting.executeScript({ target: { tabId }, files: ["wallet-sign.js"], world: "MAIN" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   switch (message?.type) {
     case HEALTH_REQUEST:
       checkHealth().then(sendResponse);
@@ -156,6 +201,15 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
         sendResponse,
         () => sendResponse(FAILED),
       );
+      return true;
+    case API_REQUEST:
+      relay(message as ApiRequestMessage).then(sendResponse);
+      return true;
+    case IMAGE_REQUEST:
+      categoryImage(message.category).then(sendResponse);
+      return true;
+    case INJECT_SIGNER:
+      injectSigner(sender.tab?.id).then(sendResponse);
       return true;
   }
 });

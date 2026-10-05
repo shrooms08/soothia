@@ -85,3 +85,110 @@ export type DetectResult = { debug: DetectDebug } & (
   | { status: "ok"; tiles: Tile[] }
   | { status: "error"; reason: "limit" | "unavailable" }
 );
+
+// ---- Wallet bridge (isolated world <-> MAIN world, via window.postMessage) ----
+
+export const WALLET_RPC_REQUEST = "soothia:v1:wallet-rpc";
+export const WALLET_RPC_RESPONSE = "soothia:v1:wallet-rpc-result";
+// The on-demand signer bundle announces itself once it has loaded.
+export const SIGNER_READY = "soothia:v1:signer-ready";
+
+export type WalletMethod = "connect" | "disconnect" | "getPublicKey" | "signTransaction" | "signerPing";
+
+export interface WalletRpcRequest {
+  type: typeof WALLET_RPC_REQUEST;
+  id: string;
+  method: WalletMethod;
+  /** signTransaction only: the unsigned transaction. */
+  txBase64?: string;
+}
+
+export type WalletRpcOutcome =
+  | { ok: true; publicKey?: string | null; signedTxBase64?: string; signature?: string }
+  // The user said no in Phantom. A normal outcome, not a failure.
+  | { ok: false; reason: "rejected" }
+  | { ok: false; reason: "no_wallet" | "timeout" | "failed"; message?: string };
+
+export type WalletRpcResponse = { type: typeof WALLET_RPC_RESPONSE; id: string } & WalletRpcOutcome;
+
+// ---- Content script -> background ----
+
+// Relay one call to the Worker. Only the paths in API_ROUTES are allowed.
+export const API_REQUEST = "soothia:v1:api";
+// Load the signer bundle (with @solana/web3.js) into this tab's MAIN world.
+export const INJECT_SIGNER = "soothia:v1:inject-signer";
+// Fetch a category image as a data: URL (page CSP can block the direct load).
+export const IMAGE_REQUEST = "soothia:v1:image";
+
+export const API_ROUTES = {
+  "/wallet/balances": "POST",
+  "/create/quote": "POST",
+  "/create/build": "POST",
+  "/create/simulate": "POST",
+  "/create/send": "POST",
+  "/create/register-retry": "POST",
+} as const;
+export type ApiPath = keyof typeof API_ROUTES;
+
+export interface ApiRequestMessage {
+  type: typeof API_REQUEST;
+  path: ApiPath;
+  body: unknown;
+}
+
+/** `status` 0 means the request never completed. */
+export interface ApiResponse<T = unknown> {
+  ok: boolean;
+  status: number;
+  body: T | null;
+}
+
+// ---- Worker shapes used by the review sheet ----
+
+export interface Balances {
+  sol: number;
+  usdc: number;
+}
+
+export interface Quote {
+  quoteId: string;
+  paymentUsdc: number;
+  breakdown: { liquidityUsdc: number; platformFeeUsdc: number };
+  expiresAt: string;
+  marketId: string;
+  resolutionRule: string;
+  sourcesOfTruth: string[];
+  imageUrl: string;
+}
+
+export interface Build {
+  txBase64: string;
+}
+
+export interface Simulation {
+  ok: boolean;
+  err: unknown;
+  reason: string | null;
+  logLine: string | null;
+  unitsConsumed: number | null;
+}
+
+export interface FinishResult {
+  signature: string;
+  status: "confirmed" | "failed" | "pending";
+  marketId: string;
+  marketUrl: string;
+  registered: boolean;
+  registerError: string | null;
+  error?: string;
+}
+
+/** Worker error body. */
+export interface ApiError {
+  error?: string;
+  message?: string | null;
+  field?: string | null;
+  reason?: string;
+  logLine?: string | null;
+  signature?: string;
+}

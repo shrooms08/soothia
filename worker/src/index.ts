@@ -17,7 +17,10 @@ import { handleMatch } from "./match";
 import { handleBalances } from "./wallet";
 
 // Wallet and create routes: POST, and only from a Soothia install.
-const INSTALL_ROUTES: Record<string, (request: Request, env: Env) => Promise<Response>> = {
+const INSTALL_ROUTES: Record<
+  string,
+  (request: Request, env: Env, ctx: ExecutionContext) => Promise<Response>
+> = {
   "/wallet/balances": handleBalances,
   "/create/quote": handleQuote,
   "/create/build": handleBuild,
@@ -75,7 +78,7 @@ function marketsQuery(url: URL): URLSearchParams {
 }
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     if (request.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: corsHeaders(request) });
     }
@@ -87,7 +90,7 @@ export default {
       const installRoute = INSTALL_ROUTES[path];
       if (installRoute) {
         if (!installId(request)) return json(request, { error: "missing_install" }, 400);
-        return installRoute(request, env);
+        return installRoute(request, env, ctx);
       }
       switch (path) {
         case "/detect":
