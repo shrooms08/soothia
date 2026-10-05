@@ -1,0 +1,24 @@
+{
+  "manifest_version": 3,
+  "name": "Soothia",
+  "version": "0.0.1",
+  "description": "See the odds on everything you read.",
+  "permissions": ["storage"],
+  "host_permissions": ["<all_urls>"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["wallet-detect.js"],
+      "run_at": "document_idle",
+      "world": "MAIN"
+    }
+  ]
+}

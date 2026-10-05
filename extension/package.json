@@ -1,0 +1,14 @@
+{
+  "name": "soothia-extension",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.1.0",
+    "typescript": "^5",
+    "vite": "^7"
+  }
+}
