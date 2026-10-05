@@ -111,60 +111,94 @@ function quoteIsFromPage(quote: string, pageText: string): boolean {
   return found / words.length >= 0.8;
 }
 
-/** Checks that only depend on the clock; reused when serving cached claims. */
-export function endTimeIsCreatable(endTime: string, nowMs: number): boolean {
+export type DropReason =
+  | "not_an_object"
+  | "question_format"
+  | "question_too_long"
+  | "category_not_allowed"
+  | "end_time_invalid"
+  | "end_time_too_soon"
+  | "end_time_too_far"
+  | "resolution_missing"
+  | "resolution_type_unknown"
+  | "resolution_type_wrong_category"
+  | "resolution_details_invalid"
+  | "resolution_sources_missing"
+  | "confidence_invalid"
+  | "source_quote_not_on_page"
+  | "duplicate";
+
+function endTimeProblem(endTime: string, nowMs: number): DropReason | null {
   const endMs = Date.parse(endTime);
-  if (Number.isNaN(endMs)) return false;
+  if (Number.isNaN(endMs)) return "end_time_invalid";
   const leadSec = (endMs - nowMs) / 1000;
-  return leadSec >= MIN_END_LEAD_SEC && leadSec <= MAX_END_HORIZON_SEC;
+  if (leadSec < MIN_END_LEAD_SEC) return "end_time_too_soon";
+  if (leadSec > MAX_END_HORIZON_SEC) return "end_time_too_far";
+  return null;
 }
 
+/** Checks that only depend on the clock; reused when serving cached claims. */
+export function endTimeIsCreatable(endTime: string, nowMs: number): boolean {
+  return endTimeProblem(endTime, nowMs) === null;
+}
+
+export type Validation = { ok: true; claim: ClaimDraft } | { ok: false; reason: DropReason };
+
 /**
- * Returns a clean draft if Panta would accept a market built from it, else
- * null. `pageText` is the text the claim was drawn from.
+ * Passes a clean draft if Panta would accept a market built from it, else
+ * says why not. `pageText` is the text the claim was drawn from.
  */
-export function validateClaim(raw: unknown, pageText: string, nowMs: number): ClaimDraft | null {
-  if (typeof raw !== "object" || raw === null) return null;
+export function validateClaim(raw: unknown, pageText: string, nowMs: number): Validation {
+  const drop = (reason: DropReason): Validation => ({ ok: false, reason });
+  if (typeof raw !== "object" || raw === null) return drop("not_an_object");
   const input = raw as Record<string, unknown>;
 
-  if (!isString(input.question)) return null;
+  if (!isString(input.question)) return drop("question_format");
   const question = input.question.trim().replace(/\s+/g, " ");
-  if (!/^Will\s.+\?$/.test(question) || question.length > QUESTION_MAX_LENGTH) return null;
+  if (!/^Will\s.+\?$/.test(question)) return drop("question_format");
+  if (question.length > QUESTION_MAX_LENGTH) return drop("question_too_long");
 
-  if (!isString(input.category)) return null;
+  if (!isString(input.category)) return drop("category_not_allowed");
   const category = input.category as Category;
-  if (!CATEGORIES.includes(category)) return null;
+  if (!CATEGORIES.includes(category)) return drop("category_not_allowed");
 
-  if (!isString(input.endTime) || !endTimeIsCreatable(input.endTime, nowMs)) return null;
+  if (!isString(input.endTime)) return drop("end_time_invalid");
+  const timeProblem = endTimeProblem(input.endTime, nowMs);
+  if (timeProblem) return drop(timeProblem);
   const endTime = new Date(Date.parse(input.endTime)).toISOString();
 
-  if (typeof input.resolution !== "object" || input.resolution === null) return null;
+  if (typeof input.resolution !== "object" || input.resolution === null) return drop("resolution_missing");
   const resolution = input.resolution as Record<string, unknown>;
-  if (!isString(resolution.type)) return null;
+  if (!isString(resolution.type)) return drop("resolution_type_unknown");
   const type = resolution.type as ResolutionType;
-  if (!RESOLUTION_TYPE_NAMES.includes(type)) return null;
-  if (!(RESOLUTION_TYPES[type].categories as readonly string[]).includes(category)) return null;
+  if (!RESOLUTION_TYPE_NAMES.includes(type)) return drop("resolution_type_unknown");
+  if (!(RESOLUTION_TYPES[type].categories as readonly string[]).includes(category)) {
+    return drop("resolution_type_wrong_category");
+  }
 
-  if (!isString(resolution.details)) return null;
+  if (!isString(resolution.details)) return drop("resolution_details_invalid");
   const details = resolution.details.trim();
-  if (!details || details.length > RESOLUTION_RULE_MAX_LENGTH) return null;
+  if (!details || details.length > RESOLUTION_RULE_MAX_LENGTH) return drop("resolution_details_invalid");
 
-  if (!Array.isArray(resolution.sources)) return null;
+  if (!Array.isArray(resolution.sources)) return drop("resolution_sources_missing");
   const sources = resolution.sources
     .filter(isString)
     .map((source) => source.trim())
     .filter(Boolean)
     .slice(0, SOURCES_OF_TRUTH_MAX);
-  if (sources.length === 0) return null;
+  if (sources.length === 0) return drop("resolution_sources_missing");
 
-  if (typeof input.confidence !== "number" || Number.isNaN(input.confidence)) return null;
+  if (typeof input.confidence !== "number" || Number.isNaN(input.confidence)) return drop("confidence_invalid");
   const confidence = Math.min(1, Math.max(0, input.confidence));
 
-  if (!isString(input.sourceQuote)) return null;
+  if (!isString(input.sourceQuote)) return drop("source_quote_not_on_page");
   const sourceQuote = input.sourceQuote.trim().split(/\s+/).slice(0, SOURCE_QUOTE_MAX_WORDS).join(" ");
-  if (!quoteIsFromPage(sourceQuote, pageText)) return null;
+  if (!quoteIsFromPage(sourceQuote, pageText)) return drop("source_quote_not_on_page");
 
-  return { question, category, endTime, resolution: { type, details, sources }, confidence, sourceQuote };
+  return {
+    ok: true,
+    claim: { question, category, endTime, resolution: { type, details, sources }, confidence, sourceQuote },
+  };
 }
 
 /** The rules, worded for the drafting prompt. */
