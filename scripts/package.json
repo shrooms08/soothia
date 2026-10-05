@@ -1,0 +1,14 @@
+{
+  "name": "soothia-scripts",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "catalog-check": "tsx catalog-check.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^24",
+    "tsx": "^4",
+    "typescript": "^5"
+  }
+}
