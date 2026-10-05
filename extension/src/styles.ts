@@ -82,11 +82,77 @@ export const STYLES = `
   }
 }
 
+/* Orb states: idle is the base pulse above. */
+
+.orb[data-state="thinking"] {
+  opacity: 0.6;
+  animation: soothia-pulse-thinking 5.5s ease-in-out infinite;
+}
+
+.orb[data-state="found"] {
+  animation: soothia-pulse-found 2.4s ease-in-out infinite;
+}
+
+@keyframes soothia-pulse-thinking {
+  0%, 100% {
+    box-shadow:
+      0 0 0 1px rgba(155, 123, 255, 0.25),
+      0 0 8px 1px rgba(155, 123, 255, 0.2),
+      0 6px 20px rgba(20, 10, 50, 0.3);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px rgba(155, 123, 255, 0.35),
+      0 0 16px 4px rgba(155, 123, 255, 0.35),
+      0 6px 20px rgba(20, 10, 50, 0.3);
+  }
+}
+
+@keyframes soothia-pulse-found {
+  0%, 100% {
+    box-shadow:
+      0 0 0 2px rgba(201, 179, 255, 0.7),
+      0 0 24px 8px rgba(155, 123, 255, 0.7),
+      0 6px 20px rgba(20, 10, 50, 0.35);
+  }
+  50% {
+    box-shadow:
+      0 0 0 2px rgba(201, 179, 255, 0.9),
+      0 0 40px 16px rgba(155, 123, 255, 0.85),
+      0 6px 20px rgba(20, 10, 50, 0.35);
+  }
+}
+
+.badge {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border: 2px solid #15121f;
+  border-radius: 10px;
+  background: #7c4dff;
+  color: #ffffff;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 16px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.badge[hidden] {
+  display: none;
+}
+
 .card {
   position: fixed;
   width: ${CARD_WIDTH}px;
   max-width: calc(100vw - ${EDGE_PADDING * 2}px);
-  padding: 18px 20px;
+  max-height: calc(100vh - ${EDGE_PADDING * 2}px);
+  overflow-y: auto;
+  padding: 18px 20px 10px;
   border: 1px solid rgba(155, 123, 255, 0.25);
   border-radius: 16px;
   background: #15121f;
@@ -122,6 +188,112 @@ export const STYLES = `
   color: #b9b1cf;
 }
 
+.tile {
+  margin: 10px 0 12px;
+  padding: 12px 14px;
+  border: 1px solid rgba(155, 123, 255, 0.2);
+  border-radius: 12px;
+  background: #1d192b;
+}
+
+.question {
+  margin: 0 0 8px;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  color: #b9b1cf;
+  font-size: 12px;
+}
+
+.chip {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(155, 123, 255, 0.18);
+  color: #d9ccff;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.quote {
+  margin: 0 0 10px;
+  color: #8b84a3;
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.odds {
+  color: #4ade80;
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.button {
+  padding: 7px 14px;
+  border: 1px solid rgba(155, 123, 255, 0.45);
+  border-radius: 999px;
+  background: transparent;
+  color: #d9ccff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.button.primary {
+  border-color: transparent;
+  background: #7c4dff;
+  color: #ffffff;
+}
+
+.button[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.button:focus-visible {
+  outline: 2px solid #c9b3ff;
+  outline-offset: 2px;
+}
+
+.debug {
+  margin-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  color: #8b84a3;
+  font-size: 12px;
+}
+
+.debug-summary {
+  padding: 8px 0;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.debug .status {
+  padding: 6px 0;
+}
+
 .status {
   display: flex;
   align-items: center;
@@ -149,7 +321,7 @@ export const STYLES = `
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .orb, .card {
+  .orb, .orb[data-state], .card {
     animation: none;
     transition: none;
   }

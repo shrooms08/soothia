@@ -1,11 +1,17 @@
 // Isolated-world content script: mounts the orb and card inside one closed
 // shadow root. Nothing here touches the page's own DOM or styles.
 import {
+  DETECT_REQUEST,
   HEALTH_REQUEST,
+  NAV_CHANGED,
   WALLET_REQUEST,
   WALLET_STATUS,
+  type DetectRequestMessage,
+  type DetectResult,
   type HealthResponse,
+  type Tile,
 } from "./messages";
+import { readPage } from "./reader";
 import {
   CARD_GAP,
   CARD_WIDTH,
@@ -19,6 +25,33 @@ import {
 const HOST_ID = "soothia-host";
 const POSITION_KEY = "soothia:orbPosition";
 const DRAG_THRESHOLD = 4;
+
+// Detection runs this long after the page (or a new URL) settles.
+const SETTLE_MS = 2000;
+// Dynamic pages can still be filling in; look again a few times before giving up.
+const THIN_RETRY_MS = 1500;
+const THIN_RETRIES = 3;
+
+type OrbState = "idle" | "thinking" | "found";
+
+type View =
+  | { kind: "watching" }
+  | { kind: "thinking" }
+  | { kind: "tiles"; tiles: Tile[] }
+  | { kind: "empty" }
+  | { kind: "error"; reason: "limit" | "unavailable" };
+
+const END_DATE = new Intl.DateTimeFormat(undefined, {
+  month: "short",
+  day: "numeric",
+  year: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+});
+
+function currentUrl(): string {
+  return location.href.split("#")[0];
+}
 
 // Orb position, stored as the gap to the right and bottom viewport edges so
 // the orb stays put relative to its corner when the window resizes.
@@ -68,6 +101,45 @@ function el<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
+// A button that looks present but does nothing yet. aria-disabled (not
+// disabled) keeps the hover tooltip working.
+function comingNext(label: string, className: string): HTMLButtonElement {
+  const button = el("button", className, label);
+  button.type = "button";
+  button.title = "Coming next";
+  button.setAttribute("aria-disabled", "true");
+  return button;
+}
+
+function tileNode({ claim, market }: Tile): HTMLElement {
+  const tile = el("div", "tile");
+
+  const meta = el("div", "meta");
+  const end = new Date(claim.endTime);
+  meta.append(
+    el("span", "chip", claim.category),
+    el("span", "ends", Number.isNaN(end.getTime()) ? "" : `Ends ${END_DATE.format(end)}`),
+  );
+
+  const actions = el("div", "actions");
+  if (market) {
+    const odds = market.yesPrice === null ? "YES \u2013" : `YES ${Math.round(market.yesPrice * 100)}%`;
+    const oddsNode = el("span", "odds", odds);
+    oddsNode.title = market.title;
+    actions.append(oddsNode, comingNext("Bet", "button primary"));
+  } else {
+    actions.append(comingNext("Make it a market", "button"));
+  }
+
+  tile.append(
+    el("p", "question", claim.question),
+    meta,
+    el("p", "quote", `\u201C${claim.sourceQuote}\u201D`),
+    actions,
+  );
+  return tile;
+}
+
 function statusRow(): { row: HTMLElement; set: (text: string, state: "good" | "bad" | "idle") => void } {
   const row = el("div", "status");
   const label = el("span", "label");
@@ -98,6 +170,10 @@ async function mount(): Promise<void> {
   orb.type = "button";
   orb.setAttribute("aria-label", "Soothia");
   orb.setAttribute("aria-expanded", "false");
+  orb.dataset.state = "idle";
+  const badge = el("span", "badge");
+  badge.hidden = true;
+  orb.append(badge);
 
   const card = el("div", "card");
   card.hidden = true;
@@ -105,12 +181,10 @@ async function mount(): Promise<void> {
   card.setAttribute("aria-label", "Soothia");
   const phantomRow = statusRow();
   const proxyRow = statusRow();
-  card.append(
-    el("h2", "title", "Soothia"),
-    el("p", "line", "I'm watching this page."),
-    phantomRow.row,
-    proxyRow.row,
-  );
+  const body = el("div", "body");
+  const debug = el("details", "debug");
+  debug.append(el("summary", "debug-summary", "debug"), phantomRow.row, proxyRow.row);
+  card.append(el("h2", "title", "Soothia"), body, debug);
 
   shadow.append(style, orb, card);
 
@@ -182,6 +256,110 @@ async function mount(): Promise<void> {
     }
     proxyRow.set(online ? "Proxy: online" : "Proxy: offline", online ? "good" : "bad");
   }
+
+  // ---- Claims ----
+
+  function setOrb(state: OrbState, count = 0): void {
+    orb.dataset.state = state;
+    badge.hidden = state !== "found";
+    badge.textContent = String(count);
+    orb.setAttribute("aria-label", state === "found" ? `Soothia, ${count} found` : "Soothia");
+  }
+
+  function line(text: string): HTMLElement {
+    return el("p", "line", text);
+  }
+
+  function render(view: View): void {
+    switch (view.kind) {
+      case "watching":
+        setOrb("idle");
+        body.replaceChildren(line("I'm watching this page."));
+        break;
+      case "thinking":
+        setOrb("thinking");
+        body.replaceChildren(line("Reading this page\u2026"));
+        break;
+      case "tiles":
+        setOrb("found", view.tiles.length);
+        body.replaceChildren(...view.tiles.map(tileNode));
+        break;
+      case "empty":
+        setOrb("idle");
+        body.replaceChildren(line("Nothing to call here."));
+        break;
+      case "error":
+        setOrb("idle");
+        body.replaceChildren(
+          line(
+            view.reason === "limit"
+              ? "That's all my calls for today. I'll be back tomorrow."
+              : "I couldn't read this one just now. Try again in a minute.",
+          ),
+        );
+        break;
+    }
+    layout();
+  }
+
+  let watchedUrl = currentUrl();
+  let detectTimer: ReturnType<typeof setTimeout> | undefined;
+
+  async function runDetect(url: string, retriesLeft: number): Promise<void> {
+    // The reader left for another URL while this one was waiting.
+    if (url !== watchedUrl) return;
+
+    const read = readPage();
+    if (read.kind === "thin" && retriesLeft > 0) {
+      detectTimer = setTimeout(() => void runDetect(url, retriesLeft - 1), THIN_RETRY_MS);
+      return;
+    }
+    if (read.kind !== "page") {
+      render({ kind: "empty" });
+      return;
+    }
+
+    render({ kind: "thinking" });
+    let result: DetectResult;
+    try {
+      const message: DetectRequestMessage = { type: DETECT_REQUEST, page: read.page };
+      result = ((await chrome.runtime.sendMessage(message)) as DetectResult | undefined) ?? {
+        status: "error",
+        reason: "unavailable",
+      };
+    } catch {
+      result = { status: "error", reason: "unavailable" };
+    }
+    if (url !== watchedUrl) return;
+
+    if (result.status === "error") render({ kind: "error", reason: result.reason });
+    else if (result.tiles.length === 0) render({ kind: "empty" });
+    else render({ kind: "tiles", tiles: result.tiles.slice(0, 3) });
+  }
+
+  // Debounced: a burst of URL changes ends in one detection for the last URL.
+  function scheduleDetect(): void {
+    clearTimeout(detectTimer);
+    const url = watchedUrl;
+    detectTimer = setTimeout(() => void runDetect(url, THIN_RETRIES), SETTLE_MS);
+  }
+
+  function onUrlMaybeChanged(): void {
+    const url = currentUrl();
+    if (url === watchedUrl) return;
+    watchedUrl = url;
+    render({ kind: "watching" });
+    scheduleDetect();
+  }
+
+  window.addEventListener("popstate", onUrlMaybeChanged);
+  window.addEventListener("message", (event) => {
+    if (event.source !== window || event.origin !== window.location.origin) return;
+    if ((event.data as { type?: unknown } | null)?.type === NAV_CHANGED) onUrlMaybeChanged();
+  });
+
+  // The debug rows change the card's height when they open or close.
+  debug.addEventListener("toggle", layout);
 
   // ---- Card open / close ----
 
@@ -269,8 +447,11 @@ async function mount(): Promise<void> {
 
   renderPhantom();
   proxyRow.set("Proxy: checking…", "idle");
-  layout();
+  render({ kind: "watching" });
   document.documentElement.append(host);
+
+  if (document.readyState === "complete") scheduleDetect();
+  else window.addEventListener("load", scheduleDetect, { once: true });
 }
 
 // Top-level pages only: no orb inside iframes.
