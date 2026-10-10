@@ -11,6 +11,9 @@ import {
   WALLET_STATUS,
   type ApiError,
   type ApiPath,
+  type BuyTarget,
+  type CreatorMarket,
+  type Position,
   type ApiRequestMessage,
   type ApiResponse,
   type DetectDebug,
@@ -21,7 +24,10 @@ import {
   type Tile,
 } from "./messages";
 import { readPage, type ReadInfo } from "./reader";
+import { openBetSheet } from "./bet-sheet";
 import { openSheet, type CreateDebug, type PendingCreate, type Sheet } from "./sheet";
+import { checkSignedTransaction } from "./tx-check";
+import { wallet } from "./wallet-client";
 import {
   CARD_GAP,
   CARD_WIDTH,
@@ -119,10 +125,34 @@ function comingNext(label: string, className: string): HTMLButtonElement {
 
 /** A market the user created from a claim on this page. */
 interface LiveMarket {
+  marketId: string;
   marketUrl: string;
+  title: string;
 }
 
-function tileNode({ claim, market }: Tile, live: LiveMarket | undefined, onMake: () => void): HTMLElement {
+const STOPWORDS = new Set("will the and for with from that this than then have has had are was were been being its their there what when where which who into over under above below after before between against during not yes any all more most less out off per via about around by on at to of in is it as or an a be".split(" "));
+
+function words(text: string): Set<string> {
+  return new Set(
+    text
+      .toLowerCase()
+      .match(/[\p{L}\p{N}]+/gu)
+      ?.filter((word) => word.length > 2 && !STOPWORDS.has(word)) ?? [],
+  );
+}
+
+/** How many meaningful words two questions share. */
+function overlap(a: string, b: string): number {
+  const other = words(b);
+  return [...words(a)].filter((word) => other.has(word)).length;
+}
+
+function tileNode(
+  { claim, market }: Tile,
+  live: LiveMarket | undefined,
+  onMake: () => void,
+  onBet: (target: BuyTarget) => void,
+): HTMLElement {
   const tile = el("div", "tile");
 
   const meta = el("div", "meta");
@@ -131,12 +161,14 @@ function tileNode({ claim, market }: Tile, live: LiveMarket | undefined, onMake:
 
   const actions = el("div", "actions");
   if (live) {
-    actions.append(externalLink("Live on Panta", live.marketUrl, "link"), comingNext("Bet", "button primary"));
+    const target: BuyTarget = { marketId: live.marketId, title: live.title, yesPrice: null, noPrice: null };
+    actions.append(externalLink("Live on Panta", live.marketUrl, "link"), button("Bet", "button primary", () => onBet(target)));
   } else if (market) {
     const odds = market.yesPrice === null ? "YES \u2013" : `YES ${Math.round(market.yesPrice * 100)}%`;
     const oddsNode = el("span", "odds", odds);
     oddsNode.title = market.title;
-    actions.append(oddsNode, comingNext("Bet", "button primary"));
+    const target: BuyTarget = { marketId: market.id, title: market.title, yesPrice: market.yesPrice, noPrice: market.noPrice };
+    actions.append(oddsNode, button("Bet", "button primary", () => onBet(target)));
   } else {
     actions.append(button("Make it a market", "button", onMake));
   }
@@ -192,6 +224,21 @@ async function mount(): Promise<void> {
   const phantomRow = statusRow();
   const proxyRow = statusRow();
   const body = el("div", "body");
+  // Two views: the claims on this page, and the wallet's bets.
+  const betsPane = el("div", "body");
+  betsPane.hidden = true;
+  const tabs = el("div", "tabs");
+  const claimsTab = button("This page", "tab selected", () => showTab("claims"));
+  const betsTab = button("My bets", "tab", () => showTab("bets"));
+  tabs.append(claimsTab, betsTab);
+  function showTab(which: "claims" | "bets"): void {
+    body.hidden = which !== "claims";
+    betsPane.hidden = which !== "bets";
+    claimsTab.classList.toggle("selected", which === "claims");
+    betsTab.classList.toggle("selected", which === "bets");
+    if (which === "bets") void renderBets();
+    layout();
+  }
   const debug = el("details", "debug");
   const scanInfo = el("dl", "scan");
   const scanAgain = el("button", "button small", "Scan again");
@@ -218,7 +265,7 @@ async function mount(): Promise<void> {
     phantomRow.row,
     proxyRow.row,
   );
-  card.append(el("h2", "title", "Soothia"), body, debug);
+  card.append(el("h2", "title", "Soothia"), tabs, body, betsPane, debug);
 
   // Typing in the sheet must not trigger the page's keyboard shortcuts (X
   // has many). Escape still closes the card: that listener runs in capture.
@@ -331,8 +378,175 @@ async function mount(): Promise<void> {
   function showTiles(): void {
     closeSheet();
     setOrb("found", tiles.length);
-    body.replaceChildren(...tiles.map((tile) => tileNode(tile, liveMarkets.get(tile.claim.id), () => review(tile))));
+    body.replaceChildren(
+      ...tiles.map((tile) => tileNode(tile, liveMarkets.get(tile.claim.id), () => review(tile), openBet)),
+    );
     layout();
+  }
+
+  function openBet(target: BuyTarget): void {
+    closeSheet();
+    showTab("claims");
+    sheet = openBetSheet({
+      target,
+      api,
+      settings: () => ({ dryRun: dryRunToggle.box.checked }),
+      debug: setCreateDebug,
+      layout,
+      isVisible: () => !card.hidden && document.visibilityState === "visible",
+      back: showTiles,
+    });
+    body.replaceChildren(sheet.node);
+    layout();
+  }
+
+  // Markets this wallet created from this very page show "Live on Panta" on
+  // the tile whose question they came from.
+  let creatorMarkets: CreatorMarket[] = [];
+
+  async function loadCreatorMarkets(): Promise<void> {
+    const owner = await wallet.publicKey();
+    if (!owner) return;
+    const response = await api<{ markets: CreatorMarket[] }>("/creator/markets", { wallet: owner });
+    if (!response.ok || !response.body) return;
+    creatorMarkets = (response.body as { markets: CreatorMarket[] }).markets;
+    attachCreatorMarkets();
+  }
+
+  function attachCreatorMarkets(): void {
+    const here = creatorMarkets.filter((market) => market.registered && market.pageUrl?.split("#")[0] === watchedUrl);
+    let changed = false;
+    for (const market of here) {
+      if ([...liveMarkets.values()].some((live) => live.marketId === market.marketId)) continue;
+      // The tile this market was drafted from: the one sharing the most words.
+      const best = tiles
+        .filter((tile) => !liveMarkets.has(tile.claim.id))
+        .map((tile) => ({ tile, score: overlap(tile.claim.question, market.question) }))
+        .sort((a, b) => b.score - a.score)[0];
+      if (!best || best.score === 0) continue;
+      liveMarkets.set(best.tile.claim.id, { marketId: market.marketId, marketUrl: market.marketUrl, title: market.question });
+      changed = true;
+    }
+    if (changed && !sheet && tiles.length > 0) showTiles();
+  }
+
+  // ---- My bets ----
+
+  async function renderBets(): Promise<void> {
+    const owner = await wallet.publicKey();
+    if (!owner) {
+      betsPane.replaceChildren(
+        line("Connect Phantom to see your bets."),
+        button("Connect Phantom", "button", async () => {
+          const result = await wallet.connect();
+          if (result.ok) void renderBets();
+        }),
+      );
+      layout();
+      return;
+    }
+    betsPane.replaceChildren(line("Loading your bets\u2026"));
+    layout();
+    const response = await api<{ positions: Position[] }>("/positions", { wallet: owner });
+    if (!response.ok || !response.body) {
+      betsPane.replaceChildren(line("I couldn't load your bets just now."), button("Try again", "link", () => void renderBets()));
+      layout();
+      return;
+    }
+    const positions = (response.body as { positions: Position[] }).positions;
+    if (positions.length === 0) {
+      betsPane.replaceChildren(line("No bets yet."), button("Refresh", "link", () => void renderBets()));
+      layout();
+      return;
+    }
+    betsPane.replaceChildren(
+      ...positions.map((position) => {
+        const row = el("div", "tile");
+        const meta = el("div", "meta");
+        meta.append(
+          el("span", `chip side-chip-${position.side}`, position.side.toUpperCase()),
+          el("span", "ends", `${position.shares.toFixed(2)} shares \u00b7 ${position.phase}${position.outcome ? ` \u00b7 ${position.outcome.toUpperCase()} won` : ""}`),
+        );
+        const actions = el("div", "actions");
+        actions.append(externalLink("View on Panta", position.marketUrl, "link"));
+        if (position.claimed) actions.append(el("span", "muted", "Claimed"));
+        else if (position.claimable) actions.append(button("Claim", "button primary", () => void claim(position, row)));
+        else {
+          const claimButton = comingNext("Claim", "button");
+          claimButton.title = "Available after the market resolves";
+          actions.append(claimButton);
+        }
+        row.append(el("p", "question", position.title || shortAddressLike(position.marketId)), meta, actions);
+        return row;
+      }),
+      button("Refresh", "link", () => void renderBets()),
+    );
+    layout();
+  }
+
+  function shortAddressLike(id: string): string {
+    return `Market ${id.slice(0, 4)}\u2026${id.slice(-4)}`;
+  }
+
+  // Win claim: build -> sign -> check -> send -> confirm. Dry run applies.
+  async function claim(position: Position, row: HTMLElement): Promise<void> {
+    const owner = await wallet.publicKey();
+    if (!owner) return;
+    const note = el("p", "line status-line", "Preparing your claim\u2026");
+    row.append(note);
+    layout();
+    const built = await api<{ txBase64: string; bytes: number; winningShares: number }>("/claim/build", {
+      wallet: owner,
+      marketId: position.marketId,
+    });
+    if (!built.ok || !built.body) {
+      note.textContent = (built.body as ApiError | null)?.message ?? "I couldn't prepare the claim just now.";
+      return;
+    }
+    const { txBase64, winningShares } = built.body as { txBase64: string; winningShares: number };
+    note.textContent = `Approve the claim in Phantom (${winningShares.toFixed(2)} winning shares).`;
+    layout();
+    const signed = await wallet.signTransaction(txBase64);
+    if (!signed.ok || !signed.signedTxBase64 || !signed.signature) {
+      note.textContent = !signed.ok && signed.reason === "rejected" ? "Cancelled in Phantom. Nothing was sent." : "Phantom couldn't sign this.";
+      return;
+    }
+    const checked = checkSignedTransaction(txBase64, signed.signedTxBase64);
+    if (!checked.ok) {
+      note.textContent = "The transaction Phantom signed is not the one Soothia built. Nothing was sent.";
+      return;
+    }
+    if (dryRunToggle.box.checked) {
+      setCreateDebug({ signature: `${signed.signature} (dry run claim, not sent)` });
+      note.textContent = "Dry run complete: Phantom signed the claim, nothing was sent.";
+      return;
+    }
+    note.textContent = "Sending your claim\u2026";
+    const sent = await api<{ signature: string }>("/claim/send", {
+      signedTxBase64: signed.signedTxBase64,
+      wallet: owner,
+      marketId: position.marketId,
+    });
+    if (!sent.ok) {
+      note.textContent = (sent.body as ApiError | null)?.reason ?? "Solana didn't accept the claim. Nothing was taken.";
+      return;
+    }
+    setCreateDebug({ signature: signed.signature, register: "claim sent" });
+    note.textContent = "Waiting for Solana to confirm\u2026";
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const status = await api<{ status: string }>("/tx/status", { signature: signed.signature });
+      const state = status.ok ? (status.body as { status: string }).status : "pending";
+      if (state === "confirmed") {
+        note.textContent = "Claimed. Your winnings are in your wallet.";
+        setCreateDebug({ register: "claim confirmed" });
+        return;
+      }
+      if (state === "failed") {
+        note.textContent = "The claim failed on Solana. Nothing was taken.";
+        return;
+      }
+    }
+    note.textContent = "Still waiting for Solana. Refresh in a minute; do not claim again.";
   }
 
   async function api<T>(path: ApiPath, payload: unknown): Promise<ApiResponse<T | ApiError>> {
@@ -363,7 +577,9 @@ async function mount(): Promise<void> {
       layout,
       isVisible: () => !card.hidden && document.visibilityState === "visible",
       back: showTiles,
-      created: (market) => liveMarkets.set(tile.claim.id, { marketUrl: market.marketUrl }),
+      created: (market) =>
+        liveMarkets.set(tile.claim.id, { marketId: market.marketId, marketUrl: market.marketUrl, title: tile.claim.question }),
+      bet: (target) => openBet({ ...target, yesPrice: null, noPrice: null }),
       savePending,
     });
     body.replaceChildren(sheet.node);
@@ -384,6 +600,7 @@ async function mount(): Promise<void> {
       case "tiles":
         tiles = view.tiles;
         showTiles();
+        attachCreatorMarkets();
         break;
       case "empty":
         setOrb("idle");
@@ -685,6 +902,7 @@ async function mount(): Promise<void> {
   setCreateDebug({});
   await loadSettings();
   void resumePending();
+  void loadCreatorMarkets();
   render({ kind: "watching" });
   document.documentElement.append(host);
 

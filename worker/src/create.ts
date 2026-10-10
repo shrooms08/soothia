@@ -49,22 +49,43 @@ interface QuoteRecord {
 interface CreatedMarket {
   marketId: string;
   question: string;
+  /** The page the market was drafted from, so that page can show it. */
+  pageUrl?: string;
   signature: string;
   createdAt: string;
   marketUrl: string;
   registered: boolean;
 }
 
-interface PantaError {
+export interface PantaError {
   code?: string;
   message?: string;
   field?: string;
   fields?: Record<string, string[]>;
 }
 
-const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+export const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
-async function pantaPost<T>(
+// Panta's quote and build endpoints fail for a few seconds at a time with a
+// generic "unexpected ... failure" message (seen live many times); the same
+// request then succeeds. Retry those twice.
+const TRANSIENT_RETRY_WAITS_MS = [1500, 4000];
+
+export async function pantaPostWithRetry<T>(
+  env: Env,
+  path: string,
+  body: unknown,
+): Promise<{ ok: true; data: T } | { ok: false; status: number; error: PantaError }> {
+  let result = await pantaPost<T>(env, path, body);
+  for (const waitMs of TRANSIENT_RETRY_WAITS_MS) {
+    if (result.ok || !/unexpected .* failure/.test(result.error.message ?? "")) break;
+    await sleep(waitMs);
+    result = await pantaPost<T>(env, path, body);
+  }
+  return result;
+}
+
+export async function pantaPost<T>(
   env: Env,
   path: string,
   body: unknown,
@@ -87,7 +108,7 @@ async function pantaPost<T>(
 }
 
 /** Our error body for a failed Panta call. Passes Panta's code and message through. */
-function pantaFailure(request: Request, failure: { status: number; error: PantaError }): Response {
+export function pantaFailure(request: Request, failure: { status: number; error: PantaError }): Response {
   const { code, message, field, fields } = failure.error;
   const status = failure.status >= 400 && failure.status < 600 ? failure.status : 502;
   return json(
@@ -107,11 +128,11 @@ function usdc(baseUnits: string | undefined): number {
 
 const quoteKey = (quoteId: string): string => `quote:${quoteId}`;
 
-function isQuoteId(value: unknown): value is string {
+export function isQuoteId(value: unknown): value is string {
   return typeof value === "string" && /^[A-Za-z0-9_-]{4,80}$/.test(value);
 }
 
-function isTxBase64(value: unknown): value is string {
+export function isTxBase64(value: unknown): value is string {
   return typeof value === "string" && value.length > 100 && value.length <= MAX_TX_BASE64 && /^[A-Za-z0-9+/]+=*$/.test(value);
 }
 
@@ -238,7 +259,7 @@ interface PantaBuild {
   expiresAt?: string;
 }
 
-function base64Bytes(base64: string): number {
+export function base64Bytes(base64: string): number {
   return Math.floor((base64.replace(/=+$/, "").length * 3) / 4);
 }
 
@@ -316,18 +337,18 @@ interface Simulation {
   value: { err: unknown; logs: string[] | null; unitsConsumed?: number };
 }
 
-const RELEVANT_LOG = /insufficient|error|failed|already in use|exceeded|invalid|custom program/i;
+export const RELEVANT_LOG = /insufficient|error|failed|already in use|exceeded|invalid|custom program/i;
 
 /** A sentence a person can act on, from the simulation's error and logs. */
-function simulationReason(err: unknown, logs: string[]): string {
+export function simulationReason(err: unknown, logs: string[]): string {
   const text = `${typeof err === "string" ? err : JSON.stringify(err)} ${logs.join(" ")}`.toLowerCase();
   if (text.includes("accountnotfound")) {
-    return "This wallet is empty. It needs SOL for network fees and USDC for the creation fee.";
+    return "This wallet is empty. It needs SOL for network fees and USDC to pay with.";
   }
   if (text.includes("insufficient lamports") || text.includes("insufficientfundsforfee") || text.includes("insufficientfundsforrent")) {
     return "This wallet does not have enough SOL for network fees.";
   }
-  if (text.includes("insufficient funds")) return "This wallet does not have enough USDC for the creation fee.";
+  if (text.includes("insufficient funds")) return "This wallet does not have enough USDC for this.";
   if (text.includes("already in use")) return "This wallet has already created a market with this exact question.";
   if (text.includes("blockhashnotfound")) return "The transaction expired before it was checked. Try again.";
   return "Solana rejected this transaction in a test run, so nothing was sent.";
@@ -371,9 +392,9 @@ export async function handleSimulate(request: Request, env: Env): Promise<Respon
 
 // ---- Confirm, register, remember ----
 
-type TxState = "confirmed" | "failed" | "pending";
+export type TxState = "confirmed" | "failed" | "pending";
 
-async function txState(env: Env, signature: string): Promise<{ state: TxState; err?: unknown }> {
+export async function txState(env: Env, signature: string): Promise<{ state: TxState; err?: unknown }> {
   const statuses = await rpc<{ value: ({ confirmationStatus?: string; err: unknown } | null)[] }>(
     env,
     "getSignatureStatuses",
@@ -386,7 +407,7 @@ async function txState(env: Env, signature: string): Promise<{ state: TxState; e
   return { state: done ? "confirmed" : "pending" };
 }
 
-async function waitForConfirmation(env: Env, signature: string, maxWaitMs: number): Promise<{ state: TxState; err?: unknown }> {
+export async function waitForConfirmation(env: Env, signature: string, maxWaitMs: number): Promise<{ state: TxState; err?: unknown }> {
   const deadline = Date.now() + maxWaitMs;
   for (;;) {
     try {
@@ -470,6 +491,7 @@ async function finish(
   await rememberMarket(env, record.wallet, {
     marketId: result.marketId,
     question: record.question,
+    pageUrl: record.draft?.pageUrl,
     signature,
     createdAt: new Date().toISOString(),
     marketUrl: result.marketUrl,
@@ -485,7 +507,7 @@ async function loadQuote(env: Env, quoteId: string): Promise<QuoteRecord | null>
 // ---- POST /create/send ----
 
 /** The transaction's id is its first signature: 64 bytes after the count byte. */
-function firstSignature(signedTxBase64: string): string | null {
+export function firstSignature(signedTxBase64: string): string | null {
   let bytes: Uint8Array;
   try {
     bytes = Uint8Array.from(atob(signedTxBase64), (char) => char.charCodeAt(0));

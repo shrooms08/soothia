@@ -281,3 +281,61 @@ Verification is "fail-closed (transaction presence and success, program, account
 `https://www.panta.market/market/<marketId>`
 
 **LIVE:** `https://www.panta.market/market/4J6WxFGuCw9deMJ6pQ7gwpVXCvLorMrz28icSnCYWeGB` returns HTTP 200 with the page title "Manchester United will win against Spurs with 2 or more goals | Panta Market". The same id under `/markets/`, `/event/`, `/events/`, and `/m/` returns 404. The pattern is not in the docs or the playground; it was found by testing the site.
+
+## Buy flow (primary phase)
+
+Read 2026-10-10 for P3: Primary buy overview, Quote primary buy, Build primary buy, Submit primary buy, Verify primary buy, List positions, Report trade, Trade status, Build win claim, and the playground's `PrimaryBuyFlow.tsx` and `ClaimFlow.tsx`.
+
+Buys happen only while a market is in its **primary** phase (before `startTime`). Amounts are human-readable decimal USDC strings (`"1.00"`), not base units.
+
+### 1. Quote: `POST /primaryorderquote/`
+
+Request: `wallet`, `marketId`, `side` (`yes` or `no`, case-insensitive), `amountUsdc` (string or number), optional `userId`.
+
+Response: `quoteId`, `marketId`, `side`, `amountUsdc`, `shares` (estimated), `avgPrice`, `feeUsdc`, `expiresAt`, `blockhashExpiryHintSec`.
+
+**LIVE** on the Soothia market, YES for `"1.00"`: `shares 1.996677`, `avgPrice 0.500832`, `feeUsdc 0.02`. Shares × price ≈ the deposit, so the 2% fee appears to come out of the deposit rather than on top. **UNCLEAR** until a real buy shows the USDC debit.
+
+Errors: `INVALID_MARKET_PARAMS`, `MARKET_NOT_FOUND`, `MARKET_NOT_IN_PRIMARY`, `AMOUNT_TOO_SMALL`, `RATE_LIMITED`. The early-market cap of 100 USDC per order comes from the Panta team, not the docs; Soothia also sets a 1.00 USDC floor.
+
+### 2. Build: `POST /primaryorderbuild/`
+
+Request: `quoteId`, `wallet` (must match the quote), optional `userId`, optional `maxSlippageBps` (default 100, max 5000).
+
+Response: `orderId`, `instructions` (ordered `{ programId, data (base64), accounts[{ pubkey, isSigner, isWritable }] }`), `expectedShares`, `recentBlockhash`, `lastValidBlockHeight`, `expiresAt`, plus echoes of the quote. **Build returns instructions, not a transaction.** The playground compiles them into a v0 `VersionedTransaction` with the wallet as fee payer and adds no compute-budget instruction; Soothia does the same with a fresh blockhash from its own RPC. **LIVE:** the buy transaction is 706 bytes.
+
+Errors: `QUOTE_EXPIRED`, `QUOTE_STALE` (the curve moved more than `maxSlippageBps`: quote again), `UNAUTHORIZED`, `MARKET_NOT_FOUND`, `MARKET_NOT_IN_PRIMARY`, `AMOUNT_TOO_SMALL`, `INVALID_MARKET_PARAMS`, `RATE_LIMITED`.
+
+### 3. Sign and broadcast
+
+As for create: the wallet signs, we send on our RPC with `skipPreflight: false`.
+
+### 4. Submit and verify: `POST /primaryordersubmit/`, `POST /primaryorderverify/`
+
+Submit: `orderId`, `signature`, optional `wallet`. Returns `status: "submitted"`. Safe to repeat. It registers the signature and does not wait for confirmation.
+
+Verify: `orderId`, optional `signature`, optional `wallet`. Returns `status`: `built`, `submitted`, `confirmed`, `failed`, or `expired`.
+
+### 5. Report: `POST /trades/`
+
+Request: `signature`, `wallet`, `marketId`, optional `quoteId`, `clientOrderId`, `userId`. Verifies the transaction on-chain (fail-closed: it must be `primary_order_usdc` or `claim_win_usdc`) and stores attribution. Returns `status: "processed"`, `kind` (`buy` or `claim`), `side`. Idempotent per signature. Errors: `TX_NOT_FOUND` (not seen yet; retry), `TX_FAILED`, `TX_MISMATCH`, `TX_FEE_MISMATCH`. `GET /trades/{signature}/` reports `processed`, `pending_attribution`, `unknown`, or `failed`.
+
+### Session lifetimes
+
+| Thing | Lifetime |
+| - | - |
+| Primary quote (`quoteId`) | about 90 seconds |
+| Primary order (`orderId`) | about 120 seconds |
+| Blockhash | about 60 seconds |
+
+### Positions: `GET /positions/?wallet=`
+
+Returns `wallet` and `positions[]` with `marketId`, `category`, `side`, `shares` (human-readable), `phase`, `claimable`, `claimed`, `outcome`. A holding with both sides is two rows. The indexer "may lag the chain briefly after a purchase". **LIVE:** the response also carries an undocumented `summary` object (`currentValueUsdc`, `primaryContributedUsdc`, …). Value is estimated client-side: `shares × yesPrice` (or `noPrice`) while open, about 1 USDC per winning share once resolved.
+
+### Win claim: `POST /claim/build/`
+
+Request: `wallet`, `marketId`. Only when positions say `claimable: true`; it re-validates on-chain. Returns `outcome`, `winningShares`, `instructions`, `derived`, `recentBlockhash`, `lastValidBlockHeight`. Compile, sign, broadcast, then optionally report via `POST /trades/` (`kind: claim`). Errors: `MARKET_NOT_FOUND`, `NOT_CLAIMABLE`, `INVALID_MARKET_PARAMS`. Creator fees use `POST /claim/creator-fees/build/` and must not be reported to `/trades/`.
+
+### Soothia's routes
+
+`/buy/quote`, `/buy/build` (assembles the transaction, 1150-byte cap), `/tx/simulate`, `/buy/send` (sends, returns at once, finishes submit → verify → report in the background), `/buy/status` (finishes the same steps idempotently and reports `confirmed`, `submitted`, `verified`, `attributed`, `errors`), `GET /positions?wallet=` (with titles), `GET /market?id=`, `/claim/build`, `/claim/send`, `/tx/status`.

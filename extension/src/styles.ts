@@ -408,6 +408,101 @@ a.button {
   outline-offset: 1px;
 }
 
+.tabs {
+  display: flex;
+  gap: 6px;
+  margin: 0 0 10px;
+}
+
+.tab {
+  padding: 5px 12px;
+  border: 1px solid rgba(155, 123, 255, 0.3);
+  border-radius: 999px;
+  background: transparent;
+  color: #b9b1cf;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.tab.selected {
+  background: rgba(155, 123, 255, 0.22);
+  color: #ffffff;
+}
+
+.sides {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.side {
+  padding: 10px 0;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  color: #f2eefc;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.side-yes.selected {
+  border-color: #4ade80;
+  background: rgba(74, 222, 128, 0.18);
+  color: #4ade80;
+}
+
+.side-no.selected {
+  border-color: #f87171;
+  background: rgba(248, 113, 113, 0.18);
+  color: #f87171;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.chip-button {
+  padding: 6px 12px;
+  border: 1px solid rgba(155, 123, 255, 0.35);
+  border-radius: 999px;
+  background: transparent;
+  color: #d9ccff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.chip-button.selected {
+  background: #7c4dff;
+  border-color: transparent;
+  color: #ffffff;
+}
+
+.input.amount {
+  width: 92px;
+  padding: 6px 8px;
+}
+
+.side-chip-yes {
+  background: rgba(74, 222, 128, 0.18);
+  color: #4ade80;
+}
+
+.side-chip-no {
+  background: rgba(248, 113, 113, 0.18);
+  color: #f87171;
+}
+
 .types {
   display: grid;
   gap: 6px;

@@ -129,13 +129,87 @@ export const API_ROUTES = {
   "/create/simulate": "POST",
   "/create/send": "POST",
   "/create/register-retry": "POST",
+  "/tx/simulate": "POST",
+  "/tx/status": "POST",
+  "/buy/quote": "POST",
+  "/buy/build": "POST",
+  "/buy/send": "POST",
+  "/buy/status": "POST",
+  "/claim/build": "POST",
+  "/claim/send": "POST",
+  "/creator/markets": "GET",
+  "/positions": "GET",
+  "/market": "GET",
 } as const;
 export type ApiPath = keyof typeof API_ROUTES;
 
 export interface ApiRequestMessage {
   type: typeof API_REQUEST;
   path: ApiPath;
+  /** POST body, or the query string for a GET route. */
   body: unknown;
+}
+
+// ---- Buying ----
+
+export interface BuyTarget {
+  marketId: string;
+  title: string;
+  yesPrice: number | null;
+  noPrice: number | null;
+}
+
+export interface BuyQuote {
+  quoteId: string;
+  marketId: string;
+  side: "yes" | "no";
+  amountUsdc: number;
+  shares: number;
+  avgPrice: number;
+  feeUsdc: number;
+  totalUsdc: number;
+  payoutPerShareUsdc: number;
+  expiresAt: string;
+}
+
+export interface BuyBuild {
+  orderId: string;
+  txBase64: string;
+  bytes: number;
+  expectedShares: number;
+  expiresAt: string | null;
+}
+
+export interface BuyStatus {
+  signature: string;
+  status: "confirmed" | "failed" | "pending";
+  confirmed: boolean;
+  submitted: boolean;
+  verified: string | null;
+  attributed: boolean;
+  errors: Record<string, string>;
+  marketUrl: string;
+  error?: string;
+}
+
+export interface Position {
+  marketId: string;
+  title: string;
+  side: "yes" | "no";
+  shares: number;
+  phase: string;
+  claimable: boolean;
+  claimed: boolean;
+  outcome: string | null;
+  marketUrl: string;
+}
+
+export interface CreatorMarket {
+  marketId: string;
+  question: string;
+  pageUrl?: string;
+  marketUrl: string;
+  registered: boolean;
 }
 
 /** `status` 0 means the request never completed. */

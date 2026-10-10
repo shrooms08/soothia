@@ -158,7 +158,13 @@ const FAILED: DetectResult = {
 async function relay(message: ApiRequestMessage): Promise<ApiResponse> {
   if (!Object.hasOwn(API_ROUTES, message.path)) return { ok: false, status: 0, body: null };
   try {
-    const response = await post(message.path, message.body);
+    const response =
+      API_ROUTES[message.path] === "GET"
+        ? await fetch(`${WORKER_URL}${message.path}?${new URLSearchParams(message.body as Record<string, string>)}`, {
+            headers: { "X-Soothia-Install": await installId() },
+            signal: AbortSignal.timeout(28_000),
+          })
+        : await post(message.path, message.body);
     return { ok: response.ok, status: response.status, body: await response.json().catch(() => null) };
   } catch {
     return { ok: false, status: 0, body: null };

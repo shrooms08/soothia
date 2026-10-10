@@ -293,3 +293,16 @@ test("instructions compile to an unsigned v0 transaction with the wallet as fee 
   assert.equal(tx.message.recentBlockhash, "GHtXQBsoZHVnNFa9YevAzFr17DJjgHXk3ycTKD5xD3Zi");
   assert.ok(tx.signatures[0].every((byte) => byte === 0));
 });
+
+test("bet amounts are two-decimal strings between 1.00 and 100.00 USDC", async () => {
+  const { parseAmount } = await import("../src/buy");
+  assert.equal(parseAmount("1"), "1.00");
+  assert.equal(parseAmount("1.5"), "1.50");
+  assert.equal(parseAmount(2), "2.00");
+  assert.equal(parseAmount("100.00"), "100.00");
+  assert.equal(parseAmount("0.99"), null);
+  assert.equal(parseAmount("100.01"), null);
+  assert.equal(parseAmount("1.005"), null);
+  assert.equal(parseAmount("-1"), null);
+  assert.equal(parseAmount("abc"), null);
+});

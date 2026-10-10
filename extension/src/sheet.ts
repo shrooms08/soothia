@@ -58,6 +58,8 @@ export interface SheetHost {
   isVisible(): boolean;
   back(): void;
   created(market: { marketId: string; marketUrl: string }): void;
+  /** Open the bet sheet for a market (the success screen's "Bet on it"). */
+  bet(target: { marketId: string; title: string }): void;
   savePending(pending: PendingCreate | null): void;
 }
 
@@ -746,8 +748,10 @@ export function openSheet(host: SheetHost): Sheet {
         encodeURIComponent(`I just turned this into a prediction market with Soothia: ${question}`) +
         `&url=${encodeURIComponent(result.marketUrl)}`;
       const actions = el("div", "actions");
+      const marketId = result.marketId;
       actions.append(
-        externalLink("View on Panta", result.marketUrl, "button primary"),
+        button("Bet on it", "button primary", () => host.bet({ marketId, title: question })),
+        externalLink("View on Panta", result.marketUrl, "button"),
         externalLink("Share on X", share, "button"),
       );
       outcome.replaceChildren(

@@ -43,3 +43,9 @@ export const BUY_WINDOW_CHOICES: { hours: number; label: string }[] = [
 ];
 // A buying window that closes right away, for an event already under way.
 export const LIVE_NOW = "live";
+
+// Bets: Soothia's floor, Panta's early-market cap, and the SOL a buy needs.
+export const MIN_BET_USDC = 1;
+export const MAX_BET_USDC = 100;
+export const MIN_SOL_FOR_BET = 0.005;
+export const BET_CHIPS = [1, 2, 5];

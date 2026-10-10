@@ -3,6 +3,17 @@
 // balances, and the market create flow. /img/* is served from static assets.
 
 import {
+  handleBuyBuild,
+  handleBuyQuote,
+  handleBuySend,
+  handleBuyStatus,
+  handleClaimBuild,
+  handleClaimSend,
+  handleMarket,
+  handlePositions,
+  handleTxStatus,
+} from "./buy";
+import {
   handleBuild,
   handleCreatorMarkets,
   handleQuote,
@@ -27,6 +38,14 @@ const INSTALL_ROUTES: Record<
   "/create/simulate": handleSimulate,
   "/create/send": handleSend,
   "/create/register-retry": handleRegisterRetry,
+  "/tx/simulate": handleSimulate,
+  "/tx/status": handleTxStatus,
+  "/buy/quote": handleBuyQuote,
+  "/buy/build": handleBuyBuild,
+  "/buy/send": handleBuySend,
+  "/buy/status": handleBuyStatus,
+  "/claim/build": handleClaimBuild,
+  "/claim/send": handleClaimSend,
 };
 
 // Query params documented for GET /markets/ (Panta names the phase filter `status`).
@@ -114,6 +133,10 @@ export default {
         return proxyPanta(request, env, "/categories/");
       case "/creator/markets":
         return handleCreatorMarkets(request, env);
+      case "/positions":
+        return handlePositions(request, env);
+      case "/market":
+        return handleMarket(request, env);
       default:
         return json(request, { error: "not_found" }, 404);
     }
