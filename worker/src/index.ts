@@ -2,6 +2,7 @@
 // a small surface to the extension: catalog reads, /detect, /match, wallet
 // balances, and the market create flow. /img/* is served from static assets.
 
+import { actionRoute } from "./actions";
 import {
   handleBuyBuild,
   handleBuyQuote,
@@ -101,6 +102,10 @@ function marketsQuery(url: URL): URLSearchParams {
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    // Solana Actions (bet links) have their own open CORS policy.
+    const action = actionRoute(request, env, ctx);
+    if (action) return action;
+
     if (request.method === "OPTIONS") {
       return new Response(null, { status: 204, headers: corsHeaders(request) });
     }

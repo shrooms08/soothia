@@ -27,7 +27,7 @@ import { rpc, RpcError } from "./rpc";
 export const MIN_BUY_USDC = 1;
 export const MAX_BUY_USDC = 100;
 // Panta's default; build rejects with QUOTE_STALE if the curve moved more.
-const MAX_SLIPPAGE_BPS = 100;
+export const MAX_SLIPPAGE_BPS = 100;
 const RECORD_TTL_SEC = 30 * 24 * 3600;
 const BACKGROUND_FINISH_WAIT_MS = 22_000;
 const STATUS_WAIT_MS = 20_000;
@@ -35,9 +35,9 @@ const MAX_POSITION_DETAILS = 20;
 // The documented settlement: a winning share pays about 1 USDC.
 const PAYOUT_PER_SHARE_USDC = 1;
 
-type Side = "yes" | "no";
+export type Side = "yes" | "no";
 
-interface BuyRecord {
+export interface BuyRecord {
   wallet: string;
   marketId: string;
   side: Side;
@@ -47,9 +47,11 @@ interface BuyRecord {
   signature?: string;
   /** Creator-fee claims are not attributable through /trades/. */
   kind?: "creator";
+  /** Where the order came from; "blink" for Solana Actions bet links. */
+  source?: "blink";
 }
 
-function parseSide(value: unknown): Side | null {
+export function parseSide(value: unknown): Side | null {
   const side = typeof value === "string" ? value.toLowerCase() : "";
   return side === "yes" || side === "no" ? side : null;
 }
@@ -65,17 +67,17 @@ export function parseAmount(value: unknown): string | null {
 
 const recordKey = (orderOrQuoteId: string): string => `buy:${orderOrQuoteId}`;
 
-async function loadRecord(env: Env, id: string): Promise<BuyRecord | null> {
+export async function loadRecord(env: Env, id: string): Promise<BuyRecord | null> {
   return (await env.SOOTHIA_CACHE.get(recordKey(id), "json")) as BuyRecord | null;
 }
 
-async function saveRecord(env: Env, id: string, record: BuyRecord): Promise<void> {
+export async function saveRecord(env: Env, id: string, record: BuyRecord): Promise<void> {
   await env.SOOTHIA_CACHE.put(recordKey(id), JSON.stringify(record), { expirationTtl: RECORD_TTL_SEC });
 }
 
 // ---- POST /buy/quote ----
 
-interface PantaBuyQuote {
+export interface PantaBuyQuote {
   quoteId: string;
   shares?: string;
   avgPrice?: string;
@@ -129,7 +131,7 @@ export async function handleBuyQuote(request: Request, env: Env): Promise<Respon
 
 // ---- POST /buy/build ----
 
-interface PantaBuyBuild {
+export interface PantaBuyBuild {
   orderId: string;
   instructions?: BuiltInstruction[];
   expectedShares?: string;
@@ -138,7 +140,7 @@ interface PantaBuyBuild {
   expiresAt?: string;
 }
 
-async function assembleWithFreshBlockhash(
+export async function assembleWithFreshBlockhash(
   env: Env,
   instructions: BuiltInstruction[],
   wallet: string,
@@ -199,7 +201,7 @@ export async function handleBuyBuild(request: Request, env: Env): Promise<Respon
 
 // ---- Confirm, submit, verify, report ----
 
-interface BuyStatus {
+export interface BuyStatus {
   signature: string;
   status: "confirmed" | "failed" | "pending";
   confirmed: boolean;
@@ -212,7 +214,7 @@ interface BuyStatus {
 }
 
 /** Follows a sent buy until Panta knows about it. Idempotent: every step may be repeated. */
-async function finishBuy(env: Env, record: BuyRecord, signature: string, maxWaitMs: number): Promise<BuyStatus> {
+export async function finishBuy(env: Env, record: BuyRecord, signature: string, maxWaitMs: number): Promise<BuyStatus> {
   const status: BuyStatus = {
     signature,
     status: "pending",
@@ -345,6 +347,10 @@ interface PantaPosition {
 
 export interface MarketBrief {
   title: string;
+  category: string;
+  /** Panta market phase: primary (buying), secondary, resolved, cancelled. */
+  phase: string | null;
+  marketType: string | null;
   yesPrice: number | null;
   noPrice: number | null;
   endTime: string | null;
@@ -371,6 +377,9 @@ export interface MarketLiquidity {
 interface MarketDetail {
   title?: string;
   description?: string;
+  category?: string;
+  phase?: string;
+  marketType?: string;
   yesPrice?: string | null;
   noPrice?: string | null;
   endTime?: number;
@@ -415,7 +424,7 @@ async function pantaGet<T>(env: Env, path: string): Promise<T | null> {
 export async function marketBrief(env: Env, marketId: string): Promise<MarketBrief | null> {
   const key = `mkt:${marketId}`;
   const cached = (await env.SOOTHIA_CACHE.get(key, "json")) as MarketBrief | null;
-  if (cached?.title && "liquidity" in cached) return cached;
+  if (cached?.title && "phase" in cached) return cached;
   const detail = await pantaGet<MarketDetail>(env, `/markets/${encodeURIComponent(marketId)}/`);
   if (!detail) return cached;
   const price = (value: string | null | undefined): number | null => {
@@ -424,6 +433,9 @@ export async function marketBrief(env: Env, marketId: string): Promise<MarketBri
   };
   const brief: MarketBrief = {
     title: (detail.title || detail.description || "").trim(),
+    category: detail.category ?? cached?.category ?? "other",
+    phase: detail.phase ?? null,
+    marketType: detail.marketType ?? null,
     yesPrice: price(detail.yesPrice),
     noPrice: price(detail.noPrice),
     endTime: typeof detail.endTime === "number" ? new Date(detail.endTime * 1000).toISOString() : null,
