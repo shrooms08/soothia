@@ -87,32 +87,64 @@
     main.querySelectorAll("[data-pct=no]").forEach(function (n) { n.textContent = pct(no); });
   }
 
-  function requestQuote() {
-    clearTimeout(quoteTimer);
-    quoteLine.textContent = "Getting a quote…";
-    quoteLine.classList.remove("error");
-    quoteTimer = setTimeout(fetchQuote, 300);
+  // The quote line never swaps a good price for an error straight away: it keeps
+  // the last good quote with "updating…" while retrying, and only after about
+  // six seconds of continuous failure says prices are busy, with a Retry link.
+  var QUOTE_DEBOUNCE_MS = 350;
+  var QUOTE_RETRY_MS = 1500;
+  var QUOTE_GIVE_UP_MS = 6000;
+  var lastGood = null;       // { key, text }
+  var failingSince = 0;
+  function quoteKey() { return side + ":" + amount.toFixed(2); }
+  function showQuote(text, state) {
+    quoteLine.replaceChildren();
+    quoteLine.classList.toggle("error", state === "error");
+    quoteLine.append(document.createTextNode(text));
+    if (state === "updating") quoteLine.append(el("span", "quote-updating", " updating…"));
+    if (state === "error") {
+      var retry = el("button", "linkish quote-retry", "Retry");
+      retry.type = "button";
+      retry.addEventListener("click", function () { failingSince = 0; requestQuote(0); });
+      quoteLine.append(document.createTextNode(" "), retry);
+    }
   }
-  function fetchQuote(retry) {
+  function requestQuote(delay) {
+    clearTimeout(quoteTimer);
+    if (lastGood && lastGood.key === quoteKey()) showQuote(lastGood.text, "updating");
+    else if (lastGood) showQuote(lastGood.text, "updating");
+    else showQuote("Getting a quote…", "plain");
+    quoteTimer = setTimeout(fetchQuote, typeof delay === "number" ? delay : QUOTE_DEBOUNCE_MS);
+  }
+  function fetchQuote() {
     var seq = ++quoteSeq;
-    // Quotes do not depend on the wallet; using the stand-in address keeps Panta's
+    var key = quoteKey();
+    // Quotes do not depend on the wallet; the stand-in address keeps Panta's
     // per-wallet quote limit for the real quote inside Place bet.
     var url = PROXY + "/api/actions/market/" + MARKET + "/quote?side=" + side + "&amount=" + amount.toFixed(2);
     fetch(url).then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b }; }); }).then(function (res) {
       if (seq !== quoteSeq) return;
-      if (!res.ok) {
-        // Panta answers INVALID_MARKET_PARAMS to quotes that come too fast; one quiet retry.
-        if (res.body.code === "invalid_market_params" && !retry) { quoteTimer = setTimeout(function () { fetchQuote(true); }, 1500); return; }
-        quoteLine.textContent = res.body.message || "No quote right now."; quoteLine.classList.add("error"); return;
-      }
+      if (!res.ok) return quoteFailed(res.body && res.body.code === "market_closed" ? res.body.message : null);
       var q = res.body;
-      quoteLine.textContent = "~" + q.shares.toFixed(2) + " " + side.toUpperCase() + " shares for " + usd(q.totalUsdc) + " incl. 2% fee";
+      failingSince = 0;
+      lastGood = { key: key, text: "~" + q.shares.toFixed(2) + " " + side.toUpperCase() + " shares for " + usd(q.totalUsdc) + " incl. 2% fee" };
+      showQuote(lastGood.text, "plain");
       if (typeof q.yesPrice === "number") setOdds(q.yesPrice, q.noPrice);
     }).catch(function () {
       if (seq !== quoteSeq) return;
-      quoteLine.textContent = "No quote right now. Check your connection.";
-      quoteLine.classList.add("error");
+      quoteFailed(null);
     });
+  }
+  // The custom amount field is debounced like the chips.
+  function quoteFailed(finalMessage) {
+    if (finalMessage) { showQuote(finalMessage, "error"); return; }
+    if (!failingSince) failingSince = Date.now();
+    if (Date.now() - failingSince < QUOTE_GIVE_UP_MS) {
+      if (lastGood) showQuote(lastGood.text, "updating");
+      else showQuote("Getting a quote…", "updating");
+      quoteTimer = setTimeout(fetchQuote, QUOTE_RETRY_MS);
+      return;
+    }
+    showQuote("Prices are busy on Panta. Try again in a moment.", "error");
   }
 
   sideButtons.forEach(function (b) {
@@ -125,7 +157,7 @@
     var v = Number(custom.value);
     if (custom.value === "" || !isFinite(v)) { amount = 1; renderChips(); renderSides(); requestQuote(); return; }
     v = Math.round(v * 100) / 100;
-    if (v < 1 || v > 100) { quoteLine.textContent = "Bets are between $1 and $100."; quoteLine.classList.add("error"); renderChips(); return; }
+    if (v < 1 || v > 100) { clearTimeout(quoteTimer); showQuote("Bets are between $1 and $100.", "error"); renderChips(); return; }
     amount = v; renderChips(); renderSides(); requestQuote();
   });
 

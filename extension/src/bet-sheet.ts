@@ -35,7 +35,11 @@ export interface BetHost {
 
 type Side = "yes" | "no";
 
-const QUOTE_DEBOUNCE_MS = 700;
+const QUOTE_DEBOUNCE_MS = 350;
+// Keep the last good quote with "updating…" while Panta is flaky; give up after this long.
+const QUOTE_RETRY_MS = 1500;
+const QUOTE_GIVE_UP_MS = 6000;
+const QUOTE_BUSY = "Prices are busy on Panta. Try again in a moment.";
 // Panta's buy quotes last about 90 seconds.
 const QUOTE_REFRESH_BEFORE_MS = 15_000;
 const QUOTE_MIN_TO_START_MS = 25_000;
@@ -75,6 +79,10 @@ export function openBetSheet(host: BetHost): Sheet {
   let quote: BuyQuote | null = null;
   let quoteError = "";
   let quoting = false;
+  /** Set while quotes keep failing; the last good quote stays on screen meanwhile. */
+  let quoteFailingSince = 0;
+  let quoteUpdating = false;
+  let quoteRetryTimer: ReturnType<typeof setTimeout> | undefined;
   let quoteSeq = 0;
   let autoRefreshes = 0;
   let busy = false;
@@ -221,12 +229,13 @@ export function openBetSheet(host: BetHost): Sheet {
         ". Total ",
         mono(usd(quote.totalUsdc)),
         ".",
+        ...(quoteUpdating || quoting ? [el("span", "quote-updating", " updating…")] : []),
       );
       const win = quote.shares * quote.payoutPerShareUsdc;
       payout.textContent = `If ${quote.side.toUpperCase()} wins, each share pays ~${usd(quote.payoutPerShareUsdc)}: about ${usd(win)} back on ${usd(quote.totalUsdc)} spent.`;
       quoteBox.replaceChildren(line, payout);
     } else if (quoting) quoteBox.replaceChildren("Getting the price…");
-    else if (quoteError) quoteBox.replaceChildren(quoteError, " ", button("Try again", "link", () => requestQuote(0)));
+    else if (quoteError) quoteBox.replaceChildren(quoteError, " ", button("Retry", "link", () => { quoteFailingSince = 0; requestQuote(0); }));
     else quoteBox.replaceChildren();
     if (!quote) payout.textContent = "";
   }
@@ -291,14 +300,27 @@ export function openBetSheet(host: BetHost): Sheet {
     if (response.ok && response.body) {
       quote = response.body as BuyQuote;
       quoteError = "";
+      quoteFailingSince = 0;
+      quoteUpdating = false;
       host.debug({
         quote: `${quote.side} ${usd(quote.totalUsdc)} -> ${quote.shares.toFixed(4)} shares at ${quote.avgPrice.toFixed(4)}, fee ${usd(quote.feeUsdc)}, expires ${quote.expiresAt.slice(11, 19)} UTC`,
       });
       expiryTimer = setTimeout(onQuoteExpiring, Math.max(1000, Date.parse(quote.expiresAt) - Date.now() - QUOTE_REFRESH_BEFORE_MS));
     } else {
-      quote = null;
-      quoteError = problem(response);
       host.debug({ quote: `failed (${response.status}): ${(response.body as ApiError | null)?.error ?? "no response"}` });
+      const code = (response.body as ApiError | null)?.error ?? "";
+      const final = /closed|not_found|bad_/.test(code);
+      if (!quoteFailingSince) quoteFailingSince = Date.now();
+      if (!final && Date.now() - quoteFailingSince < QUOTE_GIVE_UP_MS) {
+        // Keep the last good quote on screen and try again quietly.
+        quoteUpdating = true;
+        clearTimeout(quoteRetryTimer);
+        quoteRetryTimer = setTimeout(() => { if (!disposed && !busy) void fetchQuote(); }, QUOTE_RETRY_MS);
+      } else {
+        quote = null;
+        quoteUpdating = false;
+        quoteError = final ? problem(response) : QUOTE_BUSY;
+      }
     }
     render();
     return quote;
@@ -576,6 +598,7 @@ export function openBetSheet(host: BetHost): Sheet {
     dispose(): void {
       disposed = true;
       clearTimeout(quoteTimer);
+      clearTimeout(quoteRetryTimer);
       clearTimeout(expiryTimer);
     },
     trigger: () => void buy(),

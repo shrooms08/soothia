@@ -7,7 +7,7 @@ const SITE = "https://soothia.heylana.workers.dev";
 const MARKET_PATH = /^\/m\/([1-9A-HJ-NP-Za-km-z]{32,44})\/?$/;
 const CACHE_SECONDS = 60;
 // Bumped on every release so the edge never serves a stale script with a new page.
-const ASSET_VERSION = "0.8.0";
+const ASSET_VERSION = "0.8.1";
 
 const ACTION_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -146,6 +146,8 @@ function renderPage(marketId, market) {
   .custom:focus-within { border-color: var(--sth-orb-mid); }
   .quote { margin: 0; min-height: 20px; color: var(--sth-text-2); font: 400 14px/1.4 var(--sans); }
   .quote.error, .status.error { color: #E88A8A; }
+  .quote-updating { color: var(--sth-text-3); font-size: 12px; }
+  .quote-retry { font-size: 13px; padding: 0; }
   .wallet { display: grid; gap: 8px; }
   .wallet .cta { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .wallet .fine { margin: 0; text-align: center; }

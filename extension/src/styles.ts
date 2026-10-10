@@ -907,6 +907,7 @@ input[type="number"].input { font-family: var(--sth-font-mono); }
 .custom .input.amount::placeholder { color: var(--sth-text-3); font: 400 13px/1 var(--sth-font-sans); }
 .custom .input.amount:focus-visible { box-shadow: none; }
 
+.quote-updating { color: var(--sth-text-3); font: 400 11px/1 var(--sth-font-sans); }
 .quote-box {
   display: flex;
   flex-direction: column;
