@@ -493,6 +493,18 @@ a.button {
   padding: 6px 8px;
 }
 
+.position {
+  padding: 4px 0;
+}
+
+.position .meta {
+  margin-bottom: 0;
+}
+
+.position .button.small {
+  margin: 0 0 0 auto;
+}
+
 .side-chip-yes {
   background: rgba(74, 222, 128, 0.18);
   color: #4ade80;

@@ -202,6 +202,8 @@ export interface Position {
   claimed: boolean;
   outcome: string | null;
   marketUrl: string;
+  /** Shares per side minted to this wallet for creating the market, or null. */
+  creatorSeedShares: number | null;
 }
 
 export interface CreatorMarket {

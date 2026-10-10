@@ -16,6 +16,7 @@ import {
   sleep,
   txState,
   waitForConfirmation,
+  type CreatedMarket,
 } from "./create";
 import { json, readJsonObject, type Env } from "./http";
 import { PANTA_BASE } from "./markets";
@@ -117,8 +118,8 @@ export async function handleBuyQuote(request: Request, env: Env): Promise<Respon
     shares: Number(quote.shares ?? 0),
     avgPrice: Number(quote.avgPrice ?? 0),
     feeUsdc: fee,
-    // The deposit is the amount; Panta's example shows the fee inside it (shares x avgPrice = amount).
-    totalUsdc: Number(amountUsdc),
+    // Confirmed on-chain: the fee is a second transfer to Panta's fee vault, on top of the stake.
+    totalUsdc: Math.round((Number(amountUsdc) + fee) * 100) / 100,
     payoutPerShareUsdc: PAYOUT_PER_SHARE_USDC,
     expiresAt: quote.expiresAt,
   });
@@ -396,7 +397,16 @@ export async function handlePositions(request: Request, env: Env): Promise<Respo
   const rows = body.positions ?? [];
 
   const ids = [...new Set(rows.map((row) => row.marketId))].slice(0, MAX_POSITION_DETAILS);
-  const briefs = new Map(await Promise.all(ids.map(async (id) => [id, await marketBrief(env, id)] as const)));
+  const [briefs, created] = await Promise.all([
+    Promise.all(ids.map(async (id) => [id, await marketBrief(env, id)] as const)).then((entries) => new Map(entries)),
+    env.SOOTHIA_CACHE.get(`creator:${wallet}`, "json") as Promise<CreatedMarket[] | null>,
+  ]);
+  // Creating a market seeds liquidity, which mints half the seed to each side
+  // at 0.50: a 5 USDC seed is 5 YES and 5 NO shares in the creator's wallet.
+  const seedShares = new Map<string, number>();
+  for (const market of created ?? []) {
+    if (market.liquidityUsdc) seedShares.set(market.marketId, market.liquidityUsdc / 2 / 0.5);
+  }
 
   return json(request, {
     positions: rows.map((row) => ({
@@ -410,6 +420,8 @@ export async function handlePositions(request: Request, env: Env): Promise<Respo
       claimed: row.claimed === true,
       outcome: row.outcome ?? null,
       marketUrl: MARKET_PAGE_BASE + row.marketId,
+      // Shares per side this wallet got for creating the market, if it did.
+      creatorSeedShares: seedShares.get(row.marketId) ?? null,
     })),
   });
 }

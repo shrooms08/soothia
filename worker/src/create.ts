@@ -34,8 +34,10 @@ const REGISTER_ATTEMPTS = 3;
 const MAX_CREATOR_MARKETS = 100;
 
 /** What we remember about a quote so a paid market can always be finished. */
-interface QuoteRecord {
+export interface QuoteRecord {
   wallet: string;
+  /** Liquidity part of the creation fee, in USDC. It mints the creator's seed shares. */
+  liquidityUsdc?: number;
   /** The question as sent to Panta (it may have been trimmed to fit). */
   question: string;
   /** The draft and shrink level behind this quote, so build can shrink further. */
@@ -46,9 +48,11 @@ interface QuoteRecord {
   signature?: string;
 }
 
-interface CreatedMarket {
+export interface CreatedMarket {
   marketId: string;
   question: string;
+  /** USDC seeded as liquidity at creation (half per side, minted to the creator at 0.50). */
+  liquidityUsdc?: number;
   /** The page the market was drafted from, so that page can show it. */
   pageUrl?: string;
   signature: string;
@@ -200,6 +204,7 @@ async function issueQuote(
 
   const record: QuoteRecord = {
     wallet,
+    liquidityUsdc: usdc(quote.liquidityInjectionUsdc),
     question: fitted.question,
     draft,
     level: fitted.level,
@@ -491,6 +496,7 @@ async function finish(
   await rememberMarket(env, record.wallet, {
     marketId: result.marketId,
     question: record.question,
+    liquidityUsdc: record.liquidityUsdc,
     pageUrl: record.draft?.pageUrl,
     signature,
     createdAt: new Date().toISOString(),

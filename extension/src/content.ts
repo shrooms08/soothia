@@ -459,25 +459,43 @@ async function mount(): Promise<void> {
       layout();
       return;
     }
+    // One block per market, with a line per side held.
+    const byMarket = new Map<string, Position[]>();
+    for (const position of positions) byMarket.set(position.marketId, [...(byMarket.get(position.marketId) ?? []), position]);
     betsPane.replaceChildren(
-      ...positions.map((position) => {
-        const row = el("div", "tile");
-        const meta = el("div", "meta");
-        meta.append(
-          el("span", `chip side-chip-${position.side}`, position.side.toUpperCase()),
-          el("span", "ends", `${position.shares.toFixed(2)} shares \u00b7 ${position.phase}${position.outcome ? ` \u00b7 ${position.outcome.toUpperCase()} won` : ""}`),
-        );
-        const actions = el("div", "actions");
-        actions.append(externalLink("View on Panta", position.marketUrl, "link"));
-        if (position.claimed) actions.append(el("span", "muted", "Claimed"));
-        else if (position.claimable) actions.append(button("Claim", "button primary", () => void claim(position, row)));
-        else {
-          const claimButton = comingNext("Claim", "button");
-          claimButton.title = "Available after the market resolves";
-          actions.append(claimButton);
+      ...[...byMarket.values()].map((held) => {
+        const first = held[0];
+        const block = el("div", "tile");
+        block.append(el("p", "question", first.title || shortAddressLike(first.marketId)));
+        for (const position of held) {
+          const row = el("div", "position");
+          const meta = el("div", "meta");
+          meta.append(
+            el("span", `chip side-chip-${position.side}`, position.side.toUpperCase()),
+            el(
+              "span",
+              "ends",
+              `${position.shares.toFixed(2)} shares \u00b7 ${position.phase}${position.outcome ? ` \u00b7 ${position.outcome.toUpperCase()} won` : ""}`,
+            ),
+          );
+          if (position.claimed) meta.append(el("span", "muted", "Claimed"));
+          else if (position.claimable) meta.append(button("Claim", "button primary small", () => void claim(position, row)));
+          else {
+            const claimButton = comingNext("Claim", "button small");
+            claimButton.title = "Available after the market resolves";
+            meta.append(claimButton);
+          }
+          row.append(meta);
+          block.append(row);
         }
-        row.append(el("p", "question", position.title || shortAddressLike(position.marketId)), meta, actions);
-        return row;
+        if (first.creatorSeedShares) {
+          const seed = first.creatorSeedShares.toFixed(first.creatorSeedShares % 1 ? 2 : 0);
+          block.append(el("p", "muted", `Includes ${seed} YES + ${seed} NO from your creation seed.`));
+        }
+        const actions = el("div", "actions");
+        actions.append(externalLink("View on Panta", first.marketUrl, "link"));
+        block.append(actions);
+        return block;
       }),
       button("Refresh", "link", () => void renderBets()),
     );

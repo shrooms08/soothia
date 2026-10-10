@@ -186,7 +186,7 @@ export function openBetSheet(host: BetHost): Sheet {
         el("strong", "fee-total", `Total ${usd(quote.totalUsdc)}.`),
       );
       const win = quote.shares * quote.payoutPerShareUsdc;
-      payout.textContent = `If ${quote.side.toUpperCase()} wins, each share pays ~${usd(quote.payoutPerShareUsdc)}: about ${usd(win)} back.`;
+      payout.textContent = `If ${quote.side.toUpperCase()} wins, each share pays ~${usd(quote.payoutPerShareUsdc)}: about ${usd(win)} back on ${usd(quote.totalUsdc)} spent.`;
     } else if (quoting) quoteBox.replaceChildren("Getting the price…");
     else if (quoteError) quoteBox.replaceChildren(quoteError, " ", button("Try again", "link", () => requestQuote(0)));
     else quoteBox.replaceChildren("");
@@ -462,7 +462,11 @@ export function openBetSheet(host: BetHost): Sheet {
       outcome.replaceChildren(
         el("h3", "sheet-title", "Bet placed"),
         el("p", "question", target.title),
-        el("p", "line", `${quote ? `~${quote.shares.toFixed(2)} ` : ""}${side.toUpperCase()} shares are yours.${recorded ? "" : " Panta's records are catching up; the shares are on-chain."}`),
+        el(
+          "p",
+          "line",
+          `${quote ? `~${quote.shares.toFixed(2)} ` : ""}${side.toUpperCase()} shares are yours${quote ? ` for ${usd(quote.totalUsdc)} (${usd(quote.amountUsdc)} stake + ${usd(quote.feeUsdc)} fee)` : ""}.${recorded ? "" : " Panta's records are catching up; the shares are on-chain."}`,
+        ),
         actions,
         solscan,
       );

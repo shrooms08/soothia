@@ -294,7 +294,9 @@ Request: `wallet`, `marketId`, `side` (`yes` or `no`, case-insensitive), `amount
 
 Response: `quoteId`, `marketId`, `side`, `amountUsdc`, `shares` (estimated), `avgPrice`, `feeUsdc`, `expiresAt`, `blockhashExpiryHintSec`.
 
-**LIVE** on the Soothia market, YES for `"1.00"`: `shares 1.996677`, `avgPrice 0.500832`, `feeUsdc 0.02`. Shares × price ≈ the deposit, so the 2% fee appears to come out of the deposit rather than on top. **UNCLEAR** until a real buy shows the USDC debit.
+**LIVE** on the Soothia market, YES for `"1.00"`: `shares 1.996677`, `avgPrice 0.500832`, `feeUsdc 0.02`. **Confirmed by a real buy (tx `WT5qyHDf…mcQ`): the fee is charged on top of the amount.** The transaction made two USDC transfers, 1.00 to the market and 0.02 to Panta's fee vault, so 1.02 USDC left the wallet for a "1.00" order. `amountUsdc` is the stake; the total cost is `amountUsdc + feeUsdc`.
+
+Creating a market also mints shares: the liquidity part of the creation fee (5 USDC on a breaking market) is split half per side at 0.50, so the creator's wallet holds 5 YES and 5 NO shares before anyone bets.
 
 Errors: `INVALID_MARKET_PARAMS`, `MARKET_NOT_FOUND`, `MARKET_NOT_IN_PRIMARY`, `AMOUNT_TOO_SMALL`, `RATE_LIMITED`. The early-market cap of 100 USDC per order comes from the Panta team, not the docs; Soothia also sets a 1.00 USDC floor.
 
