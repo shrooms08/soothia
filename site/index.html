@@ -66,20 +66,31 @@
     <p class="fine mono">Live on Solana mainnet · Powered by Panta</p>
   </section>
 
+  <section class="stats" id="stats" hidden aria-live="polite">
+    <span class="live-dot" aria-hidden="true"></span>
+    <span class="stat"><span class="stat-n mono" data-stat="marketsCreated">0</span> <span class="stat-l" data-one="market created" data-many="markets created">markets created</span></span>
+    <span class="stat-sep">·</span>
+    <span class="stat"><span class="stat-n mono" data-stat="volumeUsdc" data-prefix="$">0</span> <span class="stat-l">bet</span></span>
+    <span class="stat-sep">·</span>
+    <span class="stat"><span class="stat-n mono" data-stat="uniqueWallets">0</span> <span class="stat-l" data-one="wallet" data-many="wallets">wallets</span></span>
+    <span class="stat-sep">·</span>
+    <span class="stat-l">through Soothia</span>
+  </section>
+
   <section class="section reveal" id="how">
     <h2>How it works</h2>
     <div class="cards">
-      <article class="card">
+      <article class="card tilt">
         <div class="shot shot-read"><img src="/img/how-read-card.webp" width="700" height="1500" alt="The Soothia card listing three claims found on a page" loading="lazy"><img class="shot-orb" src="/img/how-read-orb.webp" width="400" height="360" alt="" loading="lazy"></div>
         <h3>Read</h3>
         <p>Soothia reads the page with you and spots claims worth calling.</p>
       </article>
-      <article class="card">
+      <article class="card tilt">
         <div class="shot"><img src="/img/how-make.webp" width="700" height="1500" alt="The review sheet for turning a claim into a Panta market" loading="lazy"></div>
         <h3>Make it a market</h3>
         <p>Turn any claim into a live Panta market. Breaking markets cost 20 USDC.</p>
       </article>
-      <article class="card">
+      <article class="card tilt">
         <div class="shot"><img src="/img/how-bet.webp" width="700" height="1500" alt="The bet sheet with YES and NO and a one dollar stake" loading="lazy"></div>
         <h3>Bet</h3>
         <p>Pick YES or NO, sign with Phantom, done.</p>
@@ -89,7 +100,7 @@
 
   <section class="section reveal" id="proof">
     <h2>Already live</h2>
-    <div class="tile">
+    <div class="tile tilt">
       <div class="meta"><span class="chip">Breaking</span><span class="mono dim">Created through Soothia</span></div>
       <p class="question">Will BTC reach a new all-time high by December 31, 2026?</p>
       <div class="links">
@@ -161,5 +172,6 @@
 
 <script src="/config.js"></script>
 <script src="/app.js"></script>
+<script src="/tilt.js" defer></script>
 </body>
 </html>

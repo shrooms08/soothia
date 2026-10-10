@@ -8,6 +8,8 @@ window.SOOTHIA = {
   PANTA_URL: "https://www.panta.market",
   COLOSSEUM_URL: "https://www.colosseum.com",
   SIDETRACK_URL: "https://superteam.fun/earn/listing/panta-api-side-track",
+  // Live traction numbers, served by the Worker.
+  STATS_URL: "https://soothia-proxy.heylana.workers.dev/stats",
   // A YouTube or Loom share/embed URL, or a local .mp4. Empty shows the placeholder.
   DEMO_VIDEO_URL: "",
 };

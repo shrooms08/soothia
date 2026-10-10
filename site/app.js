@@ -29,6 +29,38 @@
     }
   }
 
+  // Traction strip: real numbers from the Worker, hidden entirely if the fetch fails.
+  var strip = document.getElementById("stats");
+  if (strip && C.STATS_URL) {
+    fetch(C.STATS_URL, { cache: "no-store" }).then(function (r) { return r.ok ? r.json() : null; }).then(function (s) {
+      if (!s || typeof s.marketsCreated !== "number" || typeof s.volumeUsdc !== "number" || typeof s.uniqueWallets !== "number") return;
+      strip.hidden = false;
+      var nodes = strip.querySelectorAll("[data-stat]");
+      var shown = false;
+      function show() {
+        if (shown) return; shown = true;
+        nodes.forEach(function (n) {
+          var end = s[n.getAttribute("data-stat")], prefix = n.getAttribute("data-prefix") || "";
+          var money = prefix === "$";
+          var fmt = function (v) { return prefix + (money ? v.toFixed(2) : Math.round(v)); };
+          var label = n.nextElementSibling;
+          if (label && label.hasAttribute("data-one")) label.textContent = label.getAttribute(end === 1 ? "data-one" : "data-many");
+          if (reduced) { n.textContent = fmt(end); return; }
+          var t0 = performance.now(), dur = 1100;
+          (function step(now) {
+            var p = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - p, 3);
+            n.textContent = fmt(end * e);
+            if (p < 1) requestAnimationFrame(step);
+          })(t0);
+        });
+      }
+      if ("IntersectionObserver" in window) {
+        var o = new IntersectionObserver(function (es) { if (es.some(function (x) { return x.isIntersecting; })) { show(); o.disconnect(); } });
+        o.observe(strip);
+      } else show();
+    }).catch(function () {});
+  }
+
   // Night sky: a few chrome stars in the side gutters, never behind text.
   var sky = document.getElementById("sky");
   if (sky) {
