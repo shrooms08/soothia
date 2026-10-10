@@ -79,7 +79,7 @@ function renderPage(marketId, market) {
   const pageUrl = `${SITE}/m/${marketId}`;
   const pantaUrl = found && market.marketUrl ? market.marketUrl : `https://www.panta.market/market/${marketId}`;
   const open = found && market.phase === "primary" && (!market.primaryPhaseEnd || Date.parse(market.primaryPhaseEnd) > Date.now());
-  const closes = found && market.primaryPhaseEnd ? new Date(market.primaryPhaseEnd).toUTCString().replace(":00 GMT", " UTC") : "";
+  const closes = found && market.primaryPhaseEnd ? new Date(market.primaryPhaseEnd).toUTCString().replace(/ GMT$/, " UTC") : "";
   const buttons = open
     ? `<a class="btn primary" href="${dialTo(marketId, "yes")}" target="_blank" rel="noopener">Bet YES</a>
        <a class="btn primary" href="${dialTo(marketId, "no")}" target="_blank" rel="noopener">Bet NO</a>`
