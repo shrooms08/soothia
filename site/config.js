@@ -10,6 +10,10 @@ window.SOOTHIA = {
   SIDETRACK_URL: "https://superteam.fun/earn/listing/panta-api-side-track",
   // Live traction numbers, served by the Worker.
   STATS_URL: "https://soothia-proxy.heylana.workers.dev/stats",
+  // Hero orb: "css" keeps the CSS orb; "auto" swaps in the 3D glass orb on capable desktops.
+  // ?orb=3d and ?orb=css on the URL override this for comparison.
+  ORB_DEFAULT: "css",
+  ORB_VERSION: "1",
   // A YouTube or Loom share/embed URL, or a local .mp4. Empty shows the placeholder.
   DEMO_VIDEO_URL: "",
 };

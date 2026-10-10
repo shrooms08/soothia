@@ -67,6 +67,10 @@ main, .footer { position: relative; z-index: 1; }
 /* The "eye": a soft highlight that drifts toward the cursor. */
 .orb-eye { position: absolute; inset: 0; background: radial-gradient(circle at 38% 34%, rgba(255,255,255,.55) 0%, rgba(255,255,255,0) 30%); transition: transform .6s var(--ease); }
 .orb-glint { position: absolute; right: -14px; top: -18px; width: 48px; height: 48px; }
+/* With the 3D orb mounted, the CSS ball, glint and arc step aside; the twinkle stars stay. */
+.orb.is-3d .orb-body, .orb.is-3d .orb-glint, .orb.is-3d .orb-arc { visibility: hidden; }
+.orb-canvas { z-index: 1; }
+.orb.is-3d .orb-stars { position: relative; z-index: 2; }
 .orb-arc { position: absolute; inset: -14px; border-radius: 50%; border: 2px solid transparent; border-top-color: var(--sth-text); border-right-color: rgba(245,240,230,.35); opacity: 0; }
 .hero-orb-wrap.thinking .orb-arc { opacity: 1; animation: spin 1.2s linear 1; }
 .orb-stars .star { position: absolute; opacity: 0; }
