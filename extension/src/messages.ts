@@ -6,9 +6,19 @@ export const WALLET_STATUS = "soothia:v1:wallet-status";
 // Isolated world -> MAIN world, asking for a fresh check.
 export const WALLET_REQUEST = "soothia:v1:wallet-request";
 
+export interface WalletInfo {
+  name: string;
+  /** A data: URI, or "" for a legacy provider. */
+  icon: string;
+  legacy?: boolean;
+}
+
 export interface WalletStatusMessage {
   type: typeof WALLET_STATUS;
-  phantom: boolean;
+  /** Every Solana wallet detected on this page. */
+  wallets: WalletInfo[];
+  /** The wallet currently connected through the bridge, if any. */
+  connected: (WalletInfo & { publicKey: string }) | null;
 }
 
 // Content script -> background service worker, via chrome.runtime.sendMessage.
@@ -95,7 +105,7 @@ export const WALLET_RPC_RESPONSE = "soothia:v1:wallet-rpc-result";
 // The on-demand signer bundle announces itself once it has loaded.
 export const SIGNER_READY = "soothia:v1:signer-ready";
 
-export type WalletMethod = "connect" | "disconnect" | "getPublicKey" | "signTransaction" | "signerPing";
+export type WalletMethod = "listWallets" | "connect" | "disconnect" | "getPublicKey" | "signTransaction" | "signerPing";
 
 export interface WalletRpcRequest {
   type: typeof WALLET_RPC_REQUEST;
@@ -103,12 +113,16 @@ export interface WalletRpcRequest {
   method: WalletMethod;
   /** signTransaction only: the unsigned transaction. */
   txBase64?: string;
+  /** connect: which wallet; getPublicKey: the wallet to reconnect silently. */
+  wallet?: string;
 }
 
 export type WalletRpcOutcome =
-  | { ok: true; publicKey?: string | null; signedTxBase64?: string; signature?: string }
-  // The user said no in Phantom. A normal outcome, not a failure.
+  | { ok: true; publicKey?: string | null; wallet?: WalletInfo | null; wallets?: WalletInfo[]; signedTxBase64?: string; signature?: string }
+  // The user said no in their wallet. A normal outcome, not a failure.
   | { ok: false; reason: "rejected" }
+  // A legacy provider needs the web3.js signer bundle before it can sign.
+  | { ok: false; reason: "legacy_needs_signer" }
   | { ok: false; reason: "no_wallet" | "timeout" | "failed"; message?: string };
 
 export type WalletRpcResponse = { type: typeof WALLET_RPC_RESPONSE; id: string } & WalletRpcOutcome;

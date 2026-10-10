@@ -1,7 +1,8 @@
-// Runs in the page's MAIN world, where wallet providers are visible.
-// Reports whether Phantom is present and answers connect / disconnect /
-// getPublicKey requests from the content script. Signing lives in
-// wallet-sign.ts, which is loaded only when the user creates a market.
+// Runs in the page's MAIN world, where wallet providers are visible. Finds
+// every Solana wallet (Wallet Standard first, legacy providers as a fallback),
+// reports them to the content script, and answers connect / disconnect /
+// getPublicKey / signTransaction requests. Standard wallets sign raw bytes
+// here; a legacy provider needs wallet-sign.ts (web3.js), injected on demand.
 // Never calls signAndSendTransaction: Soothia's Worker does the sending.
 import {
   WALLET_REQUEST,
@@ -13,74 +14,79 @@ import {
   type WalletRpcResponse,
   type WalletStatusMessage,
 } from "./messages";
+import { connect, connected, disconnect, listWallets, onWalletsChange, signTransaction, WalletError, type LegacySigner } from "./wallets";
 
-interface PhantomProvider {
-  isPhantom?: boolean;
-  publicKey?: { toString(): string } | null;
-  connect(options?: { onlyIfTrusted?: boolean }): Promise<{ publicKey: { toString(): string } }>;
-  disconnect(): Promise<void>;
+/** wallet-sign.ts leaves its web3.js helpers here for legacy providers. */
+const LEGACY_SIGNER_KEY = "__soothiaLegacySigner";
+
+function legacySigner(): LegacySigner | undefined {
+  return (window as unknown as Record<string, LegacySigner | undefined>)[LEGACY_SIGNER_KEY];
 }
 
-interface WalletWindow {
-  phantom?: { solana?: PhantomProvider };
-  solana?: PhantomProvider;
-}
+let lastReport = "";
 
-function phantom(): PhantomProvider | null {
-  const w = window as unknown as WalletWindow;
-  if (w.phantom?.solana) return w.phantom.solana;
-  return w.solana?.isPhantom ? w.solana : null;
-}
-
-function report(): void {
-  const message: WalletStatusMessage = { type: WALLET_STATUS, phantom: phantom() !== null };
+function report(force = false): void {
+  const message: WalletStatusMessage = { type: WALLET_STATUS, wallets: listWallets(), connected: connected() };
+  const serialized = JSON.stringify(message);
+  if (!force && serialized === lastReport) return;
+  lastReport = serialized;
   window.postMessage(message, window.location.origin);
 }
 
-function isRejection(error: unknown): boolean {
-  return (error as { code?: unknown } | null)?.code === 4001;
+function failure(error: unknown): WalletRpcOutcome {
+  if (error instanceof WalletError) {
+    if (error.reason === "rejected" || error.reason === "legacy_needs_signer") return { ok: false, reason: error.reason };
+    return { ok: false, reason: error.reason, message: error.message.slice(0, 200) };
+  }
+  return { ok: false, reason: "failed", message: String((error as Error)?.message ?? "").slice(0, 200) };
 }
 
 async function handle(request: WalletRpcRequest): Promise<WalletRpcOutcome | null> {
-  // signTransaction and signerPing belong to the signer bundle.
-  if (request.method !== "connect" && request.method !== "disconnect" && request.method !== "getPublicKey") {
-    return null;
-  }
-  const provider = phantom();
-  if (!provider) return { ok: false, reason: "no_wallet" };
   try {
     switch (request.method) {
-      case "connect":
-        return { ok: true, publicKey: (await provider.connect()).publicKey.toString() };
-      case "disconnect":
-        await provider.disconnect();
-        return { ok: true, publicKey: null };
-      case "getPublicKey": {
-        if (provider.publicKey) return { ok: true, publicKey: provider.publicKey.toString() };
-        // Reconnects silently if this site was approved before; never opens a popup.
-        try {
-          return { ok: true, publicKey: (await provider.connect({ onlyIfTrusted: true })).publicKey.toString() };
-        } catch {
-          return { ok: true, publicKey: null };
-        }
+      case "listWallets":
+        return { ok: true, wallets: listWallets(), wallet: connected(), publicKey: connected()?.publicKey ?? null };
+      case "connect": {
+        if (!request.wallet) return { ok: false, reason: "no_wallet" };
+        const result = await connect(request.wallet);
+        return { ok: true, publicKey: result?.publicKey ?? null, wallet: result };
       }
+      case "disconnect":
+        await disconnect();
+        return { ok: true, publicKey: null, wallet: null };
+      case "getPublicKey": {
+        // Already connected, or reconnect the remembered wallet silently; never a popup.
+        const current = connected();
+        if (current) return { ok: true, publicKey: current.publicKey, wallet: current };
+        const preferred = request.wallet ?? listWallets()[0]?.name;
+        if (!preferred) return { ok: true, publicKey: null, wallet: null };
+        const result = await connect(preferred, { silent: true });
+        return { ok: true, publicKey: result?.publicKey ?? null, wallet: result };
+      }
+      case "signTransaction": {
+        if (typeof request.txBase64 !== "string") return { ok: false, reason: "failed", message: "no transaction" };
+        const signed = await signTransaction(request.txBase64, legacySigner());
+        return { ok: true, ...signed };
+      }
+      default:
+        return null; // signerPing belongs to wallet-sign.ts
     }
   } catch (error) {
-    if (isRejection(error)) return { ok: false, reason: "rejected" };
-    return { ok: false, reason: "failed", message: String((error as Error)?.message ?? "").slice(0, 200) };
+    return failure(error);
   }
 }
 
 if (window.top === window) {
-  report();
-  // Phantom can inject after this script runs, so check again a few times.
-  for (const delay of [500, 1500, 4000]) setTimeout(report, delay);
+  report(true);
+  onWalletsChange(() => report());
+  // Legacy providers inject without an event, so look again a few times.
+  for (const delay of [500, 1500, 4000]) setTimeout(() => report(), delay);
 
   window.addEventListener("message", (event) => {
     if (event.source !== window || event.origin !== window.location.origin) return;
     const data = event.data as Partial<WalletRpcRequest> | { type?: string } | null;
     if (data?.type === WALLET_REQUEST) {
-      report();
+      report(true);
       return;
     }
     if (data?.type !== WALLET_RPC_REQUEST) return;
@@ -90,6 +96,7 @@ if (window.top === window) {
       if (!outcome) return;
       const response: WalletRpcResponse = { type: WALLET_RPC_RESPONSE, id: request.id, ...outcome };
       window.postMessage(response, window.location.origin);
+      report();
     });
   });
 }

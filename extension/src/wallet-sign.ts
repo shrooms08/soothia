@@ -1,89 +1,27 @@
-// MAIN-world signer, injected only when the user creates a market (it
-// carries @solana/web3.js, too heavy to load on every page). Turns the
-// unsigned base64 transaction into a VersionedTransaction, asks Phantom to
-// sign it, and hands back the signed bytes. It never sends anything:
-// signAndSendTransaction is deliberately not used.
+// MAIN-world helper for legacy wallet providers, injected only when needed:
+// it carries @solana/web3.js, which turns the unsigned bytes into the
+// VersionedTransaction object a legacy provider's signTransaction expects.
+// Standard wallets sign raw bytes in wallet-bridge.ts and never need this.
+// It never sends anything: signAndSendTransaction is deliberately not used.
 import { VersionedTransaction } from "@solana/web3.js";
-import {
-  SIGNER_READY,
-  WALLET_RPC_REQUEST,
-  WALLET_RPC_RESPONSE,
-  type WalletRpcOutcome,
-  type WalletRpcRequest,
-  type WalletRpcResponse,
-} from "./messages";
-
-interface SigningProvider {
-  isPhantom?: boolean;
-  signTransaction(transaction: VersionedTransaction): Promise<VersionedTransaction>;
-}
+import { SIGNER_READY, WALLET_RPC_REQUEST, WALLET_RPC_RESPONSE, type WalletRpcRequest, type WalletRpcResponse } from "./messages";
 
 const LOADED_FLAG = "__soothiaSignerLoaded";
+const LEGACY_SIGNER_KEY = "__soothiaLegacySigner";
 
-function phantom(): SigningProvider | null {
-  const w = window as unknown as { phantom?: { solana?: SigningProvider }; solana?: SigningProvider };
-  if (w.phantom?.solana) return w.phantom.solana;
-  return w.solana?.isPhantom ? w.solana : null;
-}
-
-function fromBase64(text: string): Uint8Array {
-  return Uint8Array.from(atob(text), (char) => char.charCodeAt(0));
-}
-
-function toBase64(bytes: Uint8Array): string {
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary);
-}
-
-const BASE58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
-
-function base58(bytes: Uint8Array): string {
-  let value = 0n;
-  for (const byte of bytes) value = (value << 8n) | BigInt(byte);
-  let out = "";
-  for (; value > 0n; value /= 58n) out = BASE58[Number(value % 58n)] + out;
-  for (const byte of bytes) {
-    if (byte !== 0) break;
-    out = "1" + out;
-  }
-  return out;
-}
-
-async function sign(txBase64: string): Promise<WalletRpcOutcome> {
-  const provider = phantom();
-  if (!provider) return { ok: false, reason: "no_wallet" };
-  try {
-    const transaction = VersionedTransaction.deserialize(fromBase64(txBase64));
-    const signed = await provider.signTransaction(transaction);
-    return {
-      ok: true,
-      signedTxBase64: toBase64(signed.serialize()),
-      // The transaction id, so its fate can be checked even if sending is interrupted.
-      signature: base58(signed.signatures[0]),
-    };
-  } catch (error) {
-    if ((error as { code?: unknown } | null)?.code === 4001) return { ok: false, reason: "rejected" };
-    return { ok: false, reason: "failed", message: String((error as Error)?.message ?? "").slice(0, 200) };
-  }
-}
-
-const flags = window as unknown as Record<string, boolean>;
+const flags = window as unknown as Record<string, unknown>;
 if (window.top === window && !flags[LOADED_FLAG]) {
   flags[LOADED_FLAG] = true;
-
+  flags[LEGACY_SIGNER_KEY] = {
+    deserialize: (bytes: Uint8Array) => VersionedTransaction.deserialize(bytes),
+    serialize: (transaction: unknown) => (transaction as VersionedTransaction).serialize(),
+  };
   window.addEventListener("message", (event) => {
     if (event.source !== window || event.origin !== window.location.origin) return;
     const request = event.data as WalletRpcRequest | null;
-    if (request?.type !== WALLET_RPC_REQUEST || typeof request.id !== "string") return;
-    const reply = (outcome: WalletRpcOutcome): void => {
-      const response: WalletRpcResponse = { type: WALLET_RPC_RESPONSE, id: request.id, ...outcome };
-      window.postMessage(response, window.location.origin);
-    };
-    if (request.method === "signerPing") reply({ ok: true });
-    else if (request.method === "signTransaction" && typeof request.txBase64 === "string") {
-      void sign(request.txBase64).then(reply);
-    }
+    if (request?.type !== WALLET_RPC_REQUEST || typeof request.id !== "string" || request.method !== "signerPing") return;
+    const response: WalletRpcResponse = { type: WALLET_RPC_RESPONSE, id: request.id, ok: true };
+    window.postMessage(response, window.location.origin);
   });
 }
 // Announce on every injection, so a second request for the signer also gets an answer.

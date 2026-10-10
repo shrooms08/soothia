@@ -1,17 +1,22 @@
 // Content-script side of the wallet bridge: sends a request to the MAIN
-// world and waits for the answer with the same id.
+// world and waits for the answer with the same id. Remembers the last wallet
+// used (chrome.storage.local) so it is offered first and reconnected silently.
 import {
   INJECT_SIGNER,
   WALLET_RPC_REQUEST,
   WALLET_RPC_RESPONSE,
+  type WalletInfo,
   type WalletMethod,
   type WalletRpcOutcome,
   type WalletRpcRequest,
   type WalletRpcResponse,
 } from "./messages";
 
-// How long each call may take. Calls that open a Phantom popup wait for a person.
+const LAST_WALLET_KEY = "soothia:wallet";
+
+// How long each call may take. Calls that open a wallet prompt wait for a person.
 const TIMEOUT_MS: Record<WalletMethod, number> = {
+  listWallets: 2000,
   getPublicKey: 4000,
   signerPing: 1500,
   disconnect: 5000,
@@ -19,7 +24,7 @@ const TIMEOUT_MS: Record<WalletMethod, number> = {
   signTransaction: 180_000,
 };
 
-function call(method: WalletMethod, txBase64?: string): Promise<WalletRpcOutcome> {
+function call(method: WalletMethod, extra: { txBase64?: string; wallet?: string } = {}): Promise<WalletRpcOutcome> {
   return new Promise((resolve) => {
     const id = crypto.randomUUID();
 
@@ -40,7 +45,7 @@ function call(method: WalletMethod, txBase64?: string): Promise<WalletRpcOutcome
 
     const timer = setTimeout(() => done({ ok: false, reason: "timeout" }), TIMEOUT_MS[method]);
     window.addEventListener("message", onMessage);
-    const request: WalletRpcRequest = { type: WALLET_RPC_REQUEST, id, method, ...(txBase64 ? { txBase64 } : {}) };
+    const request: WalletRpcRequest = { type: WALLET_RPC_REQUEST, id, method, ...extra };
     window.postMessage(request, window.location.origin);
   });
 }
@@ -59,16 +64,52 @@ async function ensureSigner(): Promise<boolean> {
   return false;
 }
 
+let current: WalletInfo | null = null;
+
+async function lastUsed(): Promise<string | null> {
+  try {
+    const stored = await chrome.storage.local.get(LAST_WALLET_KEY);
+    return typeof stored[LAST_WALLET_KEY] === "string" ? (stored[LAST_WALLET_KEY] as string) : null;
+  } catch {
+    return null;
+  }
+}
+
+function remember(outcome: WalletRpcOutcome): void {
+  if (!outcome.ok) return;
+  current = outcome.wallet ?? null;
+  if (outcome.wallet) chrome.storage.local.set({ [LAST_WALLET_KEY]: outcome.wallet.name }).catch(() => {});
+}
+
 export const wallet = {
-  connect: (): Promise<WalletRpcOutcome> => call("connect"),
-  disconnect: (): Promise<WalletRpcOutcome> => call("disconnect"),
-  /** The connected address, or null. Never opens a popup. */
+  /** Detected wallets, the last used one first. */
+  async list(): Promise<WalletInfo[]> {
+    const outcome = await call("listWallets");
+    const wallets = outcome.ok ? (outcome.wallets ?? []) : [];
+    const preferred = await lastUsed();
+    return wallets.slice().sort((a, b) => Number(b.name === preferred) - Number(a.name === preferred));
+  },
+  async connect(name: string): Promise<WalletRpcOutcome> {
+    const outcome = await call("connect", { wallet: name });
+    remember(outcome);
+    return outcome;
+  },
+  async disconnect(): Promise<WalletRpcOutcome> {
+    current = null;
+    return call("disconnect");
+  },
+  /** The connected address, or null. Never opens a prompt. */
   async publicKey(): Promise<string | null> {
-    const outcome = await call("getPublicKey");
+    const outcome = await call("getPublicKey", { wallet: (await lastUsed()) ?? undefined });
+    if (outcome.ok && outcome.wallet) current = outcome.wallet;
     return outcome.ok ? (outcome.publicKey ?? null) : null;
   },
+  /** The connected wallet's name and icon, once known. */
+  current: (): WalletInfo | null => current,
   async signTransaction(txBase64: string): Promise<WalletRpcOutcome> {
+    const first = await call("signTransaction", { txBase64 });
+    if (first.ok || first.reason !== "legacy_needs_signer") return first;
     if (!(await ensureSigner())) return { ok: false, reason: "failed", message: "signer did not load" };
-    return call("signTransaction", txBase64);
+    return call("signTransaction", { txBase64 });
   },
 };
