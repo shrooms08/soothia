@@ -39,13 +39,13 @@ import {
   pantaPostWithRetry,
   RELEVANT_LOG,
   simulationReason,
-  sleep,
   txState,
   waitForConfirmation,
   type PantaError,
 } from "./create";
 import { readJsonObject, type Env } from "./http";
 import { MAX_BUILT_TRANSACTION_BYTES } from "./pantaRules";
+import { displayQuote, quoteDeps, quoteWithRetry } from "./quotes";
 import { rpc, RpcError } from "./rpc";
 
 export const ACTION_VERSION = "2.4";
@@ -64,8 +64,6 @@ export const ACTION_HEADERS: Record<string, string> = {
 };
 
 const ACTION_PATH = /^\/api\/actions\/market\/([1-9A-HJ-NP-Za-km-z]{32,44})(\/confirm|\/quote)?$/;
-/** A quote needs some wallet; before the viewer connects, the share page uses this one. */
-const SYSTEM_PROGRAM = "11111111111111111111111111111111";
 const STATUS_WAIT_MS = 20_000;
 const CATEGORY_IMAGES = new Set(["crypto", "entertainment", "finance", "other", "politics", "science", "sports", "world"]);
 const FIXED_AMOUNTS = [1, 5];
@@ -78,7 +76,10 @@ type PantaResult<T> = { ok: true; data: T } | { ok: false; status: number; error
 /** Everything the handlers need from the outside world, so tests can fake it. */
 export interface ActionDeps {
   brief(marketId: string): Promise<MarketBrief | null>;
+  /** A per-wallet quote (spaced, retried); the real one before a build. */
   quote(wallet: string, marketId: string, side: Side, amountUsdc: string): Promise<PantaResult<PantaBuyQuote>>;
+  /** A price for display: cached 15 s and shared between identical requests. */
+  displayQuote(marketId: string, side: Side, amountUsdc: string): Promise<PantaResult<PantaBuyQuote>>;
   build(quoteId: string, wallet: string): Promise<PantaResult<PantaBuyBuild>>;
   assemble(instructions: PantaBuyBuild["instructions"], wallet: string): Promise<{ txBase64: string }>;
   load(orderId: string): Promise<BuyRecord | null>;
@@ -93,8 +94,8 @@ export interface ActionDeps {
 export function actionDeps(env: Env, ctx: ExecutionContext): ActionDeps {
   return {
     brief: (marketId) => marketBrief(env, marketId),
-    quote: (wallet, marketId, side, amountUsdc) =>
-      pantaPostWithRetry<PantaBuyQuote>(env, "/primaryorderquote/", { wallet, marketId, side, amountUsdc }),
+    quote: (wallet, marketId, side, amountUsdc) => quoteWithRetry(quoteDeps(env), { wallet, marketId, side, amountUsdc }),
+    displayQuote: (marketId, side, amountUsdc) => displayQuote(quoteDeps(env), { marketId, side, amountUsdc }),
     build: (quoteId, wallet) =>
       pantaPostWithRetry<PantaBuyBuild>(env, "/primaryorderbuild/", { quoteId, wallet, maxSlippageBps: MAX_SLIPPAGE_BPS }),
     assemble: (instructions, wallet) => assembleWithFreshBlockhash(env, instructions ?? [], wallet),
@@ -157,7 +158,7 @@ export function friendlyPantaError(error: PantaError): string {
   if (/CLOSED|NOT_PRIMARY|PHASE|ENDED|RESOLVED|CANCELLED/.test(code)) return CLOSED_MESSAGE;
   if (/INSUFFICIENT|BALANCE|FUNDS/.test(code)) return "Not enough USDC in this wallet for that bet.";
   if (/VALIDATION|INVALID|AMOUNT/.test(code) && error.message) return error.message;
-  return "Panta could not price this bet right now. Please try again in a moment.";
+  return "Prices are busy on Panta. Try again in a moment.";
 }
 
 function sideLabel(side: Side): string {
@@ -217,16 +218,12 @@ export async function handleActionQuote(request: Request, deps: ActionDeps, mark
   if (!side) return fail("Choose YES or NO.");
   const amountUsdc = parseAmount(url.searchParams.get("amount") ?? "");
   if (!amountUsdc) return fail(`Bets are between ${MIN_BUY_USDC} and ${MAX_BUY_USDC} USDC.`);
-  const account = url.searchParams.get("account") || SYSTEM_PROGRAM;
-  if (!isAddress(account)) return fail("The wallet address is not a valid Solana public key.");
+  // Display quotes do not depend on the wallet: the stand-in address keeps Panta's
+  // per-wallet quote limit for the real quote inside Place bet.
   const brief = await deps.brief(marketId);
   if (!brief?.title) return fail("Market not found.", 404);
   if (!bettingOpen(brief, Date.now())) return fail(CLOSED_MESSAGE);
-  let quoted = await deps.quote(account, marketId, side, amountUsdc);
-  if (!quoted.ok && quoted.error.code === "INVALID_MARKET_PARAMS") {
-    await sleep(1500);
-    quoted = await deps.quote(account, marketId, side, amountUsdc);
-  }
+  const quoted = await deps.displayQuote(marketId, side, amountUsdc);
   if (!quoted.ok) return pantaFail(quoted);
   const fee = Number(quoted.data.feeUsdc ?? 0);
   return reply({
@@ -295,12 +292,8 @@ export async function handleActionPost(request: Request, deps: ActionDeps, marke
   if (!brief?.title) return fail("Market not found.", 404);
   if (!bettingOpen(brief, Date.now())) return fail(CLOSED_MESSAGE);
 
-  // Panta answers INVALID_MARKET_PARAMS to quotes that follow each other too fast; one quiet retry.
-  let quoted = await deps.quote(account, marketId, side, amountUsdc);
-  if (!quoted.ok && quoted.error.code === "INVALID_MARKET_PARAMS") {
-    await sleep(1500);
-    quoted = await deps.quote(account, marketId, side, amountUsdc);
-  }
+  // A fresh per-wallet quote at click time; spacing and retries live in quotes.ts.
+  const quoted = await deps.quote(account, marketId, side, amountUsdc);
   if (!quoted.ok) return pantaFail(quoted);
   const quote = quoted.data;
   const record: BuyRecord = { wallet: account, marketId, side, amountUsdc, quoteId: quote.quoteId, source: "blink" };

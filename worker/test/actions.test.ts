@@ -61,6 +61,10 @@ function fake(overrides: Partial<ActionDeps> = {}, briefValue: MarketBrief | nul
         calls.push(`quote ${wallet} ${marketId} ${side} ${amountUsdc}`);
         return { ok: true, data: { quoteId: "qt_1", shares: "1.996677", feeUsdc: "0.02", amountUsdc, expiresAt: "soon" } };
       },
+      displayQuote: async (marketId, side, amountUsdc) => {
+        calls.push(`quote 11111111111111111111111111111111 ${marketId} ${side} ${amountUsdc}`);
+        return { ok: true, data: { quoteId: "qt_display", shares: "1.996677", feeUsdc: "0.02", amountUsdc, expiresAt: "soon" } };
+      },
       build: async (quoteId, wallet) => {
         calls.push(`build ${quoteId} ${wallet}`);
         return { ok: true, data: { orderId: "ord_1", instructions: [{ programId: OTHER, data: "", accounts: [] }], expectedShares: "1.996677" } };
@@ -164,7 +168,7 @@ test("POST maps Panta errors to friendly messages and rejects oversized transact
   const upstream = fake({ build: async () => ({ ok: false, status: 500, error: { message: "unexpected quote failure" } }) });
   const down = await handleActionPost(post(`${BASE}?side=no&amount=5`, { account: WALLET }), upstream.deps, MARKET);
   assert.equal(down.status, 502);
-  assert.deepEqual(await down.json(), { message: "Panta could not price this bet right now. Please try again in a moment.", code: "upstream_error" });
+  assert.deepEqual(await down.json(), { message: "Prices are busy on Panta. Try again in a moment.", code: "upstream_error" });
   const big = fake({ assemble: async () => ({ txBase64: btoa(String.fromCharCode(...new Uint8Array(1200).fill(1))) }) });
   const tooBig = await handleActionPost(post(`${BASE}?side=yes&amount=1`, { account: WALLET }), big.deps, MARKET);
   assert.equal(tooBig.status, 400);
@@ -223,9 +227,10 @@ test("the quote route prices a side and amount, with a stand-in wallet before co
   const body = (await response.json()) as any;
   assert.deepEqual(body, { side: "no", amountUsdc: 5, shares: 1.996677, avgPrice: 0, feeUsdc: 0.02, totalUsdc: 5.02, yesPrice: brief.yesPrice, noPrice: brief.noPrice, expiresAt: "soon" });
   assert.deepEqual(f.calls, [`quote 11111111111111111111111111111111 ${MARKET} no 5.00`]);
+  // The account is ignored for display quotes: Panta limits quotes per wallet.
   const withAccount = await handleActionQuote(get(`${BASE}/quote?side=yes&amount=1&account=${WALLET}`), f.deps, MARKET);
   assert.equal(withAccount.status, 200);
-  assert.equal(f.calls[1], `quote ${WALLET} ${MARKET} yes 1.00`);
+  assert.equal(f.calls[1], `quote 11111111111111111111111111111111 ${MARKET} yes 1.00`);
   assert.equal((await handleActionQuote(get(`${BASE}/quote?side=yes&amount=0`), f.deps, MARKET)).status, 400);
   const closed = await handleActionQuote(get(`${BASE}/quote?side=yes&amount=1`), fake({}, { ...brief, phase: "resolved" }).deps, MARKET);
   assert.deepEqual(await closed.json(), { message: "Betting is closed for this market." });

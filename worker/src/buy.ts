@@ -21,6 +21,7 @@ import {
 import { json, readJsonObject, type Env } from "./http";
 import { PANTA_BASE } from "./markets";
 import { MARKET_PAGE_BASE, MAX_BUILT_TRANSACTION_BYTES } from "./pantaRules";
+import { quoteDeps, quoteWithRetry } from "./quotes";
 import { rpc, RpcError } from "./rpc";
 
 // Soothia's floor and Panta's early-market cap per order, in USDC.
@@ -105,12 +106,8 @@ export async function handleBuyQuote(request: Request, env: Env): Promise<Respon
     );
   }
 
-  const result = await pantaPostWithRetry<PantaBuyQuote>(env, "/primaryorderquote/", {
-    wallet: body.wallet,
-    marketId: body.marketId,
-    side,
-    amountUsdc,
-  });
+  // Spaced and retried on Panta's transient errors (quotes.ts).
+  const result = await quoteWithRetry(quoteDeps(env), { wallet: body.wallet, marketId: body.marketId, side, amountUsdc });
   if (!result.ok) return pantaFailure(request, result);
   const quote = result.data;
 
