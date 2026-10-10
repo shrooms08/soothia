@@ -39,6 +39,7 @@ import {
   pantaPostWithRetry,
   RELEVANT_LOG,
   simulationReason,
+  sleep,
   txState,
   waitForConfirmation,
   type PantaError,
@@ -221,7 +222,11 @@ export async function handleActionQuote(request: Request, deps: ActionDeps, mark
   const brief = await deps.brief(marketId);
   if (!brief?.title) return fail("Market not found.", 404);
   if (!bettingOpen(brief, Date.now())) return fail(CLOSED_MESSAGE);
-  const quoted = await deps.quote(account, marketId, side, amountUsdc);
+  let quoted = await deps.quote(account, marketId, side, amountUsdc);
+  if (!quoted.ok && quoted.error.code === "INVALID_MARKET_PARAMS") {
+    await sleep(1500);
+    quoted = await deps.quote(account, marketId, side, amountUsdc);
+  }
   if (!quoted.ok) return pantaFail(quoted);
   const fee = Number(quoted.data.feeUsdc ?? 0);
   return reply({
@@ -290,7 +295,12 @@ export async function handleActionPost(request: Request, deps: ActionDeps, marke
   if (!brief?.title) return fail("Market not found.", 404);
   if (!bettingOpen(brief, Date.now())) return fail(CLOSED_MESSAGE);
 
-  const quoted = await deps.quote(account, marketId, side, amountUsdc);
+  // Panta answers INVALID_MARKET_PARAMS to quotes that follow each other too fast; one quiet retry.
+  let quoted = await deps.quote(account, marketId, side, amountUsdc);
+  if (!quoted.ok && quoted.error.code === "INVALID_MARKET_PARAMS") {
+    await sleep(1500);
+    quoted = await deps.quote(account, marketId, side, amountUsdc);
+  }
   if (!quoted.ok) return pantaFail(quoted);
   const quote = quoted.data;
   const record: BuyRecord = { wallet: account, marketId, side, amountUsdc, quoteId: quote.quoteId, source: "blink" };
