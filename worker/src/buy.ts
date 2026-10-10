@@ -433,17 +433,22 @@ export async function marketBrief(env: Env, marketId: string): Promise<MarketBri
   };
   const brief: MarketBrief = {
     title: (detail.title || detail.description || "").trim(),
+    // Panta's detail row is sometimes partial (its RPC hiccups); keep the last seen values.
     category: detail.category ?? cached?.category ?? "other",
-    phase: detail.phase ?? null,
-    marketType: detail.marketType ?? null,
-    yesPrice: price(detail.yesPrice),
-    noPrice: price(detail.noPrice),
-    endTime: typeof detail.endTime === "number" ? new Date(detail.endTime * 1000).toISOString() : null,
-    primaryPhaseEnd: typeof detail.primaryPhaseEndTime === "number" ? new Date(detail.primaryPhaseEndTime * 1000).toISOString() : null,
-    liquidity: liquidityFrom(detail),
+    phase: detail.phase ?? cached?.phase ?? null,
+    marketType: detail.marketType ?? cached?.marketType ?? null,
+    // Panta returns null prices when its RPC is unavailable; keep the last ones seen.
+    yesPrice: price(detail.yesPrice) ?? cached?.yesPrice ?? null,
+    noPrice: price(detail.noPrice) ?? cached?.noPrice ?? null,
+    endTime: typeof detail.endTime === "number" ? new Date(detail.endTime * 1000).toISOString() : cached?.endTime ?? null,
+    primaryPhaseEnd:
+      typeof detail.primaryPhaseEndTime === "number" ? new Date(detail.primaryPhaseEndTime * 1000).toISOString() : cached?.primaryPhaseEnd ?? null,
+    liquidity: liquidityFrom(detail) ?? cached?.liquidity ?? null,
   };
-  // Pool figures move with every trade, so this cache is short.
-  if (brief.title) await env.SOOTHIA_CACHE.put(key, JSON.stringify(brief), { expirationTtl: 120 });
+  // Pool figures move with every trade, so this cache is short; a partial row (Panta's RPC
+  // hiccup left prices or the closing time out) is kept only for the KV minimum.
+  const partial = brief.yesPrice === null || !brief.primaryPhaseEnd;
+  if (brief.title) await env.SOOTHIA_CACHE.put(key, JSON.stringify(brief), { expirationTtl: partial ? 60 : 120 });
   return brief;
 }
 

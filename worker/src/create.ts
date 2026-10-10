@@ -347,7 +347,7 @@ export const RELEVANT_LOG = /insufficient|error|failed|already in use|exceeded|i
 /** A sentence a person can act on, from the simulation's error and logs. */
 export function simulationReason(err: unknown, logs: string[]): string {
   const text = `${typeof err === "string" ? err : JSON.stringify(err)} ${logs.join(" ")}`.toLowerCase();
-  if (text.includes("accountnotfound")) {
+  if (text.includes("accountnotfound") || text.includes("found no record of a prior credit")) {
     return "This wallet is empty. It needs SOL for network fees and USDC to pay with.";
   }
   if (text.includes("insufficient lamports") || text.includes("insufficientfundsforfee") || text.includes("insufficientfundsforrent")) {

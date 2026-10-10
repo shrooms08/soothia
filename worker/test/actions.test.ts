@@ -9,8 +9,12 @@ import {
   handleActionConfirm,
   handleActionGet,
   handleActionPost,
+  handleActionQuote,
+  handleTxSend,
+  handleTxStatus,
   type ActionDeps,
 } from "../src/actions";
+import { RpcError } from "../src/rpc";
 import type { BuyRecord, BuyStatus, MarketBrief } from "../src/buy";
 import { encodeBase58 } from "../src/base58";
 
@@ -69,6 +73,8 @@ function fake(overrides: Partial<ActionDeps> = {}, briefValue: MarketBrief | nul
         return fakeDeps.finishResult;
       },
       background: () => {},
+      send: async () => {},
+      status: async () => ({ state: "confirmed" as const }),
       ...overrides,
     },
   };
@@ -86,7 +92,7 @@ test("GET returns the spec shape with four fixed buttons, two custom ones, and t
   assert.equal(body.type, "action");
   assert.equal(body.icon, "https://proxy.test/img/crypto.png");
   assert.equal(body.title, brief.title);
-  assert.equal(body.description, "YES 50% · NO 50% · Breaking market on Panta. Made with Soothia.");
+  assert.equal(body.description, "YES 50.2% · NO 49.8% · Breaking market on Panta. Made with Soothia.");
   assert.equal(body.label, "Bet");
   assert.equal(body.disabled, undefined);
   const labels = body.links.actions.map((a: any) => a.label);
@@ -109,7 +115,7 @@ test("GET omits the odds when prices are missing, and is disabled outside the bu
   assert.equal(closed.error.message, "Betting is closed for this market.");
   assert.equal(closed.links, undefined);
   assert.equal(bettingOpen({ ...brief, primaryPhaseEnd: "2020-01-01T00:00:00Z" }, Date.now()), false);
-  assert.equal(describe({ ...brief, marketType: "standard" }), "YES 50% · NO 50% · Market on Panta. Made with Soothia.");
+  assert.equal(describe({ ...brief, marketType: "standard" }), "YES 50.2% · NO 49.8% · Market on Panta. Made with Soothia.");
   const missing = await handleActionGet(get(), fake({}, null).deps, MARKET);
   assert.equal(missing.status, 404);
   assert.deepEqual(await missing.json(), { message: "Market not found." });
@@ -154,11 +160,11 @@ test("POST maps Panta errors to friendly messages and rejects oversized transact
   const quoteFail = fake({ quote: async () => ({ ok: false, status: 400, error: { code: "MARKET_CLOSED" } }) });
   const closed = await handleActionPost(post(`${BASE}?side=no&amount=5`, { account: WALLET }), quoteFail.deps, MARKET);
   assert.equal(closed.status, 400);
-  assert.deepEqual(await closed.json(), { message: "Betting is closed for this market." });
+  assert.deepEqual(await closed.json(), { message: "Betting is closed for this market.", code: "market_closed" });
   const upstream = fake({ build: async () => ({ ok: false, status: 500, error: { message: "unexpected quote failure" } }) });
   const down = await handleActionPost(post(`${BASE}?side=no&amount=5`, { account: WALLET }), upstream.deps, MARKET);
   assert.equal(down.status, 502);
-  assert.deepEqual(await down.json(), { message: "Panta could not price this bet right now. Please try again in a moment." });
+  assert.deepEqual(await down.json(), { message: "Panta could not price this bet right now. Please try again in a moment.", code: "upstream_error" });
   const big = fake({ assemble: async () => ({ txBase64: btoa(String.fromCharCode(...new Uint8Array(1200).fill(1))) }) });
   const tooBig = await handleActionPost(post(`${BASE}?side=yes&amount=1`, { account: WALLET }), big.deps, MARKET);
   assert.equal(tooBig.status, 400);
@@ -207,4 +213,40 @@ test("the confirm callback reports failed and still-pending transactions honestl
   const pending = (await (await handleActionConfirm(post(`${BASE}/confirm?orderId=ord_1`, { account: WALLET, signature: SIGNATURE }), f.deps, MARKET)).json()) as any;
   assert.equal(pending.title, "Bet sent");
   assert.equal(queued, 1);
+});
+
+test("the quote route prices a side and amount, with a stand-in wallet before connecting", async () => {
+  const f = fake();
+  const response = await handleActionQuote(get(`${BASE}/quote?side=no&amount=5`), f.deps, MARKET);
+  assert.equal(response.status, 200);
+  assert.equal(response.headers.get("Access-Control-Allow-Origin"), "*");
+  const body = (await response.json()) as any;
+  assert.deepEqual(body, { side: "no", amountUsdc: 5, shares: 1.996677, avgPrice: 0, feeUsdc: 0.02, totalUsdc: 5.02, yesPrice: brief.yesPrice, noPrice: brief.noPrice, expiresAt: "soon" });
+  assert.deepEqual(f.calls, [`quote 11111111111111111111111111111111 ${MARKET} no 5.00`]);
+  const withAccount = await handleActionQuote(get(`${BASE}/quote?side=yes&amount=1&account=${WALLET}`), f.deps, MARKET);
+  assert.equal(withAccount.status, 200);
+  assert.equal(f.calls[1], `quote ${WALLET} ${MARKET} yes 1.00`);
+  assert.equal((await handleActionQuote(get(`${BASE}/quote?side=yes&amount=0`), f.deps, MARKET)).status, 400);
+  const closed = await handleActionQuote(get(`${BASE}/quote?side=yes&amount=1`), fake({}, { ...brief, phase: "resolved" }).deps, MARKET);
+  assert.deepEqual(await closed.json(), { message: "Betting is closed for this market." });
+});
+
+test("tx send broadcasts a signed transaction and turns RPC rejections into plain words", async () => {
+  const signed = btoa(String.fromCharCode(1, ...new Uint8Array(64).fill(5), ...new Uint8Array(200).fill(2)));
+  const ok = await handleTxSend(post("https://proxy.test/api/tx/send", { signedTxBase64: signed }), fake().deps);
+  assert.equal(ok.status, 200);
+  assert.equal(typeof ((await ok.json()) as any).signature, "string");
+  const unsigned = btoa(String.fromCharCode(1, ...new Uint8Array(64), ...new Uint8Array(200).fill(2)));
+  assert.equal((await handleTxSend(post("https://proxy.test/api/tx/send", { signedTxBase64: unsigned }), fake().deps)).status, 400);
+  assert.equal((await handleTxSend(post("https://proxy.test/api/tx/send", {}), fake().deps)).status, 400);
+  const empty = fake({
+    send: async () => { throw new RpcError("Transaction simulation failed: Attempt to debit an account but found no record of a prior credit. AccountNotFound", []); },
+    status: async () => ({ state: "pending" as const }),
+  });
+  const rejected = await handleTxSend(post("https://proxy.test/api/tx/send", { signedTxBase64: signed }), empty.deps);
+  assert.equal(rejected.status, 400);
+  assert.equal(((await rejected.json()) as any).message, "This wallet is empty. It needs SOL for network fees and USDC to pay with.");
+  const status = await handleTxStatus(get(`https://proxy.test/api/tx/status?signature=${SIGNATURE}`), fake().deps);
+  assert.deepEqual(await status.json(), { signature: SIGNATURE, status: "confirmed" });
+  assert.equal((await handleTxStatus(get("https://proxy.test/api/tx/status?signature=nope"), fake().deps)).status, 400);
 });

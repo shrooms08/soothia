@@ -5,6 +5,10 @@
 //   POST ?side&amount {account}   an unsigned v0 buy transaction to sign
 //   POST /confirm?orderId {account, signature}   chaining callback after the
 //                  wallet sent it: submit -> verify -> report to Panta
+//   GET  /quote?side&amount&account   a price line for the share page
+// Plus, for the share page's own wallet flow: POST /api/tx/send
+// {signedTxBase64} broadcasts a signed transaction, GET /api/tx/status
+// ?signature= waits for it.
 // Every response carries the spec's CORS headers, X-Action-Version and
 // X-Blockchain-Ids. Panta's buy session, assembly and attribution are the
 // same code the extension uses (buy.ts).
@@ -27,9 +31,21 @@ import {
   type PantaBuyQuote,
   type Side,
 } from "./buy";
-import { base64Bytes, isQuoteId, pantaPostWithRetry, type PantaError } from "./create";
+import {
+  base64Bytes,
+  firstSignature,
+  isQuoteId,
+  isTxBase64,
+  pantaPostWithRetry,
+  RELEVANT_LOG,
+  simulationReason,
+  txState,
+  waitForConfirmation,
+  type PantaError,
+} from "./create";
 import { readJsonObject, type Env } from "./http";
 import { MAX_BUILT_TRANSACTION_BYTES } from "./pantaRules";
+import { rpc, RpcError } from "./rpc";
 
 export const ACTION_VERSION = "2.4";
 /** CAIP-2 id of Solana mainnet. */
@@ -46,7 +62,10 @@ export const ACTION_HEADERS: Record<string, string> = {
   "X-Blockchain-Ids": SOLANA_MAINNET,
 };
 
-const ACTION_PATH = /^\/api\/actions\/market\/([1-9A-HJ-NP-Za-km-z]{32,44})(\/confirm)?$/;
+const ACTION_PATH = /^\/api\/actions\/market\/([1-9A-HJ-NP-Za-km-z]{32,44})(\/confirm|\/quote)?$/;
+/** A quote needs some wallet; before the viewer connects, the share page uses this one. */
+const SYSTEM_PROGRAM = "11111111111111111111111111111111";
+const STATUS_WAIT_MS = 20_000;
 const CATEGORY_IMAGES = new Set(["crypto", "entertainment", "finance", "other", "politics", "science", "sports", "world"]);
 const FIXED_AMOUNTS = [1, 5];
 const CONFIRM_WAIT_MS = 20_000;
@@ -65,6 +84,9 @@ export interface ActionDeps {
   save(id: string, record: BuyRecord): Promise<void>;
   finish(record: BuyRecord, signature: string, maxWaitMs: number): Promise<BuyStatus>;
   background(work: Promise<unknown>): void;
+  /** Broadcasts a signed transaction; throws RpcError on rejection. */
+  send(signedTxBase64: string): Promise<void>;
+  status(signature: string, maxWaitMs: number): Promise<{ state: "confirmed" | "failed" | "pending" }>;
 }
 
 export function actionDeps(env: Env, ctx: ExecutionContext): ActionDeps {
@@ -79,6 +101,16 @@ export function actionDeps(env: Env, ctx: ExecutionContext): ActionDeps {
     save: (id, record) => saveRecord(env, id, record),
     finish: (record, signature, maxWaitMs) => finishBuy(env, record, signature, maxWaitMs),
     background: (work) => ctx.waitUntil(work.catch(() => {})),
+    send: async (signedTxBase64) => {
+      await rpc<string>(env, "sendTransaction", [
+        signedTxBase64,
+        { encoding: "base64", skipPreflight: false, preflightCommitment: "confirmed", maxRetries: 3 },
+      ]);
+    },
+    status: async (signature, maxWaitMs) => {
+      const landed = maxWaitMs > 0 ? await waitForConfirmation(env, signature, maxWaitMs) : await txState(env, signature);
+      return { state: landed.state };
+    },
   };
 }
 
@@ -86,9 +118,13 @@ function reply(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: ACTION_HEADERS });
 }
 
-/** A spec ActionError: shown to the user by the wallet or blink client. */
-function fail(message: string, status = 400): Response {
-  return reply({ message }, status);
+/** A spec ActionError: shown to the user by the wallet or blink client. `code` is for our own debugging. */
+function fail(message: string, status = 400, code?: string): Response {
+  return reply(code ? { message, code } : { message }, status);
+}
+
+function pantaFail(failure: { status: number; error: PantaError }): Response {
+  return fail(friendlyPantaError(failure.error), failure.status >= 500 ? 502 : 400, (failure.error.code ?? "upstream_error").toLowerCase());
 }
 
 export function iconFor(origin: string, category: string): string {
@@ -97,7 +133,7 @@ export function iconFor(origin: string, category: string): string {
 
 export function oddsLine(brief: Pick<MarketBrief, "yesPrice" | "noPrice">): string | null {
   if (brief.yesPrice === null || brief.noPrice === null) return null;
-  return `YES ${Math.round(brief.yesPrice * 100)}% · NO ${Math.round(brief.noPrice * 100)}%`;
+  return `YES ${(brief.yesPrice * 100).toFixed(1)}% · NO ${(brief.noPrice * 100).toFixed(1)}%`;
 }
 
 export function describe(brief: MarketBrief): string {
@@ -172,6 +208,72 @@ export async function handleActionGet(request: Request, deps: ActionDeps, market
   return reply({ ...action, links: { actions: [...fixed, ...custom] } });
 }
 
+// ---- GET /quote: the price line for the share page ----
+
+export async function handleActionQuote(request: Request, deps: ActionDeps, marketId: string): Promise<Response> {
+  const url = new URL(request.url);
+  const side = parseSide(url.searchParams.get("side"));
+  if (!side) return fail("Choose YES or NO.");
+  const amountUsdc = parseAmount(url.searchParams.get("amount") ?? "");
+  if (!amountUsdc) return fail(`Bets are between ${MIN_BUY_USDC} and ${MAX_BUY_USDC} USDC.`);
+  const account = url.searchParams.get("account") || SYSTEM_PROGRAM;
+  if (!isAddress(account)) return fail("The wallet address is not a valid Solana public key.");
+  const brief = await deps.brief(marketId);
+  if (!brief?.title) return fail("Market not found.", 404);
+  if (!bettingOpen(brief, Date.now())) return fail(CLOSED_MESSAGE);
+  const quoted = await deps.quote(account, marketId, side, amountUsdc);
+  if (!quoted.ok) return pantaFail(quoted);
+  const fee = Number(quoted.data.feeUsdc ?? 0);
+  return reply({
+    side,
+    amountUsdc: Number(amountUsdc),
+    shares: Number(quoted.data.shares ?? 0),
+    avgPrice: Number(quoted.data.avgPrice ?? 0),
+    feeUsdc: fee,
+    totalUsdc: Math.round((Number(amountUsdc) + fee) * 100) / 100,
+    yesPrice: brief.yesPrice,
+    noPrice: brief.noPrice,
+    expiresAt: quoted.data.expiresAt,
+  });
+}
+
+// ---- POST /api/tx/send and GET /api/tx/status: the share page's own wallet flow ----
+
+export async function handleTxSend(request: Request, deps: ActionDeps): Promise<Response> {
+  const body = await readJsonObject(request);
+  const signed = body?.signedTxBase64;
+  if (!isTxBase64(signed)) return fail("Missing signed transaction.");
+  if (base64Bytes(signed) > 1232) return fail("The signed transaction is too large.");
+  const signature = firstSignature(signed);
+  if (!signature) return fail("The transaction is not signed.");
+  try {
+    await deps.send(signed);
+  } catch (error) {
+    const message = error instanceof RpcError ? error.message : "rpc_error";
+    if (message === "rpc_not_configured") return fail("The proxy has no RPC configured.", 500);
+    const landed = await deps.status(signature, 0).catch(() => ({ state: "pending" as const }));
+    if (landed.state !== "confirmed" && !/already been processed/i.test(message)) {
+      if (/blockhash not found|block height exceeded|expired/i.test(message)) {
+        return fail("The transaction expired before it was sent. Please try again.", 409);
+      }
+      const logs = error instanceof RpcError ? error.logs : [];
+      return reply({ message: simulationReason(message, logs), logLine: logs.find((line) => RELEVANT_LOG.test(line)) ?? null }, 400);
+    }
+  }
+  return reply({ signature });
+}
+
+export async function handleTxStatus(request: Request, deps: ActionDeps): Promise<Response> {
+  const signature = new URL(request.url).searchParams.get("signature");
+  if (!isSignature(signature)) return fail("Missing transaction signature.");
+  try {
+    const landed = await deps.status(signature, STATUS_WAIT_MS);
+    return reply({ signature, status: landed.state });
+  } catch {
+    return fail("Could not reach Solana just now.", 502);
+  }
+}
+
 // ---- POST: build the buy transaction ----
 
 export async function handleActionPost(request: Request, deps: ActionDeps, marketId: string): Promise<Response> {
@@ -189,12 +291,12 @@ export async function handleActionPost(request: Request, deps: ActionDeps, marke
   if (!bettingOpen(brief, Date.now())) return fail(CLOSED_MESSAGE);
 
   const quoted = await deps.quote(account, marketId, side, amountUsdc);
-  if (!quoted.ok) return fail(friendlyPantaError(quoted.error), quoted.status >= 500 ? 502 : 400);
+  if (!quoted.ok) return pantaFail(quoted);
   const quote = quoted.data;
   const record: BuyRecord = { wallet: account, marketId, side, amountUsdc, quoteId: quote.quoteId, source: "blink" };
 
   const built = await deps.build(quote.quoteId, account);
-  if (!built.ok) return fail(friendlyPantaError(built.error), built.status >= 500 ? 502 : 400);
+  if (!built.ok) return pantaFail(built);
   const build = built.data;
   if (!Array.isArray(build.instructions) || build.instructions.length === 0 || !build.orderId) {
     return fail("Panta returned no transaction for this bet. Please try again.", 502);
@@ -280,13 +382,22 @@ export function actionRoute(request: Request, env: Env, ctx: ExecutionContext): 
     if (request.method === "OPTIONS") return Promise.resolve(new Response(null, { status: 204, headers: ACTION_HEADERS }));
     return Promise.resolve(reply({ rules: [{ pathPattern: "/api/actions/**", apiPath: "/api/actions/**" }] }));
   }
+  if (path === "/api/tx/send" || path === "/api/tx/status") {
+    if (request.method === "OPTIONS") return Promise.resolve(new Response(null, { status: 204, headers: ACTION_HEADERS }));
+    const deps = actionDeps(env, ctx);
+    if (path === "/api/tx/send") return request.method === "POST" ? handleTxSend(request, deps) : Promise.resolve(fail("Method not allowed.", 405));
+    return request.method === "GET" ? handleTxStatus(request, deps) : Promise.resolve(fail("Method not allowed.", 405));
+  }
   const match = ACTION_PATH.exec(path);
   if (!match) return null;
   if (request.method === "OPTIONS") return Promise.resolve(new Response(null, { status: 204, headers: ACTION_HEADERS }));
-  const [, marketId, confirm] = match;
+  const [, marketId, sub] = match;
   const deps = actionDeps(env, ctx);
-  if (confirm) {
+  if (sub === "/confirm") {
     return request.method === "POST" ? handleActionConfirm(request, deps, marketId) : Promise.resolve(fail("Method not allowed.", 405));
+  }
+  if (sub === "/quote") {
+    return request.method === "GET" ? handleActionQuote(request, deps, marketId) : Promise.resolve(fail("Method not allowed.", 405));
   }
   if (request.method === "GET") return handleActionGet(request, deps, marketId);
   if (request.method === "POST") return handleActionPost(request, deps, marketId);
