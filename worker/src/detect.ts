@@ -2,6 +2,7 @@
 // Page text is never logged and never stored; only validated claims are cached.
 import { AnthropicError, callTool, type ToolSpec } from "./anthropic";
 import { installId, json, readJsonObject, sha256Hex, type Env } from "./http";
+import { authorityFor } from "./resolution";
 import { cacheGet, cachePut } from "./store";
 import {
   CATEGORIES,
@@ -21,6 +22,14 @@ const TEXT_MAX_CHARS = 4000;
 const TITLE_MAX_CHARS = 300;
 const URL_MAX_CHARS = 2048;
 const CACHE_TTL_SEC = 30 * 60;
+// Below this much page text the model is not asked; a fixture, if any, carries the page.
+const MIN_PROSE_FOR_MODEL = 200;
+
+async function withIds(claims: Claim[], urlHash: string): Promise<Claim[]> {
+  const out: Claim[] = [];
+  for (const claim of claims) out.push({ ...claim, id: `c_${urlHash}${(await sha256Hex(claim.question)).slice(0, 8)}` });
+  return out;
+}
 const DAILY_CAP = 200;
 
 /** A draft the model produced that validation refused. Never contains page text. */
@@ -32,6 +41,99 @@ interface Dropped {
 interface DetectBody {
   claims: Claim[];
   dropped: Dropped[];
+  /** Which path produced the claims: prose, or a sports fixture read from the page's match info. */
+  path?: "prose" | "fixture";
+}
+
+/** Event mode: a fixture the extension read from a sports page (see extension/src/fixture.ts). */
+export interface FixturePayload {
+  home: string;
+  away: string;
+  competition?: string;
+  startISO: string;
+  dateLabel: string;
+  evidence: string[];
+}
+
+const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const FIXTURE_MAX_DAYS_AHEAD = 60;
+const MATCH_DURATION_MS = 3 * 3600_000;
+
+export function parseFixture(raw: unknown): FixturePayload | null {
+  if (!raw || typeof raw !== "object") return null;
+  const f = raw as Record<string, unknown>;
+  const str = (v: unknown, max: number): string => (typeof v === "string" ? v.trim().slice(0, max) : "");
+  const home = str(f.home, 60), away = str(f.away, 60), startISO = str(f.startISO, 40), dateLabel = str(f.dateLabel, 40);
+  const competition = str(f.competition, 60) || undefined;
+  const evidence = Array.isArray(f.evidence) ? f.evidence.filter((e): e is string => typeof e === "string").map((e) => e.slice(0, 300)).slice(0, 8) : [];
+  if (!home || !away || !startISO || !dateLabel || evidence.length === 0) return null;
+  if (Number.isNaN(Date.parse(startISO))) return null;
+  return { home, away, competition, startISO, dateLabel, evidence };
+}
+
+const normalize = (text: string): string => text.toLowerCase().replace(/\s+/g, " ");
+
+/** Every team name and the kickoff date must be present, as strings, in what the page showed. */
+export function fixtureGrounded(fixture: FixturePayload): boolean {
+  const haystack = normalize(fixture.evidence.join(" | "));
+  if (!haystack.includes(normalize(fixture.home)) || !haystack.includes(normalize(fixture.away))) return false;
+  const start = new Date(fixture.startISO);
+  const dayLabel = /^([A-Za-z]+) (\d{1,2}), (\d{4})$/.exec(fixture.dateLabel);
+  const candidates = new Set<string>();
+  if (dayLabel) {
+    const [, month, day, year] = dayLabel;
+    const short = month.slice(0, 3);
+    for (const m of [month, short]) {
+      candidates.add(`${day} ${m}`); candidates.add(`${m} ${day}`); candidates.add(`${m}. ${day}`); candidates.add(`${day}${m}`);
+    }
+    const index = MONTHS.indexOf(month) + 1;
+    if (index > 0) {
+      candidates.add(`${year}-${String(index).padStart(2, "0")}-${String(day).padStart(2, "0")}`);
+      candidates.add(`${day}/${index}`); candidates.add(`${index}/${day}`);
+    }
+  }
+  candidates.add(start.toISOString().slice(0, 10));
+  candidates.add("today"); candidates.add("tomorrow");
+  return [...candidates].some((candidate) => haystack.includes(normalize(candidate)));
+}
+
+/**
+ * The claims for an upcoming fixture: "Will <home> beat <away> ...?" and the
+ * reverse. Nothing here comes from a model: names and date are the signal's.
+ */
+export function fixtureClaims(fixture: FixturePayload, nowMs: number): { claims: Claim[]; dropped: Dropped[] } {
+  const dropped: Dropped[] = [];
+  const start = Date.parse(fixture.startISO);
+  if (start <= nowMs) return { claims: [], dropped: [{ question: `${fixture.home} vs ${fixture.away}`, reason: "end_time_invalid" }] };
+  if (start - nowMs > FIXTURE_MAX_DAYS_AHEAD * 86_400_000) return { claims: [], dropped: [{ question: `${fixture.home} vs ${fixture.away}`, reason: "end_time_invalid" }] };
+  if (!fixtureGrounded(fixture)) return { claims: [], dropped: [{ question: `${fixture.home} vs ${fixture.away}`, reason: "source_quote_not_on_page" }] };
+  const where = fixture.competition ? ` in ${fixture.competition}` : "";
+  const endTime = new Date(start + MATCH_DURATION_MS).toISOString();
+  const evidence = fixture.evidence.join(" \u00b7 ").slice(0, 200);
+  const claims: Claim[] = [];
+  for (const [winner, loser] of [[fixture.home, fixture.away], [fixture.away, fixture.home]]) {
+    const question = `Will ${winner} beat ${loser}${where} on ${fixture.dateLabel}?`;
+    // The official league site (or ESPN) decides, never the fixture page itself.
+    const authority = authorityFor({
+      question, category: "sports", endTime, pageUrl: "", resolutionType: "sports_result", marketType: "breaking", buyWindowHours: 1, eventInProgress: false,
+    });
+    const raw = {
+      question,
+      category: "sports",
+      endTime,
+      resolution: {
+        type: "sports_result",
+        details: `YES only if ${winner} wins the match at full time (after extra time and penalties if played). A draw, a ${loser} win, or a postponement past the deadline resolves NO.`,
+        sources: [authority.url],
+      },
+      confidence: 0.8,
+      sourceQuote: evidence,
+    };
+    const checked = validateClaim(raw, evidence, nowMs);
+    if (checked.ok) claims.push({ id: "", ...checked.claim, fromFixture: true });
+    else dropped.push({ question: raw.question, reason: checked.reason });
+  }
+  return { claims, dropped };
 }
 
 const CLAIMS_TOOL: ToolSpec = {
@@ -141,14 +243,15 @@ export async function handleDetect(request: Request, env: Env): Promise<Response
   const site = field(body, "site", 100);
   const title = field(body, "title", TITLE_MAX_CHARS);
   const text = field(body, "text", TEXT_MAX_CHARS);
-  if (!/^https?:\/\//i.test(url) || !text) return json(request, { error: "bad_request" }, 400);
+  const fixture = parseFixture(body.fixture);
+  if (!/^https?:\/\//i.test(url) || (!text && !fixture)) return json(request, { error: "bad_request" }, 400);
 
   const now = Date.now();
   if (!(await underDailyCap(env, install, now))) {
     return json(request, { error: "daily_limit" }, 429);
   }
 
-  const cacheKey = `detect:${await sha256Hex(url)}`;
+  const cacheKey = `detect:${await sha256Hex(url + (fixture ? `#fixture:${fixture.home}|${fixture.away}|${fixture.startISO}` : ""))}`;
   // "Scan again" skips the cached answer but still stores the fresh one.
   const refresh = request.headers.get("X-Soothia-Refresh") === "1";
   const cached = refresh ? null : await cacheGet<DetectBody>(cacheKey);
@@ -157,6 +260,15 @@ export async function handleDetect(request: Request, env: Env): Promise<Response
     const claims = cached.claims.filter((claim) => endTimeIsCreatable(claim.endTime, now));
     const body: DetectBody = { claims, dropped: cached.dropped ?? [] };
     return json(request, body, 200, { "X-Soothia-Cache": "HIT" });
+  }
+
+  // Event mode: a fixture page with no prose to read goes straight to the fixture claims.
+  const urlHashEarly = cacheKey.slice("detect:".length, "detect:".length + 8);
+  if (fixture && text.length < MIN_PROSE_FOR_MODEL) {
+    const built = fixtureClaims(fixture, now);
+    const result: DetectBody = { claims: await withIds(built.claims, urlHashEarly), dropped: built.dropped, path: "fixture" };
+    await cachePut(cacheKey, result, CACHE_TTL_SEC);
+    return json(request, result, 200, { "X-Soothia-Cache": "MISS" });
   }
 
   let output: Record<string, unknown>;
@@ -197,7 +309,12 @@ export async function handleDetect(request: Request, env: Env): Promise<Response
     claims.push({ id: `c_${urlHash}${questionHash}`, ...valid });
   }
 
-  const result: DetectBody = { claims, dropped };
+  let result: DetectBody = { claims, dropped, path: "prose" };
+  // Prose found nothing but the page is a fixture: fall back to the match itself.
+  if (claims.length === 0 && fixture) {
+    const built = fixtureClaims(fixture, now);
+    if (built.claims.length > 0) result = { claims: await withIds(built.claims, urlHash), dropped: [...dropped, ...built.dropped], path: "fixture" };
+  }
   await cachePut(cacheKey, result, CACHE_TTL_SEC);
   return json(request, result, 200, { "X-Soothia-Cache": "MISS" });
 }

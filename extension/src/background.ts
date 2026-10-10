@@ -21,6 +21,7 @@ import {
   type HealthResponse,
   type MatchedMarket,
   type PageContext,
+  type FixtureSignal,
 } from "./messages";
 
 const INSTALL_KEY = "soothia:installId";
@@ -71,7 +72,7 @@ async function post(path: string, body: unknown, refresh = false): Promise<Respo
   });
 }
 
-async function detect(page: PageContext, refresh: boolean): Promise<DetectResult> {
+async function detect(page: PageContext, refresh: boolean, fixture?: FixtureSignal): Promise<DetectResult> {
   const debug: DetectDebug = {
     httpStatus: null,
     cache: null,
@@ -80,16 +81,17 @@ async function detect(page: PageContext, refresh: boolean): Promise<DetectResult
     dropped: [],
   };
   try {
-    const detected = await post("/detect", page, refresh);
+    const detected = await post("/detect", fixture ? { ...page, fixture } : page, refresh);
     debug.httpStatus = detected.status;
     const cache = detected.headers.get("X-Soothia-Cache");
     debug.cache = cache === "HIT" || cache === "MISS" ? cache : null;
     if (detected.status === 429) return { status: "error", reason: "limit", debug };
     if (!detected.ok) return { status: "error", reason: "unavailable", debug };
-    const body = (await detected.json()) as { claims: Claim[]; dropped?: DroppedClaim[] };
+    const body = (await detected.json()) as { claims: Claim[]; dropped?: DroppedClaim[]; path?: "prose" | "fixture" };
     const claims = body.claims;
     debug.claimsReturned = claims.length;
     debug.dropped = body.dropped ?? [];
+    debug.path = body.path;
     if (claims.length === 0) return { status: "ok", tiles: [], debug };
 
     // A failed match is not an error: the claims still show, unmatched.
@@ -126,8 +128,8 @@ async function pruneResults(now: number): Promise<void> {
 // Two tabs on the same URL share one request.
 const inFlight = new Map<string, Promise<DetectResult>>();
 
-async function detectOnce(page: PageContext, refresh: boolean): Promise<DetectResult> {
-  const key = RESULT_PREFIX + page.url;
+async function detectOnce(page: PageContext, refresh: boolean, fixture?: FixtureSignal): Promise<DetectResult> {
+  const key = RESULT_PREFIX + page.url + (fixture ? "#fixture" : "");
   const now = Date.now();
   if (!refresh) {
     const stored = (await chrome.storage.session.get(key))[key] as StoredResult | undefined;
@@ -139,7 +141,7 @@ async function detectOnce(page: PageContext, refresh: boolean): Promise<DetectRe
   const running = inFlight.get(key);
   if (running) return running;
 
-  const request = detect(page, refresh)
+  const request = detect(page, refresh, fixture)
     .then(async (result) => {
       await chrome.storage.session.set({ [key]: { at: Date.now(), result } satisfies StoredResult });
       await pruneResults(Date.now());
@@ -301,7 +303,7 @@ function handleMessage(message: { type?: string; category?: string; action?: str
       respondSafely(checkHealth(), sendResponse, { online: false });
       return true; // keep the channel open for the async response
     case DETECT_REQUEST:
-      respondSafely(detectOnce((message as DetectRequestMessage).page, (message as DetectRequestMessage).refresh === true), sendResponse, FAILED);
+      respondSafely(detectOnce((message as DetectRequestMessage).page, (message as DetectRequestMessage).refresh === true, (message as DetectRequestMessage).fixture), sendResponse, FAILED);
       return true;
     case API_REQUEST:
       respondSafely(relay(message as ApiRequestMessage), sendResponse, { ok: false, status: 0, body: null });

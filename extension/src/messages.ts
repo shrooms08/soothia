@@ -46,6 +46,18 @@ export interface DetectRequestMessage {
   page: PageContext;
   /** "Scan again": skip the 10-minute rule here and the Worker's URL cache. */
   refresh: boolean;
+  /** Event mode: an upcoming sports fixture read from the page (extension/src/fixture.ts). */
+  fixture?: FixtureSignal;
+}
+
+export interface FixtureSignal {
+  home: string;
+  away: string;
+  competition?: string;
+  startISO: string;
+  dateLabel: string;
+  sourceUrl: string;
+  evidence: string[];
 }
 
 // Mirrors the Worker's Claim (worker/src/pantaRules.ts).
@@ -59,6 +71,8 @@ export interface Claim {
   sourceQuote: string;
   /** The page says this event is happening right now. */
   eventLive?: boolean;
+  /** Built from a sports fixture's match info rather than a sentence on the page. */
+  fromFixture?: boolean;
 }
 
 export interface MatchedMarket {
@@ -94,6 +108,8 @@ export interface DetectDebug {
   fromClientCache: boolean;
   claimsReturned: number;
   dropped: DroppedClaim[];
+  /** Which path the Worker took: prose, or the fixture's match info. */
+  path?: "prose" | "fixture";
 }
 
 export type DetectResult = { debug: DetectDebug } & (

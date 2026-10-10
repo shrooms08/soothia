@@ -521,6 +521,8 @@ a.button { display: inline-flex; align-items: center; justify-content: center; t
   text-wrap: pretty;
   overflow-wrap: anywhere;
 }
+.quote.from-match { font-style: normal; color: var(--sth-text-2); }
+.from-match-label { display: inline-block; padding: 2px 7px; margin-right: 2px; border-radius: 999px; background: var(--sth-raised-hover); color: var(--sth-link); font: 600 10px/1.4 var(--sth-font-sans); letter-spacing: .06em; text-transform: uppercase; }
 .quote {
   margin: 0;
   color: var(--sth-text-2);

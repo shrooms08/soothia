@@ -238,6 +238,8 @@ export interface Claim {
   };
   confidence: number;
   sourceQuote: string;
+  /** Built from a sports fixture's match info rather than a sentence on the page. */
+  fromFixture?: boolean;
   /** The page describes this event as happening right now. */
   eventLive?: boolean;
 }

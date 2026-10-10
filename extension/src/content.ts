@@ -41,11 +41,13 @@ import {
   MarketInfo,
   type WalletInfo,
   type WalletRpcOutcome,
+  type PageContext,
 } from "./messages";
 import { readPage, type ReadInfo } from "./reader";
 import { openBetSheet } from "./bet-sheet";
 import { openSheet, type CreateDebug, type PendingCreate, type Sheet } from "./sheet";
 import { checkSignedTransaction } from "./tx-check";
+import { describeFixture, findFixture } from "./fixture";
 import { guarded, installGuards, isContextDead, safe } from "./guard";
 import { earningsView, money } from "./earnings";
 import { wallet } from "./wallet-client";
@@ -99,6 +101,10 @@ interface ScanDebug {
   read: ReadInfo | null;
   state: string;
   detect: DetectDebug | null;
+  /** Which path ran: prose, fixture (match info), or none. */
+  path?: "prose" | "fixture" | "none";
+  /** The fixture evidence line, when event mode found a match. */
+  fixture?: string;
 }
 
 function currentUrl(): string {
@@ -212,12 +218,14 @@ function tileNode(
     actions.append(button("Make it a market", "button primary", onMake));
   }
 
-  tile.append(
-    el("p", "question", claim.question),
-    meta,
-    el("p", "quote", `\u201C${claim.sourceQuote}\u201D`),
-    actions,
-  );
+  const source = claim.fromFixture
+    ? (() => {
+        const line = el("p", "quote from-match");
+        line.append(el("span", "from-match-label", "From match info"), ` \u00b7 ${claim.sourceQuote}`);
+        return line;
+      })()
+    : el("p", "quote", `\u201C${claim.sourceQuote}\u201D`);
+  tile.append(el("p", "question", claim.question), meta, source, actions);
   return tile;
 }
 
@@ -958,6 +966,8 @@ async function mount(): Promise<void> {
       ["site", scan.read?.site ?? location.hostname.replace(/^www\./, "")],
       ["extracted", scan.read ? `${scan.read.chars} chars` : "\u2013"],
       ["text", scan.read?.preview || "\u2013"],
+      ["path", scan.path ?? "\u2013"],
+      ...(scan.fixture ? ([["fixture", scan.fixture]] as [string, string][]) : []),
       ["detect", scan.state],
     ];
     const audio = getAudioState();
@@ -1175,19 +1185,31 @@ async function mount(): Promise<void> {
       watchForText(url, read.reason, refresh);
       return;
     }
-    if (read.kind !== "page") {
-      setScan({ read: read.info, state: `skipped (${read.reason})`, detect: null });
+    // Event mode: a sports fixture page has match info instead of prose.
+    const fixture = read.kind === "skip" ? null : safe("fixture", () => findFixture(document, Date.now())) ?? null;
+    if (read.kind !== "page" && !fixture) {
+      setScan({ read: read.info, state: `skipped (${read.reason})`, detect: null, path: "none" });
       render({ kind: "skipped" });
-      emitScanEvent({ done: "skipped" });
+      emitScanEvent({ done: "skipped", path: "none" });
       return;
     }
-
-    setScan({ read: read.info, state: refresh ? "running (scan again)" : "running", detect: null });
+    const page: PageContext =
+      read.kind === "page"
+        ? read.page
+        : { url: watchedUrl.split("#")[0], site: location.hostname.replace(/^www\./, ""), title: document.title.slice(0, 300), text: fixture ? fixture.evidence.join("\n") : "" };
+    const fixtureNote = fixture ? describeFixture(fixture) : "";
+    setScan({
+      read: read.kind === "page" ? read.info : { site: page.site, chars: page.text.length, preview: fixtureNote.slice(0, 80) },
+      state: refresh ? "running (scan again)" : "running",
+      detect: null,
+      path: fixture && read.kind !== "page" ? "fixture" : "prose",
+      fixture: fixtureNote,
+    });
     const started = Date.now();
     let result: DetectResult | undefined;
     let relayError = "";
     try {
-      const message: DetectRequestMessage = { type: DETECT_REQUEST, page: read.page, refresh };
+      const message: DetectRequestMessage = { type: DETECT_REQUEST, page, refresh, ...(fixture ? { fixture } : {}) };
       result = (await chrome.runtime.sendMessage(message)) as DetectResult | undefined;
       if (!result) relayError = "background gave no answer";
     } catch (error) {
@@ -1206,10 +1228,11 @@ async function mount(): Promise<void> {
       render({ kind: "error", reason: result.reason });
       emitScanEvent({ done: "error" });
     } else {
-      setScan({ state: "done", detect: result.debug });
+      const path = result.debug.path ?? (fixture && read.kind !== "page" ? "fixture" : "prose");
+      setScan({ state: "done", detect: result.debug, path: result.tiles.length === 0 ? "none" : path });
       if (result.tiles.length === 0) render({ kind: "empty" });
       else render({ kind: "tiles", tiles: result.tiles.slice(0, 3) });
-      emitScanEvent({ done: "ok", tiles: result.tiles.slice(0, 3).map((tile) => tile.claim.question), cached: result.debug.fromClientCache });
+      emitScanEvent({ done: "ok", path, tiles: result.tiles.slice(0, 3).map((tile) => tile.claim.question), cached: result.debug.fromClientCache });
     }
   }
 

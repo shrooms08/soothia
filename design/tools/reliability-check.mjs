@@ -43,7 +43,7 @@ async function visit(url, label) {
   for (let i = 0; i < 100 && !final; i++) await page.waitForTimeout(250);
   const last = events[events.length - 1] ?? {};
   const title = (await page.title().catch(() => "")).slice(0, 60);
-  const row = { label, url, title, dcl, state: final?.state ?? last.state ?? "no scan event", done: final?.done ?? "-", chars: final?.chars ?? last.chars ?? 0, ms: final?.elapsedMs ?? null, cached: final?.cached ?? false, tiles: final?.tiles ?? [], issues: last.issues ?? [], errors };
+  const row = { label, url, title, dcl, state: final?.state ?? last.state ?? "no scan event", done: final?.done ?? "-", path: final?.path ?? "-", chars: final?.chars ?? last.chars ?? 0, ms: final?.elapsedMs ?? null, cached: final?.cached ?? false, tiles: final?.tiles ?? [], issues: last.issues ?? [], errors };
   await page.close();
   return row;
 }
@@ -53,7 +53,7 @@ for (const url of process.argv.slice(2)) {
   rows.push(cold, warm);
   console.log(`\n== ${url}\n   ${cold.title}`);
   for (const r of [cold, warm]) {
-    console.log(`   ${r.label.padEnd(6)} dcl ${r.dcl}ms | ${r.done} ${r.ms === null ? "(no result)" : r.ms + "ms from script start"} | ${r.chars} chars | state: ${r.state}${r.cached ? " | client cache" : ""}`);
+    console.log(`   ${r.label.padEnd(6)} dcl ${r.dcl}ms | ${r.done} ${r.ms === null ? "(no result)" : r.ms + "ms from script start"} | path ${r.path} | ${r.chars} chars | state: ${r.state}${r.cached ? " | client cache" : ""}`);
     for (const t of r.tiles) console.log(`          claim: ${t}`);
     for (const i of r.issues) console.log(`          issue: ${i}`);
     for (const e of r.errors) console.log(`          ERROR ${e}`);
