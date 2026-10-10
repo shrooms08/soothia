@@ -6,6 +6,8 @@ const PROXY = "https://soothia-proxy.heylana.workers.dev";
 const SITE = "https://soothia.heylana.workers.dev";
 const MARKET_PATH = /^\/m\/([1-9A-HJ-NP-Za-km-z]{32,44})\/?$/;
 const CACHE_SECONDS = 60;
+// Bumped on every release so the edge never serves a stale script with a new page.
+const ASSET_VERSION = "0.8.0";
 
 const ACTION_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -148,7 +150,21 @@ function renderPage(marketId, market) {
   .wallet .cta { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
   .wallet .fine { margin: 0; text-align: center; }
   .wallet-row { display: flex; align-items: center; gap: 8px; color: var(--sth-text-2); font: 500 13px/1 var(--sans); }
-  .phantom-badge { display: inline-flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 6px; background: #AB9FF2; color: #16131F; font: 700 11px/1 var(--sans); }
+  .wallet-row .wallet-name { color: var(--sth-text); }
+  .wallet-row .linkish { margin-left: auto; }
+  .wallet-icon { flex: none; width: 20px; height: 20px; border-radius: 6px; object-fit: cover; }
+  .wallet-initial { display: inline-flex; align-items: center; justify-content: center; background: var(--sth-raised-hover); color: var(--sth-text); font: 700 11px/1 var(--sans); }
+  .linkish { border: 0; background: none; color: var(--sth-link); font: 500 13px/1 var(--sans); cursor: pointer; padding: 4px 0; }
+  .linkish:hover { color: var(--sth-text); text-decoration: underline; }
+  .wallet-picker { margin-top: 4px; padding: 12px; border: 1px solid var(--sth-hairline); border-radius: 12px; background: #000; display: grid; gap: 8px; }
+  .wallet-picker-title { margin: 0; color: var(--sth-text); font: 600 13px/1.3 var(--sans); }
+  .wallet-picker-list { display: grid; gap: 6px; }
+  .wallet-option { display: flex; align-items: center; gap: 10px; width: 100%; padding: 10px 12px; border: 1px solid var(--sth-hairline-soft); border-radius: 10px; background: transparent; color: var(--sth-text); font: 500 14px/1 var(--sans); text-align: left; cursor: pointer; }
+  .wallet-option:hover, .wallet-option:focus-visible { background: var(--sth-raised-hover); border-color: var(--sth-orb-mid); }
+  .install-links { justify-content: flex-start; gap: 6px 16px; }
+  .open-in { display: grid; gap: 8px; }
+  .open-in-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .open-in .fine { margin: 0; }
   .btn.wide { width: 100%; }
   .btn.place { height: 48px; font-size: 15px; }
   .btn:disabled, .btn[disabled] { opacity: .45; cursor: default; pointer-events: none; }
@@ -182,18 +198,18 @@ function renderPage(marketId, market) {
 <linearGradient id="chrome" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFFFFF"/><stop offset=".34" stop-color="#D3D1DE"/><stop offset=".5" stop-color="#6F6C82"/><stop offset=".64" stop-color="#F3F2F8"/><stop offset="1" stop-color="#8E8BA0"/></linearGradient>
 <symbol id="star" viewBox="-50 -50 100 100"><path d="M0 -50 C3 -12 8 -4 32 0 C8 4 3 12 0 50 C-3 12 -8 4 -32 0 C-8 -4 -3 -12 0 -50Z" fill="url(#chrome)"/><path d="M0 -50 C3 -12 8 -4 32 0 L0 0Z" fill="#FFFFFF" opacity=".38"/><path d="M0 0 L-32 0 C-8 4 -3 12 0 50Z" fill="#0E0D14" opacity=".28"/></symbol>
 </defs></svg>
-<main class="share" data-market="${marketId}" data-proxy="${PROXY}" data-site="${SITE}" data-open="${open ? "1" : "0"}" data-panta="${escape(pantaUrl)}">
+<main class="share" data-market="${marketId}" data-proxy="${PROXY}" data-site="${SITE}" data-v="${ASSET_VERSION}" data-open="${open ? "1" : "0"}" data-panta="${escape(pantaUrl)}">
   <a class="hero-orb-wrap" href="/" aria-label="Soothia home"><div class="orb"><span class="orb-body"><span class="orb-shimmer"></span><span class="orb-eye"></span></span><svg class="star orb-glint"><use href="#star"/></svg></div></a>
   <p class="kicker">${escape(kind)} on Panta</p>
   <h1>${escape(question)}</h1>
   ${hasOdds ? `<p class="odds"><span><b class="yes">YES</b> <span data-pct="yes">${pct(market.yesPrice)}</span></span><span>·</span><span><b class="no">NO</b> <span data-pct="no">${pct(market.noPrice)}</span></span></p>` : ""}
   ${panel}
-  <p class="fine">${open ? `You sign in your own Phantom wallet; Soothia never holds funds. Bets are 1–100 USDC plus a 2% fee.${closes ? ` Buying closes <time datetime="${closesIso}">${escape(closes)}</time>.` : ""}` : found ? "The buying window for this market has closed." : ""}</p>
+  <p class="fine">${open ? `You sign in your own Solana wallet; Soothia never holds funds. Bets are 1–100 USDC plus a 2% fee.${closes ? ` Buying closes <time datetime="${closesIso}">${escape(closes)}</time>.` : ""}` : found ? "The buying window for this market has closed." : ""}</p>
   <p class="links"><a href="${escape(pantaUrl)}" target="_blank" rel="noopener">View on Panta ↗</a><a href="/">Get Soothia</a></p>
   <p class="foot">Made with Soothia. Live on Solana mainnet.</p>
 </main>
-<script src="/sky.js"></script>
-<script src="/share.js"></script>
+<script src="/sky.js?v=${ASSET_VERSION}"></script>
+<script src="/share.js?v=${ASSET_VERSION}"></script>
 </body>
 </html>`;
 }

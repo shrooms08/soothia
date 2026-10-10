@@ -1,6 +1,8 @@
-// The share page's bet panel: quote, connect Phantom, sign, send, confirm,
-// record. Talks only to the proxy's public action routes. The web3.js piece
-// (share-tx.js) loads after Connect. Nothing here ever asks Phantom to send.
+// The share page's bet panel: quote, connect a wallet (Wallet Standard, with
+// legacy providers as a fallback), sign, send, confirm, record. Talks only
+// to the proxy's public action routes. wallets.js (small) loads at once;
+// share-tx.js (web3.js) only for a legacy provider. Nothing here ever asks a
+// wallet to send: Soothia's Worker broadcasts the signed transaction.
 (function () {
   var main = document.querySelector("main.share");
   if (!main) return;
@@ -9,6 +11,8 @@
   var SITE = main.getAttribute("data-site");
   var OPEN = main.getAttribute("data-open") === "1";
   var STEPS = ["Signing", "Sending", "Confirming", "Recording"];
+  var LAST_WALLET_KEY = "soothia:wallet";
+  var V = main.getAttribute("data-v") || "0";
   var $ = function (id) { return document.getElementById(id); };
 
   // Closing time in the viewer's local time.
@@ -25,13 +29,14 @@
   var side = params.get("side") === "no" ? "no" : "yes";
   var amount = 1;
   var account = null;
-  var provider = null;
-  var tx = null; // share-tx.js module, loaded after Connect
+  var walletInfo = null; // {name, icon, legacy, publicKey}
+  var W = null;          // wallets.js
+  var tx = null;         // share-tx.js, legacy providers only
   var busy = false;
   var quoteTimer = 0;
   var quoteSeq = 0;
-  var mobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-  var isMobileWidth = window.innerWidth < 720;
+  var ua = navigator.userAgent;
+  var mobile = /Android|iPhone|iPad|iPod/i.test(ua);
 
   var sideButtons = main.querySelectorAll(".side");
   var chips = main.querySelectorAll(".chip[data-amount]");
@@ -47,12 +52,24 @@
   function pct(p) { return typeof p === "number" ? (p * 100).toFixed(1) + "%" : "—"; }
   function usd(n) { return "$" + Number(n).toFixed(2); }
   function short(a) { return a.slice(0, 4) + "…" + a.slice(-4); }
-  function deepLink(withSide) {
+  function el(tag, cls, text) { var n = document.createElement(tag); if (cls) n.className = cls; if (text) n.textContent = text; return n; }
+  function link(label, href, cls) { var a = el("a", cls, label); a.href = href; a.target = "_blank"; a.rel = "noopener"; return a; }
+  function remembered() { try { return localStorage.getItem(LAST_WALLET_KEY); } catch (e) { return null; } }
+  function remember(name) { try { localStorage.setItem(LAST_WALLET_KEY, name); } catch (e) {} }
+  function pageUrl(withSide) {
     var url = new URL(location.href);
     url.search = "";
-    if (withSide) url.searchParams.set("side", withSide);
-    return "https://phantom.app/ul/browse/" + encodeURIComponent(url.toString()) + "?ref=" + encodeURIComponent(SITE);
+    url.searchParams.set("side", withSide || side);
+    return url.toString();
   }
+
+  // In-app browser deep links verified from each wallet's docs (docs/wallets.md). No guesses.
+  var DEEP_LINKS = [
+    { name: "Phantom", url: function (page) { return "https://phantom.com/ul/browse/" + encodeURIComponent(page) + "?ref=" + encodeURIComponent(SITE); } },
+    { name: "Solflare", url: function (page) { return "https://solflare.com/ul/v1/browse/" + encodeURIComponent(page) + "?ref=" + encodeURIComponent(SITE); } },
+    { name: "Backpack", url: function (page) { return "https://backpack.app/ul/v1/browse/" + encodeURIComponent(page) + "?ref=" + encodeURIComponent(SITE); } },
+  ];
+  var INSTALL_LINKS = [["Phantom", "https://phantom.com"], ["Solflare", "https://solflare.com"], ["Backpack", "https://backpack.app"], ["Jupiter", "https://jup.ag/mobile"]];
 
   function renderSides() {
     sideButtons.forEach(function (b) {
@@ -78,7 +95,9 @@
   }
   function fetchQuote(retry) {
     var seq = ++quoteSeq;
-    var url = PROXY + "/api/actions/market/" + MARKET + "/quote?side=" + side + "&amount=" + amount.toFixed(2) + (account ? "&account=" + account : "");
+    // Quotes do not depend on the wallet; using the stand-in address keeps Panta's
+    // per-wallet quote limit for the real quote inside Place bet.
+    var url = PROXY + "/api/actions/market/" + MARKET + "/quote?side=" + side + "&amount=" + amount.toFixed(2);
     fetch(url).then(function (r) { return r.json().then(function (b) { return { ok: r.ok, body: b }; }); }).then(function (res) {
       if (seq !== quoteSeq) return;
       if (!res.ok) {
@@ -97,7 +116,7 @@
   }
 
   sideButtons.forEach(function (b) {
-    b.addEventListener("click", function () { if (busy) return; side = b.getAttribute("data-side"); renderSides(); requestQuote(); });
+    b.addEventListener("click", function () { if (busy) return; side = b.getAttribute("data-side"); renderSides(); requestQuote(); if (!account) renderWallet(); });
   });
   chips.forEach(function (c) {
     c.addEventListener("click", function () { if (busy) return; amount = Number(c.getAttribute("data-amount")); custom.value = ""; renderChips(); renderSides(); requestQuote(); });
@@ -110,66 +129,123 @@
     amount = v; renderChips(); renderSides(); requestQuote();
   });
 
-  // ---- Wallet ----
+  // ---- Wallets ----
 
-  function findProvider() {
-    var p = window.phantom && window.phantom.solana;
-    return p && p.isPhantom ? p : null;
+  function walletIcon(info) {
+    if (info.icon) { var img = el("img", "wallet-icon"); img.src = info.icon; img.alt = ""; img.width = 20; img.height = 20; return img; }
+    return el("span", "wallet-icon wallet-initial", info.name.slice(0, 1).toUpperCase());
   }
-  function el(tag, cls, text) { var n = document.createElement(tag); if (cls) n.className = cls; if (text) n.textContent = text; return n; }
-  function link(label, href, cls) { var a = el("a", cls, label); a.href = href; a.target = "_blank"; a.rel = "noopener"; return a; }
+  function detected() {
+    if (!W) return [];
+    var last = remembered();
+    return W.listWallets().slice().sort(function (a, b) { return Number(b.name === last) - Number(a.name === last); });
+  }
 
-  function renderWallet() {
+  var renderedKey = "";
+  function renderWallet(force) {
+    // Re-render only when something changed, so an open picker is not wiped by the polling.
+    var key = account ? "connected:" + account : "wallets:" + detected().map(function (w) { return w.name; }).join(",") + ":" + side;
+    if (!force && key === renderedKey) return;
+    renderedKey = key;
     walletBox.replaceChildren();
     if (account) {
       var row = el("div", "wallet-row");
-      row.append(el("span", "phantom-badge", "P"), el("span", "mono", short(account)));
+      row.append(walletIcon(walletInfo), el("span", "wallet-name", walletInfo.name), el("span", "mono", short(account)));
+      var change = el("button", "linkish", "Change");
+      change.type = "button";
+      change.addEventListener("click", function () { if (busy) return; W.disconnect(); account = null; walletInfo = null; renderWallet(true); requestQuote(); });
+      row.append(change);
       walletBox.append(row);
       place.disabled = false;
       return;
     }
     place.disabled = true;
-    provider = findProvider();
-    if (provider) {
-      var b = el("button", "btn primary wide", "Connect Phantom");
+    var wallets = detected();
+    if (wallets.length) {
+      var b = el("button", "btn primary wide", "Connect wallet");
       b.type = "button";
-      b.addEventListener("click", connect);
+      b.setAttribute("data-action", "connect");
+      b.addEventListener("click", function () { openPicker(wallets); });
       walletBox.append(b);
+      if (mobile) walletBox.append(openInWallet());
     } else if (mobile) {
-      // No wallet in this browser: reopen the page inside Phantom's own browser.
-      var yes = link("Bet YES", deepLink("yes"), "btn primary");
-      var no = link("Bet NO", deepLink("no"), "btn primary");
-      yes.setAttribute("data-deeplink", "yes"); no.setAttribute("data-deeplink", "no");
-      var grid = el("div", "cta"); grid.append(yes, no);
-      var c = link("Connect Phantom", deepLink(side), "btn wide"); c.setAttribute("data-deeplink", "connect");
-      walletBox.append(grid, c, el("p", "fine", "Opens in Phantom's in-app browser."));
+      walletBox.append(openInWallet());
     } else {
-      walletBox.append(link("Install Phantom", "https://phantom.com", "btn primary wide"), el("p", "fine", "Phantom is a Solana wallet for Chrome, Brave, Firefox and phones."));
+      walletBox.append(el("p", "wallet-picker-title", "No Solana wallet found"));
+      var links = el("p", "links install-links");
+      INSTALL_LINKS.forEach(function (pair) { links.append(link("Get " + pair[0] + " ↗", pair[1], "")); });
+      walletBox.append(links, el("p", "fine", "Install one, then reload this page."));
     }
   }
 
-  function connect() {
-    provider = findProvider();
-    if (!provider) return;
-    status.textContent = "";
-    provider.connect().then(function (res) {
-      var key = (res && res.publicKey) || provider.publicKey;
-      account = key.toString();
+  // Phones without an injected wallet: open this page inside a wallet's own browser.
+  function openInWallet() {
+    var box = el("div", "open-in");
+    box.append(el("p", "wallet-picker-title", "Open in your wallet"));
+    var grid = el("div", "open-in-grid");
+    DEEP_LINKS.forEach(function (w) {
+      var a = link(w.name, w.url(pageUrl(side)), "btn");
+      a.removeAttribute("target");
+      a.setAttribute("data-deeplink", w.name);
+      grid.append(a);
+    });
+    var copy = el("button", "btn", "Copy link");
+    copy.type = "button";
+    copy.setAttribute("data-action", "copy-link");
+    copy.addEventListener("click", function () {
+      navigator.clipboard.writeText(pageUrl(side)).then(function () { copy.textContent = "Copied"; setTimeout(function () { copy.textContent = "Copy link"; }, 1500); }).catch(function () {});
+    });
+    grid.append(copy);
+    box.append(grid, el("p", "fine", "Paste it into your wallet app's browser (Jupiter: tap the globe icon)."));
+    return box;
+  }
+
+  function openPicker(wallets) {
+    var old = walletBox.querySelector(".wallet-picker");
+    if (old) old.remove();
+    var picker = el("div", "wallet-picker");
+    picker.setAttribute("role", "dialog");
+    picker.setAttribute("aria-label", "Choose a wallet");
+    picker.append(el("p", "wallet-picker-title", "Choose a wallet"));
+    var list = el("div", "wallet-picker-list");
+    wallets.forEach(function (info) {
+      var option = el("button", "wallet-option");
+      option.type = "button";
+      option.setAttribute("data-wallet", info.name);
+      option.append(walletIcon(info), el("span", "wallet-option-name", info.name));
+      option.addEventListener("click", function () { picker.remove(); connectWallet(info.name); });
+      list.append(option);
+    });
+    var cancel = el("button", "linkish", "Cancel");
+    cancel.type = "button";
+    cancel.addEventListener("click", function () { picker.remove(); });
+    picker.append(list, cancel);
+    walletBox.append(picker);
+    var first = picker.querySelector(".wallet-option");
+    if (first) first.focus();
+  }
+
+  function connectWallet(name, silent) {
+    if (!W) return Promise.resolve(null);
+    if (!silent) status.textContent = "Approve the connection in " + name + ".";
+    return W.connect(name, silent ? { silent: true } : undefined).then(function (res) {
+      if (!res) return null;
+      account = res.publicKey;
+      walletInfo = res;
+      remember(name);
+      status.textContent = "";
       renderWallet();
       requestQuote();
-      // Fetch the signing helpers now so Place bet is instant.
-      loadTx();
+      if (res.legacy) loadTx(); // web3.js, only for a legacy provider
+      return res;
     }).catch(function (e) {
-      status.textContent = isRejection(e) ? "Connection cancelled." : "Phantom couldn't connect.";
+      if (!silent) status.textContent = W.isRejection(e) ? "Connection cancelled." : name + " couldn't connect.";
+      return null;
     });
   }
   function loadTx() {
     if (tx) return Promise.resolve(tx);
-    return import("/share-tx.js").then(function (m) { tx = m; return m; });
-  }
-  function isRejection(e) {
-    var msg = String((e && e.message) || e || "").toLowerCase();
-    return (e && e.code === 4001) || msg.indexOf("reject") >= 0 || msg.indexOf("cancel") >= 0;
+    return import("/share-tx.js?v=" + V).then(function (m) { tx = m; return m; });
   }
 
   // ---- Progress ----
@@ -201,34 +277,49 @@
     return fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) })
       .then(function (r) { return r.json().then(function (b) { return { ok: r.ok, status: r.status, body: b }; }); });
   }
+  function postWithRetry(url, body, tries) {
+    return post(url, body).then(function (res) {
+      if (res.ok || res.status < 500 && res.status !== 429 || tries <= 1) return res;
+      return new Promise(function (r) { setTimeout(r, 2500); }).then(function () { return postWithRetry(url, body, tries - 1); });
+    }).catch(function () {
+      if (tries <= 1) return { ok: false, status: 0, body: {} };
+      return new Promise(function (r) { setTimeout(r, 2500); }).then(function () { return postWithRetry(url, body, tries - 1); });
+    });
+  }
+  function waitConfirmed(sig, tries) {
+    return fetch(PROXY + "/api/tx/status?signature=" + sig).then(function (r) { return r.json(); }).then(function (b) {
+      if (b.status === "confirmed" || b.status === "failed") return b.status;
+      return tries > 1 ? waitConfirmed(sig, tries - 1) : "pending";
+    }).catch(function () { return tries > 1 ? waitConfirmed(sig, tries - 1) : "pending"; });
+  }
 
   // ---- The bet ----
 
   function placeBet() {
-    if (busy || !account) return;
+    if (busy || !account || !W) return;
     status.textContent = "";
     status.classList.remove("error");
     outcome.hidden = true;
     setBusy(true);
     showSteps("Signing");
     var built, signature, nextHref, chainState = "pending";
-    loadTx().then(function () {
+    var legacy = walletInfo && walletInfo.legacy ? loadTx() : Promise.resolve(null);
+    legacy.then(function () {
       return post(PROXY + "/api/actions/market/" + MARKET + "?side=" + side + "&amount=" + amount.toFixed(2), { account: account });
     }).then(function (res) {
       if (!res.ok) throw { step: "Signing", message: res.body.message || "Couldn't prepare the bet." };
       built = res.body;
       nextHref = built.links && built.links.next && built.links.next.href;
-      status.textContent = built.message ? "Approve in Phantom: " + built.message : "Approve in Phantom.";
-      return provider.signTransaction(tx.deserialize(built.transaction)).catch(function (e) {
-        throw { step: "Signing", message: isRejection(e) ? "Cancelled in Phantom. Nothing was sent." : "Phantom couldn't sign this." };
+      status.textContent = built.message ? "Approve in " + walletInfo.name + ": " + built.message : "Approve in your wallet.";
+      return W.signTransaction(built.transaction, walletInfo.legacy ? tx : undefined).catch(function (e) {
+        throw { step: "Signing", message: W.isRejection(e) ? "Cancelled in your wallet. Nothing was sent." : "Your wallet couldn't sign this." };
       });
     }).then(function (signed) {
-      var signedBase64 = tx.serialize(signed);
-      var check = tx.checkSignedTransaction(built.transaction, signedBase64);
-      if (!check.ok) throw { step: "Signing", message: check.problem === "too_large" ? "The signed transaction is too large to send." : "The transaction Phantom signed is not the one Soothia built. Nothing was sent." };
+      var check = W.checkSignedTransaction(built.transaction, signed.signedTxBase64);
+      if (!check.ok) throw { step: "Signing", message: check.problem === "too_large" ? "The signed transaction is too large to send." : "The transaction your wallet signed is not the one Soothia built. Nothing was sent." };
       showSteps("Sending");
       status.textContent = "Sending to Solana…";
-      return post(PROXY + "/api/tx/send", { signedTxBase64: signedBase64 });
+      return post(PROXY + "/api/tx/send", { signedTxBase64: signed.signedTxBase64 });
     }).then(function (res) {
       if (!res.ok) throw { step: "Sending", message: res.body.message || "Solana didn't accept the transaction. Nothing was taken." };
       signature = res.body.signature;
@@ -240,8 +331,6 @@
       chainState = state;
       showSteps("Recording");
       status.textContent = state === "confirmed" ? "Recording the bet with Panta…" : "Solana is slow right now; recording anyway…";
-      // The callback tells Panta about the bet (submit, verify, report). Retry a few
-      // times; if it still fails, the Worker's own sweep records the bet later.
       return nextHref ? postWithRetry(PROXY + nextHref, { account: account, signature: signature }, 3) : { ok: false, body: {} };
     }).then(function (res) {
       showSteps("done");
@@ -262,21 +351,6 @@
       failWith((e && e.step) || "Signing", (e && e.message) || "Something went wrong. Nothing was sent.");
     });
   }
-  function postWithRetry(url, body, tries) {
-    return post(url, body).then(function (res) {
-      if (res.ok || res.status < 500 && res.status !== 429 || tries <= 1) return res;
-      return new Promise(function (r) { setTimeout(r, 2500); }).then(function () { return postWithRetry(url, body, tries - 1); });
-    }).catch(function () {
-      if (tries <= 1) return { ok: false, status: 0, body: {} };
-      return new Promise(function (r) { setTimeout(r, 2500); }).then(function () { return postWithRetry(url, body, tries - 1); });
-    });
-  }
-  function waitConfirmed(sig, tries) {
-    return fetch(PROXY + "/api/tx/status?signature=" + sig).then(function (r) { return r.json(); }).then(function (b) {
-      if (b.status === "confirmed" || b.status === "failed") return b.status;
-      return tries > 1 ? waitConfirmed(sig, tries - 1) : "pending";
-    }).catch(function () { return tries > 1 ? waitConfirmed(sig, tries - 1) : "pending"; });
-  }
 
   place.addEventListener("click", placeBet);
 
@@ -284,10 +358,25 @@
   renderChips();
   renderWallet();
   requestQuote();
-  // Phantom injects itself a moment after the page loads.
-  var tries = 0;
-  var poll = setInterval(function () {
-    if (findProvider() || ++tries > 10) { clearInterval(poll); if (!account) renderWallet(); }
-  }, 250);
-  if (window.phantom === undefined) window.addEventListener("load", function () { if (!account) renderWallet(); });
+
+  // The wallet layer: small, loaded at once. Re-render as wallets register, and
+  // reconnect the last used wallet silently when it is still installed.
+  import("/wallets.js?v=" + V).then(function (m) {
+    W = m;
+    m.registerMobileWalletAdapter(SITE);
+    m.onWalletsChange(function () { if (!account) renderWallet(); });
+    renderWallet();
+    var tries = 0;
+    var poll = setInterval(function () {
+      // Legacy providers inject without an event.
+      if (!account) renderWallet();
+      if (++tries >= 8) clearInterval(poll);
+    }, 400);
+    setTimeout(function () {
+      var last = remembered();
+      if (!account && last && detected().some(function (w) { return w.name === last; })) connectWallet(last, true);
+    }, 600);
+  }).catch(function () {
+    status.textContent = "The wallet helper didn't load. Refresh the page.";
+  });
 })();
