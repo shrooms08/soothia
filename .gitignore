@@ -5,3 +5,4 @@ dist
 .wrangler
 .DS_Store
 design/tools/.chromium-profile
+design/tools/.orb-frames/
