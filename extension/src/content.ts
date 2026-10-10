@@ -36,11 +36,13 @@ import {
   type FinishResult,
   type HealthResponse,
   type Tile,
+  MarketInfo,
 } from "./messages";
 import { readPage, type ReadInfo } from "./reader";
 import { openBetSheet } from "./bet-sheet";
 import { openSheet, type CreateDebug, type PendingCreate, type Sheet } from "./sheet";
 import { checkSignedTransaction } from "./tx-check";
+import { earningsView, money } from "./earnings";
 import { wallet } from "./wallet-client";
 import {
   CARD_GAP,
@@ -615,6 +617,7 @@ async function mount(): Promise<void> {
       return;
     }
     const positions = (response.body as { positions: Position[] }).positions;
+    if (creatorMarkets.length === 0) await loadCreatorMarkets();
     if (positions.length === 0) {
       betsPane.replaceChildren(refreshRow(), stateBlock("empty", "No bets yet."));
       layout();
@@ -647,6 +650,9 @@ async function mount(): Promise<void> {
           const seed = first.creatorSeedShares.toFixed(first.creatorSeedShares % 1 ? 2 : 0);
           block.append(el("p", "note", `Includes ${seed} YES + ${seed} NO from your creation seed.`));
         }
+        if (creatorMarkets.some((market) => market.registered && market.marketId === first.marketId)) {
+          block.append(earningsRow(first.marketId, block));
+        }
         // One claim control per market: for the side that can be claimed.
         const claimable = held.find((position) => position.claimable && !position.claimed);
         const claimed = held.some((position) => position.claimed);
@@ -668,6 +674,96 @@ async function mount(): Promise<void> {
     link.prepend(icon("refresh"));
     row.append(link);
     return row;
+  }
+
+  // Creator earnings for a market this wallet created: an estimate while the
+  // buying window is open, a claim control once it has closed. Numbers come
+  // from Panta's market detail; without them, only the share and the date.
+  function earningsRow(marketId: string, block: HTMLElement): HTMLElement {
+    const row = el("div", "earnings");
+    const text = el("p", "note earnings-text", "Checking the pool\u2026");
+    row.append(el("p", "earnings-label", "Creator earnings"), text);
+    void (async () => {
+      const response = await api<MarketInfo>("/market", { id: marketId });
+      if (!response.ok || !response.body) {
+        text.textContent = "Up to 20% of the pool, claimable after the buying window closes.";
+        layout();
+        return;
+      }
+      const info = response.body as MarketInfo;
+      const view = earningsView(info.primaryPhaseEnd, info.liquidity, Date.now());
+      text.textContent = view.text;
+      if (view.phase === "claimable") {
+        row.append(button("Claim creator fees", "button primary small", () => void claimCreatorFees(marketId, block)));
+      }
+      layout();
+    })();
+    return row;
+  }
+
+  // Creator-fee claim: build -> sign -> check -> send -> confirm. Panta does
+  // not take these on /trades/, so there is no recording step. Dry run applies.
+  async function claimCreatorFees(marketId: string, row: HTMLElement): Promise<void> {
+    const owner = await wallet.publicKey();
+    if (!owner) return;
+    const note = el("p", "line status-line", "Preparing your claim\u2026");
+    row.append(note);
+    layout();
+    const built = await api<{ txBase64: string; claimableFeesUsdc: number }>("/claim/creator-fees/build", { wallet: owner, marketId });
+    if (!built.ok || !built.body) {
+      const error = (built.body as ApiError | null)?.error ?? "";
+      note.textContent =
+        error === "market_not_graduated" || error === "no_creator_fees" ? "Nothing to claim yet." : (built.body as ApiError | null)?.message ?? "I couldn't prepare the claim just now.";
+      layout();
+      return;
+    }
+    const { txBase64, claimableFeesUsdc } = built.body as { txBase64: string; claimableFeesUsdc: number };
+    const amount = money(claimableFeesUsdc);
+    note.textContent = `Signing: approve the claim in Phantom (${amount}).`;
+    layout();
+    const signed = await wallet.signTransaction(txBase64);
+    if (!signed.ok || !signed.signedTxBase64 || !signed.signature) {
+      note.textContent = !signed.ok && signed.reason === "rejected" ? "Cancelled in Phantom. Nothing was sent." : "Phantom couldn't sign this.";
+      return;
+    }
+    if (!checkSignedTransaction(txBase64, signed.signedTxBase64).ok) {
+      note.textContent = "The transaction Phantom signed is not the one Soothia built. Nothing was sent.";
+      return;
+    }
+    if (dryRunToggle.box.checked) {
+      setCreateDebug({ signature: `${signed.signature} (dry run creator-fee claim, not sent)` });
+      note.textContent = `Dry run complete: Phantom signed the claim for ${amount}, nothing was sent.`;
+      return;
+    }
+    note.textContent = "Sending your claim\u2026";
+    const sent = await api<{ signature: string }>("/claim/send", { signedTxBase64: signed.signedTxBase64, wallet: owner, marketId });
+    if (!sent.ok) {
+      note.textContent = (sent.body as ApiError | null)?.reason ?? "Solana didn't accept the claim. Nothing was taken.";
+      return;
+    }
+    setCreateDebug({ signature: signed.signature, register: "creator-fee claim sent" });
+    note.textContent = "Confirming on Solana\u2026";
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const status = await api<{ status: string }>("/tx/status", { signature: signed.signature });
+      const state = status.ok ? (status.body as { status: string }).status : "pending";
+      if (state === "confirmed") {
+        note.replaceChildren(
+          el("strong", "", `Creator fees claimed: ${amount}.`),
+          el("span", "", " Panta does not record creator-fee claims, so nothing to report. "),
+          externalLink("Transaction on Solscan", `https://solscan.io/tx/${signed.signature}`, "link mono ext"),
+        );
+        setCreateDebug({ register: "creator-fee claim confirmed" });
+        sound("betPlaced");
+        pulseOrb();
+        layout();
+        return;
+      }
+      if (state === "failed") {
+        note.textContent = "The claim failed on Solana. Nothing was taken.";
+        return;
+      }
+    }
+    note.textContent = "Still waiting for Solana. Refresh in a minute; do not claim again.";
   }
 
   function shortAddressLike(id: string): string {

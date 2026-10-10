@@ -148,6 +148,7 @@ export const API_ROUTES = {
   "/buy/status": "POST",
   "/claim/build": "POST",
   "/claim/send": "POST",
+  "/claim/creator-fees/build": "POST",
   "/creator/markets": "GET",
   "/positions": "GET",
   "/market": "GET",
@@ -215,6 +216,26 @@ export interface Position {
   marketUrl: string;
   /** Shares per side minted to this wallet for creating the market, or null. */
   creatorSeedShares: number | null;
+}
+
+export interface MarketLiquidity {
+  totalVolumeUsdc: number;
+  royaltyBps: number;
+  skewBps: number;
+  creatorFeesUsdc: number;
+  isGraduated: boolean;
+  graduationThresholdUsdc: number;
+}
+
+export interface MarketInfo {
+  marketId: string;
+  title: string;
+  yesPrice: number | null;
+  noPrice: number | null;
+  endTime: string | null;
+  primaryPhaseEnd: string | null;
+  liquidity: MarketLiquidity | null;
+  marketUrl: string;
 }
 
 export interface CreatorMarket {

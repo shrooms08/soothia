@@ -955,6 +955,11 @@ input[type="number"].input { font-family: var(--sth-font-mono); }
 .position-text { color: var(--sth-text); font: 400 13px/1 var(--sth-font-mono); }
 .tile.market .question { font-size: 16px; }
 .tile.market .actions { margin-top: 8px; }
+.earnings { margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: var(--sth-raised-hover); display: grid; gap: 4px; }
+.earnings-label { margin: 0; color: var(--sth-text-2); font: 600 11px/1 var(--sth-font-sans); letter-spacing: .06em; text-transform: uppercase; }
+.earnings-text { margin: 0; }
+.earnings .button { justify-self: start; margin-top: 4px; }
+.earnings .status-line { margin: 4px 0 0; }
 
 /* Tooltip for the disabled Claim button */
 .tip { position: relative; }
