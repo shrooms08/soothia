@@ -2,6 +2,7 @@
 // shadow root. Nothing here touches the page's own DOM or styles.
 import { betLink } from "./config";
 import { button, copyButton, el, endDate, externalLink, icon, starSvg } from "./dom";
+import { pickWallet } from "./wallet-picker";
 import { loadFonts } from "./fonts";
 import {
   armSounds,
@@ -38,6 +39,8 @@ import {
   type HealthResponse,
   type Tile,
   MarketInfo,
+  type WalletInfo,
+  type WalletRpcOutcome,
 } from "./messages";
 import { readPage, type ReadInfo } from "./reader";
 import { openBetSheet } from "./bet-sheet";
@@ -268,7 +271,7 @@ async function mount(): Promise<void> {
   cardStars.setAttribute("aria-hidden", "true");
   for (let i = 0; i < 6; i++) cardStars.append(starSvg("card-star"));
   card.append(cardStars);
-  const phantomRow = statusRow();
+  const walletRow = statusRow();
   const proxyRow = statusRow();
   const body = el("div", "body");
   // Two views: the claims on this page, and the wallet's bets.
@@ -324,7 +327,7 @@ async function mount(): Promise<void> {
     skipChecksToggle.row,
     createInfo,
     replayRow,
-    phantomRow.row,
+    walletRow.row,
     proxyRow.row,
   );
   const head = el("div", "card-head");
@@ -453,12 +456,12 @@ async function mount(): Promise<void> {
 
   // ---- Status rows ----
 
-  let phantomDetected = false;
+  let detectedWallets: WalletInfo[] = [];
 
-  function renderPhantom(): void {
-    phantomRow.set(
-      phantomDetected ? "Phantom: detected" : "Phantom: not found",
-      phantomDetected ? "good" : "bad",
+  function renderWalletRow(): void {
+    walletRow.set(
+      detectedWallets.length ? `Wallet: ${detectedWallets.map((info) => info.name).join(", ")} detected` : "Wallet: none found",
+      detectedWallets.length ? "good" : "bad",
     );
   }
 
@@ -467,11 +470,21 @@ async function mount(): Promise<void> {
     if (event.source !== window || event.origin !== window.location.origin) return;
     const data: unknown = event.data;
     if (typeof data !== "object" || data === null) return;
-    const { type, phantom } = data as { type?: unknown; phantom?: unknown };
-    if (type !== WALLET_STATUS || typeof phantom !== "boolean") return;
-    phantomDetected = phantom;
-    renderPhantom();
+    const { type, wallets } = data as { type?: unknown; wallets?: unknown };
+    if (type !== WALLET_STATUS || !Array.isArray(wallets)) return;
+    detectedWallets = wallets as WalletInfo[];
+    renderWalletRow();
   });
+
+  // Picker, then connect. Resolves with the outcome, or null when dismissed.
+  async function chooseAndConnect(container: HTMLElement): Promise<WalletRpcOutcome | null> {
+    const choice = pickWallet(container, await wallet.list());
+    layout();
+    const name = await choice;
+    layout();
+    if (!name) return null;
+    return wallet.connect(name);
+  }
 
   async function refreshProxy(): Promise<void> {
     proxyRow.set("Proxy: checking…", "idle");
@@ -605,12 +618,11 @@ async function mount(): Promise<void> {
   async function renderBets(): Promise<void> {
     const owner = await wallet.publicKey();
     if (!owner) {
-      const connect = button("Connect Phantom", "button connect", async () => {
-        const result = await wallet.connect();
-        if (result.ok) void renderBets();
+      const connect = button("Connect wallet", "button connect", async () => {
+        const result = await chooseAndConnect(betsPane);
+        if (result?.ok) void renderBets();
       });
-      connect.prepend(el("span", "phantom-badge", "P"));
-      betsPane.replaceChildren(stateBlock("empty", "Connect Phantom to see your bets."), connect);
+      betsPane.replaceChildren(stateBlock("empty", "Connect a wallet to see your bets."), connect);
       layout();
       return;
     }
@@ -728,20 +740,20 @@ async function mount(): Promise<void> {
     }
     const { txBase64, claimableFeesUsdc } = built.body as { txBase64: string; claimableFeesUsdc: number };
     const amount = money(claimableFeesUsdc);
-    note.textContent = `Signing: approve the claim in Phantom (${amount}).`;
+    note.textContent = `Signing: approve the claim in your wallet (${amount}).`;
     layout();
     const signed = await wallet.signTransaction(txBase64);
     if (!signed.ok || !signed.signedTxBase64 || !signed.signature) {
-      note.textContent = !signed.ok && signed.reason === "rejected" ? "Cancelled in Phantom. Nothing was sent." : "Phantom couldn't sign this.";
+      note.textContent = !signed.ok && signed.reason === "rejected" ? "Cancelled in your wallet. Nothing was sent." : "Your wallet couldn't sign this.";
       return;
     }
     if (!checkSignedTransaction(txBase64, signed.signedTxBase64).ok) {
-      note.textContent = "The transaction Phantom signed is not the one Soothia built. Nothing was sent.";
+      note.textContent = "The transaction your wallet signed is not the one Soothia built. Nothing was sent.";
       return;
     }
     if (dryRunToggle.box.checked) {
       setCreateDebug({ signature: `${signed.signature} (dry run creator-fee claim, not sent)` });
-      note.textContent = `Dry run complete: Phantom signed the claim for ${amount}, nothing was sent.`;
+      note.textContent = `Dry run complete: your wallet signed the claim for ${amount}, nothing was sent.`;
       return;
     }
     note.textContent = "Sending your claim\u2026";
@@ -795,21 +807,21 @@ async function mount(): Promise<void> {
       return;
     }
     const { txBase64, winningShares } = built.body as { txBase64: string; winningShares: number };
-    note.textContent = `Approve the claim in Phantom (${winningShares.toFixed(2)} winning shares).`;
+    note.textContent = `Approve the claim in your wallet (${winningShares.toFixed(2)} winning shares).`;
     layout();
     const signed = await wallet.signTransaction(txBase64);
     if (!signed.ok || !signed.signedTxBase64 || !signed.signature) {
-      note.textContent = !signed.ok && signed.reason === "rejected" ? "Cancelled in Phantom. Nothing was sent." : "Phantom couldn't sign this.";
+      note.textContent = !signed.ok && signed.reason === "rejected" ? "Cancelled in your wallet. Nothing was sent." : "Your wallet couldn't sign this.";
       return;
     }
     const checked = checkSignedTransaction(txBase64, signed.signedTxBase64);
     if (!checked.ok) {
-      note.textContent = "The transaction Phantom signed is not the one Soothia built. Nothing was sent.";
+      note.textContent = "The transaction your wallet signed is not the one Soothia built. Nothing was sent.";
       return;
     }
     if (dryRunToggle.box.checked) {
       setCreateDebug({ signature: `${signed.signature} (dry run claim, not sent)` });
-      note.textContent = "Dry run complete: Phantom signed the claim, nothing was sent.";
+      note.textContent = "Dry run complete: your wallet signed the claim, nothing was sent.";
       return;
     }
     note.textContent = "Sending your claim\u2026";
@@ -1130,7 +1142,7 @@ async function mount(): Promise<void> {
     if (!open) return;
     sound("open");
     dismissBubble();
-    renderPhantom();
+    renderWalletRow();
     window.postMessage({ type: WALLET_REQUEST }, window.location.origin);
     void refreshProxy();
     sheet?.refresh();
@@ -1209,15 +1221,25 @@ async function mount(): Promise<void> {
 
   window.addEventListener("resize", layout);
 
-  renderPhantom();
+  renderWalletRow();
   proxyRow.set("Proxy: checking…", "idle");
   // Dev-only: on localhost, a page may post scenes to screenshot. Nothing
   // here reaches the network: every Worker call is answered from `mockApi`.
   if (/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) {
     window.addEventListener("message", (event) => {
       if (event.source !== window) return;
-      const data = event.data as { type?: string; scene?: string; mocks?: Record<string, unknown>; tiles?: Tile[]; dryRun?: boolean } | null;
+      const data = event.data as { type?: string; scene?: string; mocks?: Record<string, unknown>; tiles?: Tile[]; dryRun?: boolean; selector?: string } | null;
       if (data?.type !== "soothia:v1:dev-scene" || !data.scene) return;
+      // Harness probes: press something inside the closed shadow root, or read its text.
+      if (data.scene === "press" && data.selector) {
+        card.querySelector<HTMLElement>(data.selector)?.click();
+        return;
+      }
+      if (data.scene === "dump") {
+        const node = data.selector ? card.querySelector<HTMLElement>(data.selector) : null;
+        window.postMessage({ type: "soothia:v1:dev-dump", text: card.innerText, node: node ? node.outerHTML.slice(0, 300) : null }, "*");
+        return;
+      }
       if (data.mocks) mockApi = data.mocks;
       if (typeof data.dryRun === "boolean") dryRunToggle.box.checked = data.dryRun;
       clearTimeout(detectTimer);

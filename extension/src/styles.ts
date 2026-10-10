@@ -730,12 +730,25 @@ input[type="number"].input { font-family: var(--sth-font-mono); }
   border-radius: var(--sth-r-field);
   background: var(--sth-surface-2);
 }
-.wallet.disconnected { padding: 0; background: transparent; }
+.wallet.disconnected { padding: 0; background: transparent; flex-wrap: wrap; }
+.wallet .wallet-picker { flex: 1 1 100%; width: 100%; margin-top: 8px; }
 .wallet-dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--sth-yes); }
 .wallet-text { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.wallet-line { display: flex; align-items: center; gap: 2px; min-width: 0; }
 .wallet-address { color: var(--sth-text); font: 500 13px/1 var(--sth-font-mono); }
 .wallet-holdings { color: var(--sth-text-2); font: 400 11px/1 var(--sth-font-mono); }
 .wallet .ghost { margin-left: auto; }
+.wallet-icon { flex: none; width: 20px; height: 20px; border-radius: 6px; object-fit: cover; }
+.wallet-initial { display: inline-flex; align-items: center; justify-content: center; background: var(--sth-raised-hover); color: var(--sth-text); font: 700 11px/1 var(--sth-font-sans); }
+.wallet-name { color: var(--sth-text-2); font: 500 12px/1 var(--sth-font-sans); }
+
+/* Wallet picker */
+.wallet-picker { margin-top: 10px; padding: 12px; border: 1px solid var(--sth-hairline); border-radius: 12px; background: var(--sth-raised); display: grid; gap: 8px; }
+.wallet-picker-title { margin: 0; color: var(--sth-text); font: 600 13px/1.3 var(--sth-font-sans); }
+.wallet-picker-list { display: grid; gap: 6px; }
+.wallet-option { display: flex; align-items: center; gap: 10px; width: 100%; padding: 9px 10px; border: 1px solid var(--sth-hairline-soft); border-radius: 10px; background: transparent; color: var(--sth-text); font: 500 13px/1 var(--sth-font-sans); text-align: left; cursor: pointer; }
+.wallet-option:hover, .wallet-option:focus-visible { background: var(--sth-raised-hover); border-color: var(--sth-orb-mid); }
+.wallet-picker-links { display: flex; flex-wrap: wrap; gap: 6px 14px; }
 .button.connect {
   display: flex;
   align-items: center;

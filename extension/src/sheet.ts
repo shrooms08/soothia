@@ -4,6 +4,7 @@
 // and only when Dry run is off.
 import { betLink } from "./config";
 import { button, copyButton, domainName, el, externalLink, icon, shortAddress, starSvg, withMono } from "./dom";
+import { pickWallet, walletIcon } from "./wallet-picker";
 import type {
   ApiError,
   ApiPath,
@@ -233,7 +234,7 @@ export function openSheet(host: SheetHost): Sheet {
   fillWindowChoices();
 
   const rule = el("details", "rule");
-  const ruleText = el("p", "rule-text", "Connect Phantom to see the exact rule Panta will receive.");
+  const ruleText = el("p", "rule-text", "Connect a wallet to see the exact rule Panta will receive.");
   const sources = el("ul", "sources");
   const resolver = el("p", "note", "Panta's AI resolver settles it from these sources, with a 1-hour dispute window.");
   const ruleBody = el("div", "rule-body");
@@ -317,23 +318,25 @@ export function openSheet(host: SheetHost): Sheet {
   function renderWallet(): void {
     walletRow.classList.toggle("disconnected", !address);
     if (!address) {
-      const connectButton = button("Connect Phantom", "button connect", () => void connect());
-      connectButton.prepend(el("span", "phantom-badge", "P"));
-      walletRow.replaceChildren(connectButton);
+      walletRow.replaceChildren(button("Connect wallet", "button connect", () => void connect()));
       return;
     }
     const holdings = balances
       ? `${balances.sol.toFixed(4)} SOL · ${balances.usdc.toFixed(2)} USDC`
       : "checking balances…";
+    const current = wallet.current();
     const who = el("span", "wallet-address", shortAddress(address));
     who.title = address;
     const text = el("span", "wallet-text");
-    text.append(who, el("span", "wallet-holdings", holdings));
-    walletRow.replaceChildren(el("span", "wallet-dot"), text, button("Disconnect", "ghost", () => void disconnect()));
+    const line = el("span", "wallet-line");
+    if (current) line.append(el("span", "wallet-name", `${current.name} · `));
+    line.append(who);
+    text.append(line, el("span", "wallet-holdings", holdings));
+    walletRow.replaceChildren(current ? walletIcon(current) : el("span", "wallet-dot"), text, button("Disconnect", "ghost", () => void disconnect()));
   }
 
   function renderFee(): void {
-    if (!address) fee.replaceChildren("Connect Phantom to see the live fee.");
+    if (!address) fee.replaceChildren("Connect a wallet to see the live fee.");
     else if (quote) {
       const { paymentUsdc, breakdown } = quote;
       const row = (label: string, value: string, total = false): HTMLElement => {
@@ -543,15 +546,23 @@ export function openSheet(host: SheetHost): Sheet {
   }
 
   async function connect(): Promise<void> {
-    setStatus("Approve the connection in Phantom.");
-    const outcome = await wallet.connect();
+    const wallets = await wallet.list();
+    if (disposed) return;
+    setStatus(wallets.length ? "Choose a wallet." : "");
+    const choice = pickWallet(walletRow, wallets);
+    host.layout();
+    const name = await choice;
+    if (disposed) return;
+    if (!name) return setStatus("");
+    setStatus(`Approve the connection in ${name}.`);
+    const outcome = await wallet.connect(name);
     if (disposed) return;
     if (outcome.ok && outcome.publicKey) {
       setStatus("");
       setAddress(outcome.publicKey);
     } else if (!outcome.ok && outcome.reason === "rejected") setStatus("Connection cancelled.");
-    else if (!outcome.ok && outcome.reason === "no_wallet") setStatus("Phantom isn't installed in this browser.");
-    else setStatus("Phantom didn't answer. Open Phantom and try again.");
+    else if (!outcome.ok && outcome.reason === "no_wallet") setStatus("No Solana wallet found in this browser.");
+    else setStatus(`${name} didn't answer. Open it and try again.`);
   }
 
   async function disconnect(): Promise<void> {
@@ -631,7 +642,7 @@ export function openSheet(host: SheetHost): Sheet {
       }
 
       showSteps("Signing");
-      setStatus(`${notice}Approve the transaction in Phantom.`);
+      setStatus(`${notice}Approve the transaction in your wallet.`);
       const signed = await wallet.signTransaction(txBase64);
       if (disposed) return;
       if (!signed.ok || !signed.signedTxBase64 || !signed.signature) {
@@ -639,10 +650,10 @@ export function openSheet(host: SheetHost): Sheet {
         host.sound?.("softError");
         setStatus(
           !signed.ok && signed.reason === "rejected"
-            ? "Cancelled in Phantom. Nothing was sent."
+            ? "Cancelled in your wallet. Nothing was sent."
             : !signed.ok && signed.reason === "timeout"
-              ? "Phantom didn't answer in time. Nothing was sent."
-              : "Phantom couldn't sign this. Nothing was sent.",
+              ? "Your wallet didn't answer in time. Nothing was sent."
+              : "Your wallet couldn't sign this. Nothing was sent.",
         );
         return;
       }
@@ -654,10 +665,10 @@ export function openSheet(host: SheetHost): Sheet {
         showSteps(null);
         setStatus(
           checked.problem === "too_large"
-            ? `Phantom's signed transaction is ${checked.bytes} bytes, over Solana's 1,232-byte limit. Nothing was sent.`
+            ? `The signed transaction is ${checked.bytes} bytes, over Solana's 1,232-byte limit. Nothing was sent.`
             : checked.problem === "not_signed"
-              ? "Phantom returned the transaction without a signature. Nothing was sent."
-              : "The transaction Phantom signed is not the one Soothia built. Nothing was sent.",
+              ? "Your wallet returned the transaction without a signature. Nothing was sent."
+              : "The transaction your wallet signed is not the one Soothia built. Nothing was sent.",
         );
         return;
       }
@@ -670,7 +681,7 @@ export function openSheet(host: SheetHost): Sheet {
         });
         showSteps(null);
         host.sound?.("open");
-        setStatus("Dry run complete: Phantom signed it, nothing was sent.");
+        setStatus("Dry run complete: your wallet signed it, nothing was sent.");
         return;
       }
 
@@ -846,7 +857,7 @@ export function openSheet(host: SheetHost): Sheet {
 
   host.debug({ wallet: "not connected", quote: "–", simulate: "–", signature: "–", register: "–" });
   render();
-  // If Phantom already trusts this site, pick the wallet up without a popup.
+  // If the last used wallet already trusts this site, pick it up without a prompt.
   void wallet.publicKey().then((found) => {
     if (!disposed && found && !address) setAddress(found);
   });

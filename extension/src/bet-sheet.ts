@@ -2,6 +2,7 @@
 // quote -> build -> simulate -> Phantom signs -> send -> confirm -> Panta
 // records it. Money moves only in the send step, and only with Dry run off.
 import { button, el, externalLink, icon, shortAddress, starSvg, withMono } from "./dom";
+import { pickWallet, walletIcon } from "./wallet-picker";
 import type {
   ApiError,
   ApiPath,
@@ -188,24 +189,26 @@ export function openBetSheet(host: BetHost): Sheet {
   function renderWallet(): void {
     walletRow.classList.toggle("disconnected", !address);
     if (!address) {
-      const connectButton = button("Connect Phantom", "button connect", () => void connect());
-      connectButton.prepend(el("span", "phantom-badge", "P"));
-      walletRow.replaceChildren(connectButton);
+      walletRow.replaceChildren(button("Connect wallet", "button connect", () => void connect()));
       return;
     }
     const holdings = balances
       ? `${balances.sol.toFixed(4)} SOL · ${balances.usdc.toFixed(2)} USDC`
       : "checking balances…";
+    const current = wallet.current();
     const who = el("span", "wallet-address", shortAddress(address));
     who.title = address;
     const text = el("span", "wallet-text");
-    text.append(who, el("span", "wallet-holdings", holdings));
-    walletRow.replaceChildren(el("span", "wallet-dot"), text, button("Disconnect", "ghost", () => void disconnect()));
+    const line = el("span", "wallet-line");
+    if (current) line.append(el("span", "wallet-name", `${current.name} · `));
+    line.append(who);
+    text.append(line, el("span", "wallet-holdings", holdings));
+    walletRow.replaceChildren(current ? walletIcon(current) : el("span", "wallet-dot"), text, button("Disconnect", "ghost", () => void disconnect()));
   }
 
   function renderQuote(): void {
     const mono = (text: string, extra = ""): HTMLElement => el("span", `mono ${extra}`, text);
-    if (!address) quoteBox.replaceChildren("Connect Phantom to see the price.");
+    if (!address) quoteBox.replaceChildren("Connect a wallet to see the price.");
     else if (quote) {
       const line = el("div", "");
       line.append(
@@ -351,15 +354,23 @@ export function openBetSheet(host: BetHost): Sheet {
   }
 
   async function connect(): Promise<void> {
-    setStatus("Approve the connection in Phantom.");
-    const result = await wallet.connect();
+    const wallets = await wallet.list();
+    if (disposed) return;
+    setStatus(wallets.length ? "Choose a wallet." : "");
+    const choice = pickWallet(walletRow, wallets);
+    host.layout();
+    const name = await choice;
+    if (disposed) return;
+    if (!name) return setStatus("");
+    setStatus(`Approve the connection in ${name}.`);
+    const result = await wallet.connect(name);
     if (disposed) return;
     if (result.ok && result.publicKey) {
       setStatus("");
       setAddress(result.publicKey);
     } else if (!result.ok && result.reason === "rejected") setStatus("Connection cancelled.");
-    else if (!result.ok && result.reason === "no_wallet") setStatus("Phantom isn't installed in this browser.");
-    else setStatus("Phantom didn't answer. Open Phantom and try again.");
+    else if (!result.ok && result.reason === "no_wallet") setStatus("No Solana wallet found in this browser.");
+    else setStatus(`${name} didn't answer. Open it and try again.`);
   }
 
   async function disconnect(): Promise<void> {
@@ -422,27 +433,27 @@ export function openBetSheet(host: BetHost): Sheet {
       }
 
       showSteps("Signing");
-      setStatus("Approve the purchase in Phantom.");
+      setStatus("Approve the purchase in your wallet.");
       const signed = await wallet.signTransaction(txBase64);
       if (disposed) return;
       if (!signed.ok || !signed.signedTxBase64 || !signed.signature) {
         showSteps(null);
         host.sound?.("softError");
         return setStatus(
-          !signed.ok && signed.reason === "rejected" ? "Cancelled in Phantom. Nothing was sent." : "Phantom couldn't sign this. Nothing was sent.",
+          !signed.ok && signed.reason === "rejected" ? "Cancelled in your wallet. Nothing was sent." : "Your wallet couldn't sign this. Nothing was sent.",
         );
       }
       const checked = checkSignedTransaction(txBase64, signed.signedTxBase64);
       if (!checked.ok) {
         host.debug({ signature: `refused, not sent: ${checked.problem} (${checked.detail})` });
         showSteps(null);
-        return setStatus("The transaction Phantom signed is not the one Soothia built. Nothing was sent.");
+        return setStatus("The transaction your wallet signed is not the one Soothia built. Nothing was sent.");
       }
       if (dryRun) {
         host.debug({ signature: `${signed.signature} (dry run, not sent; ${checked.bytes} bytes)`, register: "not attempted (dry run)" });
         showSteps(null);
         host.sound?.("open");
-        return setStatus("Dry run complete: Phantom signed it, nothing was sent.");
+        return setStatus("Dry run complete: your wallet signed it, nothing was sent.");
       }
 
       showSteps("Sending");
