@@ -68,6 +68,9 @@ export interface MatchedMarket {
   yesPrice: number | null;
   noPrice: number | null;
   endTime: string;
+  /** primary: bettable in Soothia; p2p: shares trade between people on Panta's order book. */
+  phase?: "primary" | "p2p";
+  pantaUrl?: string;
 }
 
 export interface Tile {

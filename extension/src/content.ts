@@ -192,6 +192,12 @@ function tileNode(
     const link = externalLink("Live on Panta", live.marketUrl, "link ext");
     link.prepend(el("span", "live-dot"));
     actions.append(link, button("Bet", "button", () => onBet(target)));
+  } else if (market && market.phase === "p2p") {
+    // The buying window has closed; shares trade between people on Panta.
+    const odds = market.yesPrice === null ? "YES \u2013 on Panta" : `YES ${(market.yesPrice * 100).toFixed(1)}% on Panta`;
+    const oddsNode = el("span", "odds p2p", odds);
+    oddsNode.title = `${market.title} (trading between people on Panta)`;
+    actions.append(oddsNode, externalLink("Trade on Panta", market.pantaUrl ?? `https://www.panta.market/market/${market.id}`, "button ext"));
   } else if (market) {
     const odds = market.yesPrice === null ? "YES \u2013" : `YES ${(market.yesPrice * 100).toFixed(1)}%`;
     const oddsNode = el("span", "odds", odds);

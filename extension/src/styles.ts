@@ -535,6 +535,7 @@ a.button { display: inline-flex; align-items: center; justify-content: center; t
 }
 .actions.end { justify-content: flex-end; }
 .odds { color: var(--sth-yes); font: 500 15px/1 var(--sth-font-mono); }
+.odds.p2p { font-size: 12px; white-space: nowrap; }
 
 /* ---------- Empty / skipped / error (this-page.empty, .skipped, .error) ---------- */
 
