@@ -1,9 +1,19 @@
 # The landing page: static assets served by Cloudflare (Pages, now part of Workers).
 name = "soothia"
+main = "worker.js"
 compatibility_date = "2025-10-01"
 workers_dev = true
 
 [assets]
 directory = "./"
+binding = "ASSETS"
+# These paths are rendered by worker.js; everything else is a static file.
+run_worker_first = ["/m/*", "/actions.json"]
 html_handling = "auto-trailing-slash"
 not_found_handling = "404-page"
+
+# The proxy Worker, called directly for market data (workers.dev to workers.dev
+# fetches inside one account are refused, a service binding is the way).
+[[services]]
+binding = "PROXY"
+service = "soothia-proxy"
