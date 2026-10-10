@@ -2,7 +2,8 @@
 // market. It owns the create flow: quote -> build -> simulate -> Phantom
 // signs -> send -> confirm -> register. Money moves only in the send step,
 // and only when Dry run is off.
-import { button, domainName, el, externalLink, icon, shortAddress, starSvg, withMono } from "./dom";
+import { betLink } from "./config";
+import { button, copyButton, domainName, el, externalLink, icon, shortAddress, starSvg, withMono } from "./dom";
 import type {
   ApiError,
   ApiPath,
@@ -779,10 +780,12 @@ export function openSheet(host: SheetHost): Sheet {
       host.created({ marketId: result.marketId, marketUrl: result.marketUrl });
       showSteps("done");
       setStatus("");
+      // The bet link unfurls on X and lets anyone bet from their wallet, no extension needed.
+      const link = betLink(result.marketId);
       const share =
         "https://x.com/intent/post?text=" +
-        encodeURIComponent(`I just turned this into a prediction market with Soothia: ${question}`) +
-        `&url=${encodeURIComponent(result.marketUrl)}`;
+        encodeURIComponent(`I turned this into a prediction market with Soothia. Bet YES or NO: ${question}`) +
+        `&url=${encodeURIComponent(link)}`;
       const actions = el("div", "actions");
       const marketId = result.marketId;
       const flourish = el("div", "flourish");
@@ -793,7 +796,11 @@ export function openSheet(host: SheetHost): Sheet {
         button("Bet on it", "button", () => host.bet({ marketId, title: question })),
       );
       actions.className = "button-stack";
-      actions.append(externalLink("View on Panta", result.marketUrl, "button primary wide ext"), grid);
+      actions.append(
+        externalLink("View on Panta", result.marketUrl, "button primary wide ext"),
+        grid,
+        copyButton("Copy bet link", link, "button wide", () => host.sound?.("open")),
+      );
       outcome.classList.add("success");
       outcome.replaceChildren(
         flourish,

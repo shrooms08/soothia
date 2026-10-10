@@ -18,6 +18,28 @@ export function button(label: string, className: string, onClick?: () => void): 
   return node;
 }
 
+/** A button that copies text and reads "Copied" for a moment. `onCopied` runs on success. */
+export function copyButton(label: string, text: string, className: string, onCopied?: () => void): HTMLButtonElement {
+  const node = button(label, className, () => {
+    void navigator.clipboard
+      .writeText(text)
+      .then(() => {
+        node.textContent = "Copied";
+        node.classList.add("copied");
+        onCopied?.();
+        setTimeout(() => {
+          node.textContent = label;
+          node.classList.remove("copied");
+        }, 1500);
+      })
+      .catch(() => {
+        node.textContent = "Couldn't copy";
+        setTimeout(() => (node.textContent = label), 1500);
+      });
+  });
+  return node;
+}
+
 /** A link that opens in a new tab and tells the destination nothing about this page. */
 export function externalLink(label: string, href: string, className: string): HTMLAnchorElement {
   const node = el("a", className, label);

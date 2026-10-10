@@ -954,7 +954,10 @@ input[type="number"].input { font-family: var(--sth-font-mono); }
 .side-chip-no { color: var(--sth-no); background: var(--sth-no-bg); }
 .position-text { color: var(--sth-text); font: 400 13px/1 var(--sth-font-mono); }
 .tile.market .question { font-size: 16px; }
-.tile.market .actions { margin-top: 8px; }
+.tile.market .actions { margin-top: 8px; gap: 14px; }
+.tile.market .actions .link { margin-right: auto; }
+.tile.market .actions .link + .link { margin-right: 0; }
+.button.copied, .link.copied { color: var(--sth-yes); }
 .earnings { margin-top: 10px; padding: 10px 12px; border-radius: 10px; background: var(--sth-raised-hover); display: grid; gap: 4px; }
 .earnings-label { margin: 0; color: var(--sth-text-2); font: 600 11px/1 var(--sth-font-sans); letter-spacing: .06em; text-transform: uppercase; }
 .earnings-text { margin: 0; }

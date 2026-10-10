@@ -1,6 +1,7 @@
 // Isolated-world content script: mounts the orb and card inside one closed
 // shadow root. Nothing here touches the page's own DOM or styles.
-import { button, el, endDate, externalLink, icon, starSvg } from "./dom";
+import { betLink } from "./config";
+import { button, copyButton, el, endDate, externalLink, icon, starSvg } from "./dom";
 import { loadFonts } from "./fonts";
 import {
   armSounds,
@@ -657,7 +658,10 @@ async function mount(): Promise<void> {
         const claimable = held.find((position) => position.claimable && !position.claimed);
         const claimed = held.some((position) => position.claimed);
         const actions = el("div", "actions");
-        actions.append(externalLink("View on Panta", first.marketUrl, "link ext"));
+        actions.append(
+          externalLink("View on Panta", first.marketUrl, "link ext"),
+          copyButton("Copy bet link", betLink(first.marketId), "link", () => sound("open")),
+        );
         if (claimed && !claimable) actions.append(el("span", "note", "Claimed"));
         else if (claimable) actions.append(button("Claim", "button primary small", () => void claim(claimable, block)));
         else actions.append(comingNext("Claim", "button small", "Available after the market resolves"));
