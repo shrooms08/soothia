@@ -2,7 +2,7 @@
 import { fileURLToPath } from "node:url";
 import { chromium } from "../../scripts/node_modules/playwright/index.mjs";
 const out = fileURLToPath(new URL("../../design/applied/", import.meta.url));
-const url = process.argv[2] || "https://soothia.heylana.workers.dev/";
+const url = process.argv[2] || "https://soothia.fun/";
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1200, height: 820 }, deviceScaleFactor: 2 });
 await page.goto(url, { waitUntil: "networkidle" });

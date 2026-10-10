@@ -36,7 +36,7 @@ const mocks = {
     authority: { name: "CoinGecko", url: "https://www.coingecko.com/en/coins/bitcoin" },
     resolutionRule: "YES if BTC/USD sets a new all-time high by 2026-12-31 23:59 UTC, per CoinGecko. Otherwise NO.",
     sourcesOfTruth: ["https://www.coingecko.com/en/coins/bitcoin", "https://x.com/intangiblecoins/status/2002741524950344005"],
-    imageUrl: "https://soothia-proxy.heylana.workers.dev/img/crypto.png", endTime: "2026-12-31T23:59:59Z", resolutionTime: "2027-01-01T00:59:59Z",
+    imageUrl: "https://api.soothia.fun/img/crypto.png", endTime: "2026-12-31T23:59:59Z", resolutionTime: "2027-01-01T00:59:59Z",
   },
   "/create/build": { txBase64, bytes: 1051, recentBlockhash: "x", lastValidBlockHeight: 1, txExpiresAt: soon, quote: null },
   "/buy/quote": { quoteId: "qt_mock", marketId: MARKET, side: "yes", amountUsdc: 1, shares: 1.983541, avgPrice: 0.504148, feeUsdc: 0.02, totalUsdc: 1.02, payoutPerShareUsdc: 1, expiresAt: soon },

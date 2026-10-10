@@ -2,6 +2,11 @@ name = "soothia-proxy"
 main = "src/index.ts"
 compatibility_date = "2025-10-01"
 workers_dev = true
+
+# api.soothia.fun is the public API address; the workers.dev URL keeps serving.
+routes = [
+  { pattern = "api.soothia.fun", custom_domain = true },
+]
 # @solana/web3.js (used only to assemble a transaction from instructions) needs Buffer.
 compatibility_flags = ["nodejs_compat"]
 

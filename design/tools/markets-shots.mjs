@@ -8,7 +8,7 @@ import { chromium, devices } from "../../scripts/node_modules/playwright/index.m
 
 const root = fileURLToPath(new URL("../..", import.meta.url));
 const out = `${root}design/applied/`;
-const SITE = "https://soothia.heylana.workers.dev";
+const SITE = "https://soothia.fun";
 const p2pId = process.argv[2];
 const browser = await chromium.launch();
 

@@ -4,6 +4,13 @@ main = "worker.js"
 compatibility_date = "2025-10-01"
 workers_dev = true
 
+# soothia.fun is the public address; the workers.dev URL keeps serving old links.
+# Workers Custom Domains: Cloudflare creates the DNS records and certificates itself.
+routes = [
+  { pattern = "soothia.fun", custom_domain = true },
+  { pattern = "www.soothia.fun", custom_domain = true },
+]
+
 [assets]
 directory = "./"
 binding = "ASSETS"

@@ -55,7 +55,7 @@ const mocks = {
     authority: { name: "CoinGecko", url: "https://www.coingecko.com/en/coins/bitcoin" },
     resolutionRule: "YES if this happens by 2026-12-31 23:59 UTC, per CoinGecko's BTC/USD price. Otherwise NO. Touching the level at any time before the deadline counts.",
     sourcesOfTruth: ["https://www.coingecko.com/en/coins/bitcoin", "https://x.com/mwatch/status/1"],
-    imageUrl: "https://soothia-proxy.heylana.workers.dev/img/crypto.png", endTime: "2026-12-31T23:59:59Z", resolutionTime: "2027-01-01T00:59:59Z",
+    imageUrl: "https://api.soothia.fun/img/crypto.png", endTime: "2026-12-31T23:59:59Z", resolutionTime: "2027-01-01T00:59:59Z",
   },
   "/create/build": { txBase64, bytes: 1051, recentBlockhash: "x", lastValidBlockHeight: 1, txExpiresAt: soon, quote: null },
   "/create/simulate": { ok: true, err: null, reason: null, logLine: null, logs: [], unitsConsumed: 48210 },

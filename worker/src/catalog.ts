@@ -80,7 +80,7 @@ const MAX_PAGES = 10;
 const PACE_MS = 400;
 const DETAILS_PER_REQUEST = 8;
 const DETAILS_PER_SWEEP = 40;
-const SITE_URL = "https://soothia.heylana.workers.dev";
+const SITE_URL = "https://soothia.fun";
 const CATEGORY_IMAGES = new Set(["crypto", "entertainment", "finance", "other", "politics", "science", "sports", "world"]);
 
 const round1 = (value: number): number => Math.round(value * 10) / 10;
@@ -268,7 +268,7 @@ export async function getCatalog(env: Env, imageOrigin: string, ctx?: ExecutionC
 
 /** Cron: refresh the catalog with a larger detail budget, so blank titles fill in over time. */
 export async function warmCatalog(env: Env): Promise<void> {
-  const built = await build(env, "https://soothia-proxy.heylana.workers.dev", DETAILS_PER_SWEEP);
+  const built = await build(env, "https://api.soothia.fun", DETAILS_PER_SWEEP);
   if (built) await cachePut(CATALOG_KEY, built, 24 * 3600);
 }
 

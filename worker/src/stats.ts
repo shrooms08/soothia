@@ -82,7 +82,7 @@ async function pantaTrades(env: Env, offset: number): Promise<TradesPage | null>
   }
 }
 
-const SITE_ORIGINS = ["https://soothia.heylana.workers.dev"];
+const SITE_ORIGINS = ["https://soothia.fun", "https://www.soothia.fun", "https://soothia.heylana.workers.dev"];
 
 export function publicCors(request: Request): Record<string, string> {
   const origin = request.headers.get("Origin") ?? "";

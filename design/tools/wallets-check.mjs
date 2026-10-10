@@ -16,7 +16,7 @@ import { ed25519 } from "../../worker/node_modules/@noble/curves/ed25519.js";
 const root = fileURLToPath(new URL("../..", import.meta.url));
 const out = `${root}design/applied/`;
 const MARKET = "CLQqZ7r6WYC5xNumWrmC7UAkQ1Z6pdCbjJSy7wQu1DgL";
-const SITE = "https://soothia.heylana.workers.dev";
+const SITE = "https://soothia.fun";
 const SHARE = `${SITE}/m/${MARKET}`;
 let failures = 0;
 const check = (name, ok, detail = "") => { console.log(`${ok ? "ok " : "FAIL"} ${name}${detail ? ` (${String(detail).slice(0, 160)})` : ""}`); if (!ok) failures++; };

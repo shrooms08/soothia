@@ -2,8 +2,8 @@
 // that need code: /actions.json (Solana Actions mapping for bet links) and
 // /m/<marketId> (a share page rendered server-side so X and other crawlers
 // see the market's Open Graph tags). Market data comes from soothia-proxy.
-const PROXY = "https://soothia-proxy.heylana.workers.dev";
-const SITE = "https://soothia.heylana.workers.dev";
+const PROXY = "https://api.soothia.fun";
+const SITE = "https://soothia.fun";
 const MARKET_PATH = /^\/m\/([1-9A-HJ-NP-Za-km-z]{32,44})\/?$/;
 const CACHE_SECONDS = 60;
 // Bumped on every release so the edge never serves a stale script with a new page.
@@ -22,6 +22,10 @@ const ACTION_HEADERS = {
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
+    // www goes to the bare domain, same path and query.
+    if (url.hostname === "www.soothia.fun") {
+      return Response.redirect(`${SITE}${url.pathname}${url.search}`, 301);
+    }
     if (url.pathname === "/actions.json") {
       if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: ACTION_HEADERS });
       const rules = { rules: [{ pathPattern: "/m/*", apiPath: `${PROXY}/api/actions/market/*` }] };

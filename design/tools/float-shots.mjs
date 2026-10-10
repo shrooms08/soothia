@@ -4,7 +4,7 @@
 import { fileURLToPath } from "node:url";
 import { chromium } from "../../scripts/node_modules/playwright/index.mjs";
 const out = fileURLToPath(new URL("../applied/", import.meta.url));
-const SITE = "https://soothia.heylana.workers.dev";
+const SITE = "https://soothia.fun";
 const browser = await chromium.launch();
 const page = await browser.newPage({ viewport: { width: 1440, height: 900 }, deviceScaleFactor: 2 });
 await page.goto(`${SITE}/?v=${Date.now()}`, { waitUntil: "networkidle" });

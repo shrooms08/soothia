@@ -266,7 +266,7 @@ Verification is "fail-closed (transaction presence and success, program, account
 
 **LIVE:** the transient quote failure (`unexpected create quote failure — check server logs`) showed up on roughly one quote in three during the P2 build and cleared within a few seconds each time. Soothia's Worker retries twice (after 1.5s and 4s).
 
-**LIVE:** Panta's quote accepted an `imageUrl` hosted on the Soothia Worker (`https://soothia-proxy.heylana.workers.dev/img/crypto.png`). The Cloudinary upload flow was not needed.
+**LIVE:** Panta's quote accepted an `imageUrl` hosted on the Soothia Worker (`https://soothia-proxy.heylana.workers.dev/img/crypto.png`; that URL stays live for the registered market, new markets use `https://api.soothia.fun/img/<category>.png`). The Cloudinary upload flow was not needed.
 
 **UNCLEAR:** the required commitment for register (`confirmed` or `finalized`).
 

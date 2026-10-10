@@ -15,9 +15,10 @@ Soothia is a Chrome MV3 extension (floating orb on every page) backed by a Cloud
 
 ## Layout
 
-- `extension/`: MV3 extension, TypeScript, Vite. Build output in `extension/dist`. `WORKER_URL` is the single constant in `extension/src/config.ts`.
-- `worker/`: Cloudflare Worker `soothia-proxy`, TypeScript, Wrangler.
+- `extension/`: MV3 extension, TypeScript, Vite. Build output in `extension/dist`. `WORKER_URL` (https://api.soothia.fun) and `SITE_URL` (https://soothia.fun) are the constants in `extension/src/config.ts`.
+- `worker/`: Cloudflare Worker `soothia-proxy`, TypeScript, Wrangler. Served at https://api.soothia.fun (custom domain) and the original https://soothia-proxy.heylana.workers.dev; both stay live.
 - `scripts/`: Node + TypeScript scripts run with `tsx`.
+- `site/`: the landing site Worker `soothia`, served at https://soothia.fun (www redirects there) and https://soothia.heylana.workers.dev. Never rename the heylana workers.dev subdomain.
 - `docs/`: generated reports such as `catalog-check.md`.
 
 ## Panta notes (from the docs)

@@ -13,6 +13,7 @@ function allowedOrigin(request: Request): string | null {
   if (!origin) return null;
   if (origin.startsWith("chrome-extension://")) return origin;
   if (origin === "http://localhost" || origin.startsWith("http://localhost:")) return origin;
+  if (origin === "https://soothia.fun" || origin === "https://www.soothia.fun" || origin === "https://soothia.heylana.workers.dev") return origin;
   return null;
 }
 

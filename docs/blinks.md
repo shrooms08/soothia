@@ -4,11 +4,11 @@ Read on 2026-10-10 from solana.com/docs/advanced/actions, the `@solana/actions` 
 
 ## What a bet link is
 
-`https://soothia.heylana.workers.dev/m/<marketId>` is a share page for one Panta market. For a person it shows the question, the live odds, "Bet YES" and "Bet NO" (which open dial.to with the action URL), "View on Panta" and "Get Soothia". For X and other crawlers it carries per-market Open Graph and Twitter card tags, so the link unfurls as a card even where Blinks are not rendered. For a Blink client (a wallet extension, dial.to, or a site with Dialect's client) the site's `/actions.json` maps `/m/*` to the Action API on the proxy, which turns the page into an interactive bet card.
+`https://soothia.fun/m/<marketId>` is a share page for one Panta market. For a person it shows the question, the live odds, "Bet YES" and "Bet NO" (which open dial.to with the action URL), "View on Panta" and "Get Soothia". For X and other crawlers it carries per-market Open Graph and Twitter card tags, so the link unfurls as a card even where Blinks are not rendered. For a Blink client (a wallet extension, dial.to, or a site with Dialect's client) the site's `/actions.json` maps `/m/*` to the Action API on the proxy, which turns the page into an interactive bet card.
 
 ## The Action API (proxy, `worker/src/actions.ts`)
 
-Base: `https://soothia-proxy.heylana.workers.dev/api/actions/market/<marketId>`.
+Base: `https://api.soothia.fun/api/actions/market/<marketId>`.
 
 ### Headers on every response (and on `OPTIONS` and `actions.json`)
 
@@ -31,7 +31,7 @@ From `ACTIONS_CORS_HEADERS` in `@solana/actions`, plus the two version headers D
 ```json
 {
   "type": "action",
-  "icon": "https://soothia-proxy.heylana.workers.dev/img/<category>.png",
+  "icon": "https://api.soothia.fun/img/<category>.png",
   "title": "<market question>",
   "description": "YES 50% · NO 50% · Breaking market on Panta. Made with Soothia.",
   "label": "Bet",
@@ -89,10 +89,10 @@ If a client does not support chaining it stops after sending: the bet is on-chai
 
 ### `actions.json`
 
-At the site root, `https://soothia.heylana.workers.dev/actions.json`, with the CORS headers above:
+At the site root, `https://soothia.fun/actions.json`, with the CORS headers above:
 
 ```json
-{ "rules": [ { "pathPattern": "/m/*", "apiPath": "https://soothia-proxy.heylana.workers.dev/api/actions/market/*" } ] }
+{ "rules": [ { "pathPattern": "/m/*", "apiPath": "https://api.soothia.fun/api/actions/market/*" } ] }
 ```
 
 A cross-host `apiPath` is what Jupiter does (`jup.ag/actions.json` → `worker.jup.ag`). The proxy also serves its own `/actions.json` mapping `/api/actions/**` to itself.

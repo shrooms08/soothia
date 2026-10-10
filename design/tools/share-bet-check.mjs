@@ -8,7 +8,7 @@ import { chromium, devices } from "../../scripts/node_modules/playwright/index.m
 import { Keypair, VersionedTransaction } from "../../worker/node_modules/@solana/web3.js/lib/index.cjs.js";
 
 const MARKET = "CLQqZ7r6WYC5xNumWrmC7UAkQ1Z6pdCbjJSy7wQu1DgL";
-const SITE = "https://soothia.heylana.workers.dev";
+const SITE = "https://soothia.fun";
 const URL_ = `${SITE}/m/${MARKET}`;
 const out = fileURLToPath(new URL("../applied/", import.meta.url));
 const keypair = Keypair.generate();
@@ -41,7 +41,7 @@ const browser = await chromium.launch();
     };
   }, PUBKEY);
   const requests = [];
-  page.on("request", (r) => { if (r.url().includes("soothia-proxy")) requests.push(`${r.method()} ${r.url().replace("https://soothia-proxy.heylana.workers.dev", "")}`); });
+  page.on("request", (r) => { if (/api\.soothia\.fun|soothia-proxy/.test(r.url())) requests.push(`${r.method()} ${r.url().replace(/^https:\/\/(api\.soothia\.fun|soothia-proxy\.heylana\.workers\.dev)/, "")}`); });
   await page.goto(URL_, { waitUntil: "networkidle" });
   await page.waitForTimeout(800);
   const quote = page.locator("#quote");

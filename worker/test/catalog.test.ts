@@ -30,7 +30,7 @@ test("a row is normalized with one-decimal odds, volume, images and Soothia attr
   assert.equal(item.createdBySoothia, true);
   assert.equal(item.imageUrl, `${ORIGIN}/img/crypto.png`);
   assert.equal(item.pantaUrl, `https://www.panta.market/market/${row.marketId}`);
-  assert.equal(item.soothiaUrl, `https://soothia.heylana.workers.dev/m/${row.marketId}`);
+  assert.equal(item.soothiaUrl, `https://soothia.fun/m/${row.marketId}`);
   const withImage = normalizeRow({ ...row, category: "pop-culture", images: ["https://res.cloudinary.com/x/y.webp"] }, null, new Set(), ORIGIN)!;
   assert.equal(withImage.imageUrl, "https://res.cloudinary.com/x/y.webp");
   assert.equal(withImage.createdBySoothia, false);
