@@ -272,36 +272,57 @@ chrome.runtime.onInstalled.addListener((details) => {
   if (details.reason === "install") openWelcome().catch(() => {});
 });
 
+// Nothing in the service worker may surface in chrome://extensions: every
+// handler answers with a failure value instead of throwing, and stray
+// rejections (a closed tab, a reloaded extension, a lost message port) are
+// swallowed here.
+self.addEventListener("unhandledrejection", (event) => event.preventDefault());
+self.addEventListener("error", (event) => event.preventDefault());
+
+const respondSafely = (work: Promise<unknown>, sendResponse: (value: unknown) => void, fallback: unknown): void => {
+  work.then(
+    (value) => { try { sendResponse(value); } catch { /* port closed */ } },
+    () => { try { sendResponse(fallback); } catch { /* port closed */ } },
+  );
+};
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  try {
+    return handleMessage(message, sender, sendResponse);
+  } catch {
+    try { sendResponse(undefined); } catch { /* port closed */ }
+    return false;
+  }
+});
+
+function handleMessage(message: { type?: string; category?: string; action?: string } | undefined, sender: chrome.runtime.MessageSender, sendResponse: (value: unknown) => void): boolean | undefined {
   switch (message?.type) {
     case HEALTH_REQUEST:
-      checkHealth().then(sendResponse);
+      respondSafely(checkHealth(), sendResponse, { online: false });
       return true; // keep the channel open for the async response
     case DETECT_REQUEST:
-      detectOnce((message as DetectRequestMessage).page, (message as DetectRequestMessage).refresh === true).then(
-        sendResponse,
-        () => sendResponse(FAILED),
-      );
+      respondSafely(detectOnce((message as DetectRequestMessage).page, (message as DetectRequestMessage).refresh === true), sendResponse, FAILED);
       return true;
     case API_REQUEST:
-      relay(message as ApiRequestMessage).then(sendResponse);
+      respondSafely(relay(message as ApiRequestMessage), sendResponse, { ok: false, status: 0, body: null });
       return true;
     case IMAGE_REQUEST:
-      categoryImage(message.category).then(sendResponse);
+      respondSafely(categoryImage(message.category ?? ""), sendResponse, null);
       return true;
     case INJECT_SIGNER:
-      injectSigner(sender.tab?.id).then(sendResponse);
+      respondSafely(injectSigner(sender.tab?.id), sendResponse, false);
       return true;
     case OPEN_WELCOME:
-      openWelcome().then(() => sendResponse(true), () => sendResponse(false));
+      respondSafely(openWelcome().then(() => true), sendResponse, false);
       return true;
     case MUSIC_CONTROL:
       // The welcome page asks the background to make sure the player exists.
       if (message.action === "ensure") {
         if (sender.tab?.id !== undefined) welcomeTabs.add(sender.tab.id);
-        startMusic().then(sendResponse);
+        respondSafely(startMusic(), sendResponse, { playing: false, muted: false, error: "background failed" });
         return true;
       }
-      return; // Other actions are answered by the offscreen document itself.
+      return undefined; // Other actions are answered by the offscreen document itself.
   }
-});
+  return undefined;
+}

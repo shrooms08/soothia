@@ -46,6 +46,7 @@ import { readPage, type ReadInfo } from "./reader";
 import { openBetSheet } from "./bet-sheet";
 import { openSheet, type CreateDebug, type PendingCreate, type Sheet } from "./sheet";
 import { checkSignedTransaction } from "./tx-check";
+import { guarded, installGuards, isContextDead, safe } from "./guard";
 import { earningsView, money } from "./earnings";
 import { wallet } from "./wallet-client";
 import {
@@ -72,12 +73,14 @@ const STYLE_KEY = "soothia:sfxStyle";
 const BUBBLE_KEY = "soothia:bubbleShown";
 const BUBBLE_DELAY_MS = 1500;
 
-// Detection runs this long after the page (or a new URL) settles.
-const SETTLE_MS = 2000;
-// X and other dynamic pages render after load: look again up to five times
-// over about four seconds before deciding there is nothing to read.
-const THIN_RETRY_MS = 800;
-const THIN_RETRIES = 5;
+// Detection starts this long after DOMContentLoaded (or a new URL).
+const SETTLE_MS = 600;
+// When the page has too little text yet (a consent wall, a late-rendering
+// article, a tweet still loading), its DOM is watched for up to this long and
+// the read is retried as it fills in.
+const THIN_WATCH_MS = 8000;
+const THIN_DEBOUNCE_MS = 400;
+const THIN_RETRIES = 1;
 // The thinking ring stays at least this long so it never just flickers.
 const MIN_THINKING_MS = 600;
 
@@ -89,7 +92,7 @@ type View =
   | { kind: "tiles"; tiles: Tile[] }
   | { kind: "empty" }
   | { kind: "skipped" }
-  | { kind: "error"; reason: "limit" | "unavailable" };
+  | { kind: "error"; reason: "limit" | "unavailable" | "updated" };
 
 // Everything the debug footer shows about the last scan of this URL.
 interface ScanDebug {
@@ -471,7 +474,7 @@ async function mount(): Promise<void> {
     );
   }
 
-  window.addEventListener("message", (event) => {
+  window.addEventListener("message", guarded("wallet status", (event: MessageEvent) => {
     // Only accept messages this same window posted to itself, with our type.
     if (event.source !== window || event.origin !== window.location.origin) return;
     const data: unknown = event.data;
@@ -480,7 +483,7 @@ async function mount(): Promise<void> {
     if (type !== WALLET_STATUS || !Array.isArray(wallets)) return;
     detectedWallets = wallets as WalletInfo[];
     renderWalletRow();
-  });
+  }));
 
   // Picker, then connect. Resolves with the outcome, or null when dismissed.
   async function chooseAndConnect(container: HTMLElement): Promise<WalletRpcOutcome | null> {
@@ -935,6 +938,8 @@ async function mount(): Promise<void> {
         sound("softError");
         if (view.reason === "limit") {
           body.replaceChildren(stateBlock("error", "That's all my calls for today. I'll be back tomorrow."));
+        } else if (view.reason === "updated") {
+          body.replaceChildren(stateBlock("error", "Soothia was updated. Reload this tab to keep going."));
         } else {
           body.replaceChildren(stateBlock("error", "I couldn't read this one just now.", rescanButton()));
         }
@@ -949,6 +954,7 @@ async function mount(): Promise<void> {
 
   function renderDebug(): void {
     const rows: [string, string][] = [
+      ["version", extensionVersion()],
       ["site", scan.read?.site ?? location.hostname.replace(/^www\./, "")],
       ["extracted", scan.read ? `${scan.read.chars} chars` : "\u2013"],
       ["text", scan.read?.preview || "\u2013"],
@@ -956,6 +962,7 @@ async function mount(): Promise<void> {
     ];
     const audio = getAudioState();
     rows.push(["audio", `${audio.muted ? "muted" : audio.context} \u00b7 ${audio.last}`]);
+    for (const issue of issues) rows.push(["issue", issue]);
     const detect = scan.detect;
     if (detect) {
       const worker = detect.cache ?? "\u2013";
@@ -977,6 +984,40 @@ async function mount(): Promise<void> {
   function setScan(update: Partial<ScanDebug>): void {
     scan = { ...scan, ...update };
     renderDebug();
+    emitScanEvent();
+  }
+
+  // Caught problems go here, never to the console or chrome://extensions.
+  const issues: string[] = [];
+  function logIssue(text: string): void {
+    issues.push(`${new Date().toISOString().slice(11, 19)} ${text}`);
+    if (issues.length > 3) issues.shift();
+    renderDebug();
+  }
+  installGuards(logIssue);
+
+  function extensionVersion(): string {
+    try {
+      return chrome.runtime.getManifest().version;
+    } catch {
+      return "unknown";
+    }
+  }
+
+  // Harness only: when chrome.storage.local has soothia:devEvents, scan progress is posted to
+  // the page so a headless test can time it. Off for everyone else.
+  let devEvents = false;
+  const scanStarted = Date.now();
+  function emitScanEvent(extra: Record<string, unknown> = {}): void {
+    if (!devEvents) return;
+    try {
+      window.postMessage(
+        { type: "soothia:v1:scan", state: scan.state, chars: scan.read?.chars ?? 0, site: scan.read?.site ?? "", elapsedMs: Date.now() - scanStarted, issues: [...issues], ...extra },
+        "*",
+      );
+    } catch {
+      // Not important.
+    }
   }
   onAudioState(() => renderDebug());
 
@@ -1033,7 +1074,8 @@ async function mount(): Promise<void> {
   async function loadSettings(): Promise<void> {
     dryRunToggle.box.checked = true;
     try {
-      const stored = await chrome.storage.local.get([DRY_RUN_KEY, SKIP_CHECKS_KEY, MUTED_KEY, STYLE_KEY]);
+      const stored = await chrome.storage.local.get([DRY_RUN_KEY, SKIP_CHECKS_KEY, MUTED_KEY, STYLE_KEY, "soothia:devEvents"]);
+      devEvents = stored["soothia:devEvents"] === true;
       dryRunToggle.box.checked = stored[DRY_RUN_KEY] !== false;
       skipChecksToggle.box.checked = stored[SKIP_CHECKS_KEY] === true;
       // Sound is on unless it was muted; the fresh-install default is on.
@@ -1062,25 +1104,85 @@ async function mount(): Promise<void> {
   let watchedUrl = currentUrl();
   let detectTimer: ReturnType<typeof setTimeout> | undefined;
 
-  async function runDetect(url: string, retriesLeft: number, refresh: boolean): Promise<void> {
+  let thinObserver: MutationObserver | null = null;
+  let thinTimer: ReturnType<typeof setTimeout> | undefined;
+  let thinDeadline: ReturnType<typeof setTimeout> | undefined;
+
+  function stopWatchingForText(): void {
+    thinObserver?.disconnect();
+    thinObserver = null;
+    clearTimeout(thinTimer);
+    clearTimeout(thinDeadline);
+  }
+
+  // Too little text yet: watch the page fill in (consent wall gone, article rendered) for up to
+  // THIN_WATCH_MS and read again as soon as it changes; then give up with "Not enough to read".
+  function watchForText(url: string, reason: string, refresh: boolean): void {
+    stopWatchingForText();
+    setScan({ state: `waiting for text (${reason})` });
+    render({ kind: "thinking" });
+    const finish = (): void => {
+      stopWatchingForText();
+      void safe("detect", () => runDetect(url, 0, refresh, true));
+    };
+    // On each burst of DOM changes, peek: enough text (or a page we never read) ends the wait early.
+    const peek = (): void => {
+      if (url !== watchedUrl) return stopWatchingForText();
+      const look = safe("read page", readPage);
+      if (!look || look.kind === "thin") {
+        if (look) setScan({ state: `waiting for text (${look.reason})` });
+        return;
+      }
+      finish();
+    };
+    try {
+      thinObserver = new MutationObserver(
+        guarded("observer", () => {
+          clearTimeout(thinTimer);
+          thinTimer = setTimeout(peek, THIN_DEBOUNCE_MS);
+        }),
+      );
+      thinObserver.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+    } catch {
+      thinObserver = null;
+    }
+    thinDeadline = setTimeout(finish, THIN_WATCH_MS);
+  }
+
+  async function runDetect(url: string, retriesLeft: number, refresh: boolean, lastLook = false): Promise<void> {
     // The reader left for another URL while this one was waiting.
     if (url !== watchedUrl) return;
+    if (isContextDead()) {
+      render({ kind: "error", reason: "updated" });
+      return;
+    }
+    render({ kind: "thinking" });
 
-    const read = readPage();
-    if (read.kind === "thin" && retriesLeft > 0) {
-      const attempt = THIN_RETRIES - retriesLeft + 1;
-      setScan({ read: read.info, state: `waiting for text, try ${attempt} of ${THIN_RETRIES} (${read.reason})` });
-      detectTimer = setTimeout(() => void runDetect(url, retriesLeft - 1, refresh), THIN_RETRY_MS);
+    const read = safe("read page", readPage);
+    if (!read) {
+      setScan({ state: "error (could not read the page)", detect: null });
+      render({ kind: "error", reason: "unavailable" });
+      return;
+    }
+    if (read.kind === "thin" && !lastLook && retriesLeft > 0) {
+      // A quick second look after a moment is usually enough for X; otherwise watch the DOM.
+      setScan({ read: read.info });
+      watchForText(url, read.reason, refresh);
+      return;
+    }
+    if (read.kind === "thin" && !lastLook) {
+      // Still thin on a scan-again: watch once more, briefly.
+      watchForText(url, read.reason, refresh);
       return;
     }
     if (read.kind !== "page") {
       setScan({ read: read.info, state: `skipped (${read.reason})`, detect: null });
       render({ kind: "skipped" });
+      emitScanEvent({ done: "skipped" });
       return;
     }
 
     setScan({ read: read.info, state: refresh ? "running (scan again)" : "running", detect: null });
-    render({ kind: "thinking" });
     const started = Date.now();
     let result: DetectResult | undefined;
     let relayError = "";
@@ -1088,8 +1190,8 @@ async function mount(): Promise<void> {
       const message: DetectRequestMessage = { type: DETECT_REQUEST, page: read.page, refresh };
       result = (await chrome.runtime.sendMessage(message)) as DetectResult | undefined;
       if (!result) relayError = "background gave no answer";
-    } catch {
-      relayError = "background unreachable; reload this tab";
+    } catch (error) {
+      relayError = /context invalidated/i.test(String((error as Error)?.message)) ? "extension updated; reload this tab" : "background unreachable; reload this tab";
     }
     const remaining = MIN_THINKING_MS - (Date.now() - started);
     if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining));
@@ -1097,29 +1199,34 @@ async function mount(): Promise<void> {
 
     if (!result) {
       setScan({ state: `error (${relayError})`, detect: null });
-      render({ kind: "error", reason: "unavailable" });
+      render({ kind: "error", reason: isContextDead() ? "updated" : "unavailable" });
+      emitScanEvent({ done: "error" });
     } else if (result.status === "error") {
       setScan({ state: `error (${result.reason})`, detect: result.debug });
       render({ kind: "error", reason: result.reason });
+      emitScanEvent({ done: "error" });
     } else {
       setScan({ state: "done", detect: result.debug });
       if (result.tiles.length === 0) render({ kind: "empty" });
       else render({ kind: "tiles", tiles: result.tiles.slice(0, 3) });
+      emitScanEvent({ done: "ok", tiles: result.tiles.slice(0, 3).map((tile) => tile.claim.question), cached: result.debug.fromClientCache });
     }
   }
 
   // "Scan again": runs now, past the 10-minute rule and the Worker's URL cache.
   function rescan(): void {
     clearTimeout(detectTimer);
-    void runDetect(watchedUrl, THIN_RETRIES, true);
+    stopWatchingForText();
+    void safe("detect", () => runDetect(watchedUrl, THIN_RETRIES, true));
   }
   scanAgain.addEventListener("click", rescan);
 
   // Debounced: a burst of URL changes ends in one detection for the last URL.
   function scheduleDetect(): void {
     clearTimeout(detectTimer);
+    stopWatchingForText();
     const url = watchedUrl;
-    detectTimer = setTimeout(() => void runDetect(url, THIN_RETRIES, false), SETTLE_MS);
+    detectTimer = setTimeout(() => void safe("detect", () => runDetect(url, THIN_RETRIES, false)), SETTLE_MS);
   }
 
   function onUrlMaybeChanged(): void {
@@ -1291,16 +1398,21 @@ async function mount(): Promise<void> {
   setTimeout(applyTheme, 1500);
   renderDebug();
   setCreateDebug({});
-  await loadSettings();
-  void resumePending();
-  void loadCreatorMarkets();
-  void maybeShowBubble();
+  await safe("settings", loadSettings);
+  void safe("resume", resumePending);
+  void safe("creator markets", loadCreatorMarkets);
+  void safe("bubble", maybeShowBubble);
   render({ kind: "watching" });
   document.documentElement.append(host);
 
-  if (document.readyState === "complete") scheduleDetect();
-  else window.addEventListener("load", scheduleDetect, { once: true });
+  // Read as soon as the DOM is there (plus a short settle), not after every image has loaded.
+  if (document.readyState !== "loading") scheduleDetect();
+  else document.addEventListener("DOMContentLoaded", guarded("start", scheduleDetect), { once: true });
 }
 
-// Top-level pages only: no orb inside iframes.
-if (window.top === window) void mount();
+// Top-level pages only: no orb inside iframes. Nothing here may throw out to the page.
+if (window.top === window) {
+  mount().catch(() => {
+    // Could not mount at all (very unusual page); stay silent rather than surface an error.
+  });
+}

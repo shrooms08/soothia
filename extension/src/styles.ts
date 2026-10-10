@@ -1105,6 +1105,7 @@ a { color: var(--sth-link); }
 .sky { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
 .sky-star { position: absolute; opacity: var(--rest, .4); animation: skyTwinkle 4.5s ease-in-out infinite; }
 .star { display: block; width: 100%; height: 100%; overflow: visible; }
+.version { position: fixed; left: 0; right: 0; bottom: 14px; margin: 0; text-align: center; color: var(--sth-text-3); font: 400 12px/1 var(--mono); letter-spacing: .04em; pointer-events: none; }
 .welcome { position: relative; z-index: 1; width: min(560px, 100% - 32px); padding: 40px 0 56px; text-align: center; }
 @keyframes floatY { 0%, 100% { transform: translateY(5px); } 50% { transform: translateY(-5px); } }
 @keyframes floatGlow { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }

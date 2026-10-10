@@ -119,6 +119,14 @@ document.getElementById("pin-link")?.addEventListener("click", (event) => {
   if (how) how.hidden = !how.hidden;
 });
 
+// The version, so a tester can tell which build this is.
+try {
+  const version = document.getElementById("version");
+  if (version) version.textContent = `Soothia ${chrome.runtime.getManifest().version}`;
+} catch {
+  // Not inside the extension (harness preview).
+}
+
 // Night sky in the side gutters.
 const sky = document.getElementById("sky");
 if (sky) {

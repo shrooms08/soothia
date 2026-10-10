@@ -18,4 +18,11 @@ await cp(join(root, "extension", "dist"), join(staging, "soothia"), { recursive:
 await rm(out, { force: true });
 execFileSync("zip", ["-qr", "-X", out, "soothia"], { cwd: staging });
 await rm(staging, { recursive: true, force: true });
-console.log(`site/soothia-extension.zip (Soothia ${manifest.version})`);
+
+// The zip must carry the version in extension/public/manifest.json, or the site ships a stale build.
+const source = JSON.parse(await readFile(join(root, "extension", "public", "manifest.json"), "utf8"));
+const zipped = JSON.parse(execFileSync("unzip", ["-p", out, "soothia/manifest.json"], { encoding: "utf8" }));
+if (zipped.version !== source.version || manifest.version !== source.version) {
+  throw new Error(`zip has ${zipped.version}, dist has ${manifest.version}, source has ${source.version}`);
+}
+console.log(`site/soothia-extension.zip (Soothia ${zipped.version}, verified)`);
