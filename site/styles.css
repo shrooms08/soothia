@@ -83,6 +83,10 @@ main, .footer { position: relative; z-index: 1; }
 
 h1 { margin: 0 0 20px; font: 400 clamp(38px, 6.4vw, 64px)/1.1 var(--serif); letter-spacing: -.01em; text-wrap: pretty; }
 .underline { background: linear-gradient(90deg, var(--sth-orb-edge), var(--sth-orb-mid)) no-repeat 0 92% / 0% 3px; transition: background-size .9s var(--ease); }
+/* The line under the headline, in the same serif, between the headline and the supporting paragraph. */
+.hero-tagline { margin: -4px 0 26px; color: var(--sth-text); font: 400 clamp(20px, 2.6vw, 26px)/1.3 var(--serif); letter-spacing: -.005em; }
+/* Keep "into a market" on one line so the headline breaks after "take", not inside the underline. */
+h1 .underline { white-space: nowrap; }
 .hero.read .underline { background-size: 100% 3px; }
 .sub { margin: 0 auto 28px; max-width: 620px; color: var(--sth-text-2); font-size: 18px; text-wrap: pretty; }
 .cta { display: flex; justify-content: center; flex-wrap: wrap; gap: 10px; }
@@ -183,6 +187,7 @@ h3 { margin: 18px 0 6px; font: 500 20px/1.3 var(--serif); }
   .hero { padding: 36px 16px 56px; }
   /* Room for the found stars above the orb, clear of the nav. */
   .hero-orb-wrap { padding-top: 56px; }
+  .hero-tagline { margin-bottom: 16px; }
   .section { padding: 40px 16px; }
   .footer { padding: 32px 16px 48px; }
   .maker-art, .maker-art img { height: 160px; }
