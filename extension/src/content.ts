@@ -2,7 +2,18 @@
 // shadow root. Nothing here touches the page's own DOM or styles.
 import { button, el, endDate, externalLink, icon, starSvg } from "./dom";
 import { loadFonts } from "./fonts";
-import { armSounds, isMuted, playSound, setMuted, type SoundName } from "./sfx";
+import {
+  armSounds,
+  getAudioState,
+  isMuted,
+  onAudioState,
+  playSound,
+  setMuted,
+  setStyle,
+  SYNTH_STYLES,
+  type SfxStyle,
+  type SoundName,
+} from "./sfx";
 import {
   API_REQUEST,
   DETECT_REQUEST,
@@ -50,6 +61,7 @@ const SKIP_CHECKS_KEY = "soothia:skipChecks";
 // A sent transaction whose market has not been seen registered yet.
 const PENDING_KEY = "soothia:pendingCreate";
 const MUTED_KEY = "soothia:muted";
+const STYLE_KEY = "soothia:sfxStyle";
 // Set once the first-run speech bubble has been dismissed.
 const BUBBLE_KEY = "soothia:bubbleShown";
 const BUBBLE_DELAY_MS = 1500;
@@ -336,7 +348,7 @@ async function mount(): Promise<void> {
     playSound(name);
   }
   armSounds(shadow);
-  armSounds(document);
+  armSounds(window);
   card.append(head, tabs, body, betsPane, debug);
 
   // Typing in the sheet must not trigger the page's keyboard shortcuts (X
@@ -819,6 +831,8 @@ async function mount(): Promise<void> {
       ["text", scan.read?.preview || "\u2013"],
       ["detect", scan.state],
     ];
+    const audio = getAudioState();
+    rows.push(["audio", `${audio.muted ? "muted" : audio.context} \u00b7 ${audio.last}`]);
     const detect = scan.detect;
     if (detect) {
       const worker = detect.cache ?? "\u2013";
@@ -841,6 +855,7 @@ async function mount(): Promise<void> {
     scan = { ...scan, ...update };
     renderDebug();
   }
+  onAudioState(() => renderDebug());
 
   let createDebug: CreateDebug = { wallet: "\u2013", quote: "\u2013", simulate: "\u2013", signature: "\u2013", register: "\u2013" };
 
@@ -895,10 +910,13 @@ async function mount(): Promise<void> {
   async function loadSettings(): Promise<void> {
     dryRunToggle.box.checked = true;
     try {
-      const stored = await chrome.storage.local.get([DRY_RUN_KEY, SKIP_CHECKS_KEY, MUTED_KEY]);
+      const stored = await chrome.storage.local.get([DRY_RUN_KEY, SKIP_CHECKS_KEY, MUTED_KEY, STYLE_KEY]);
       dryRunToggle.box.checked = stored[DRY_RUN_KEY] !== false;
       skipChecksToggle.box.checked = stored[SKIP_CHECKS_KEY] === true;
+      // Sound is on unless it was muted; the fresh-install default is on.
       setMuted(stored[MUTED_KEY] === true);
+      const saved = stored[STYLE_KEY];
+      if (typeof saved === "string" && [...SYNTH_STYLES, "files"].includes(saved)) setStyle(saved as SfxStyle);
     } catch {
       // Storage unavailable: stay in dry run.
     }

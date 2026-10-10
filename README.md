@@ -66,3 +66,12 @@ npm run catalog-check
 ```
 
 It pages through every Panta market, prints a summary (totals, counts by phase and category, how many are tradable, 15 sample markets with YES prices), and writes it to `docs/catalog-check.md`.
+
+## Sounds and music
+
+The extension's sound effects are synthesized with the Web Audio API (`extension/src/sfx.ts`): bell tones from inharmonic partials, pentatonic notes, a generated reverb. Three styles ship (`musicbox`, `celesta`, `chimes`); the chosen one is stored in `chrome.storage.local` under `soothia:sfxStyle`, and mute under `soothia:muted`. Audition them at `chrome-extension://<extension id>/welcome.html?sfx=1`.
+
+To use recorded sounds instead, drop CC0 files named `found`, `open`, `marketLive`, `betPlaced` and `softError` (`.mp3` or `.wav`) into `extension/public/sfx/` and rebuild. A fourth style, `files`, then appears on the sound-check page. Missing files fall back to the celesta synth.
+
+Music: Medieval Music – Cobblestone Village (source and license to be confirmed; see `extension/public/music/LICENSE-music.txt`). It plays only on the welcome page, never on websites.
+

@@ -14,6 +14,7 @@
   </defs>
 </svg>
 <div class="sky" id="sky" aria-hidden="true"></div>
+<button class="sound-toggle" id="sound-toggle" type="button" aria-label="Mute sound" title="Mute sound"></button>
 <main class="welcome" id="welcome">
   <div class="orb-wrap"><div class="orb"><span class="orb-body"><span class="orb-shimmer"></span></span><svg class="star orb-glint"><use href="#star"/></svg><span class="orb-stars"><svg class="star"><use href="#star"/></svg><svg class="star"><use href="#star"/></svg><svg class="star"><use href="#star"/></svg></span></div></div>
 
@@ -53,8 +54,9 @@
 
   <section class="sfx-test" id="sfx-test" hidden>
     <h2>Sound check</h2>
-    <div class="sfx-buttons" id="sfx-buttons"></div>
-    <label class="mute-row"><input type="checkbox" id="mute"> Mute sounds</label>
+    <p class="audio-state mono" id="audio-state">audio: not created</p>
+    <div class="sfx-grid" id="sfx-grid"></div>
+    <div class="sfx-row"><button class="button" id="music-toggle" type="button">Play music</button><label class="mute-row"><input type="checkbox" id="mute"> Mute sound</label></div>
   </section>
 </main>
 <script src="welcome.js"></script>

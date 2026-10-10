@@ -1,10 +1,26 @@
 // The welcome page (welcome.html): a four-step stepper shown once after
-// install, plus a sound check behind ?sfx=1 for auditioning the effects.
-import { el } from "./dom";
-import { armSounds, isMuted, playSound, setMuted, type SoundName } from "./sfx";
+// install, soft onboarding music, and a sound check behind ?sfx=1.
+import { el, icon } from "./dom";
+import { installMusicHooks, isMusicPlaying, startMusic, stopMusic } from "./music";
+import {
+  armSounds,
+  filesStyleAvailable,
+  getAudioState,
+  getStyle,
+  isMuted,
+  onAudioState,
+  playSound,
+  setMuted,
+  setStyle,
+  SOUND_NAMES,
+  SYNTH_STYLES,
+  type SfxStyle,
+} from "./sfx";
 import { WELCOME_STYLES } from "./styles";
 
 const MUTED_KEY = "soothia:muted";
+const STYLE_KEY = "soothia:sfxStyle";
+const MUSIC_URL = "music/onboarding.mp3";
 const STEPS = 4;
 const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -53,11 +69,24 @@ function go(target: number): void {
   document.getElementById("welcome")?.classList.toggle("found", step === 1 || step === 4);
 }
 
+function leave(): void {
+  stopMusic();
+}
+
 back.addEventListener("click", () => go(step - 1));
-next.addEventListener("click", () => (step === STEPS ? window.close() : go(step + 1)));
+next.addEventListener("click", () => {
+  if (step === STEPS) {
+    leave();
+    setTimeout(() => window.close(), 1300);
+  } else go(step + 1);
+});
 document.addEventListener("keydown", (event) => {
   if (event.key === "ArrowRight") go(step + 1);
   if (event.key === "ArrowLeft") go(step - 1);
+});
+document.getElementById("show-me")?.addEventListener("click", leave);
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) stopMusic();
 });
 
 document.getElementById("pin-link")?.addEventListener("click", (event) => {
@@ -80,34 +109,116 @@ if (sky) {
   }
 }
 
-// Sounds: the mute setting is shared with the in-page card.
-armSounds(document);
+// ---- Sound: shared mute and style, the speaker toggle, and the music ----
+
+armSounds(window);
+installMusicHooks();
+
+const soundToggle = document.getElementById("sound-toggle") as HTMLButtonElement | null;
+function renderToggle(): void {
+  if (!soundToggle) return;
+  const label = isMuted() ? "Unmute sound" : "Mute sound";
+  soundToggle.setAttribute("aria-label", label);
+  soundToggle.title = label;
+  soundToggle.replaceChildren(icon(isMuted() ? "muted" : "sound"));
+  const box = document.getElementById("mute") as HTMLInputElement | null;
+  if (box) box.checked = isMuted();
+}
+function saveMuted(value: boolean): void {
+  setMuted(value);
+  renderToggle();
+  chrome.storage.local.set({ [MUTED_KEY]: value }).catch(() => {});
+}
+soundToggle?.addEventListener("click", () => saveMuted(!isMuted()));
+
 chrome.storage.local
-  .get(MUTED_KEY)
+  .get([MUTED_KEY, STYLE_KEY])
   .then((stored) => {
     setMuted(stored[MUTED_KEY] === true);
-    const box = document.getElementById("mute") as HTMLInputElement | null;
-    if (box) box.checked = isMuted();
+    const saved = stored[STYLE_KEY];
+    if (typeof saved === "string" && [...SYNTH_STYLES, "files"].includes(saved)) setStyle(saved as SfxStyle);
+    renderToggle();
   })
-  .catch(() => {});
+  .catch(renderToggle);
+
+// Music starts on the first gesture, once the context is running.
+let musicWanted = true;
+function startMusicSoon(): void {
+  if (!musicWanted || isMusicPlaying()) return;
+  setTimeout(() => void startMusic(MUSIC_URL), 150);
+}
+for (const type of ["pointerdown", "keydown", "touchstart"]) {
+  window.addEventListener(type, startMusicSoon, { capture: true, passive: true });
+}
 
 // Dev-only sound check: welcome.html?sfx=1
+const devHooks = { getAudioState, isMusicPlaying, playSound, startMusic: () => startMusic(MUSIC_URL), stopMusic };
+(window as unknown as { soothiaAudio?: typeof devHooks }).soothiaAudio = devHooks;
+
 if (new URLSearchParams(location.search).get("sfx") === "1") {
   const test = document.getElementById("sfx-test");
-  const buttons = document.getElementById("sfx-buttons");
-  if (test && buttons) {
+  const grid = document.getElementById("sfx-grid");
+  const state = document.getElementById("audio-state");
+  const musicButton = document.getElementById("music-toggle") as HTMLButtonElement | null;
+  const box = document.getElementById("mute") as HTMLInputElement | null;
+  if (test && grid && state) {
     test.hidden = false;
-    for (const name of ["found", "open", "marketLive", "betPlaced", "softError"] as SoundName[]) {
-      const button = el("button", "button", name);
-      button.type = "button";
-      button.addEventListener("click", () => playSound(name));
-      buttons.append(button);
-    }
-    const box = document.getElementById("mute") as HTMLInputElement | null;
-    box?.addEventListener("change", () => {
-      setMuted(box.checked);
-      chrome.storage.local.set({ [MUTED_KEY]: box.checked }).catch(() => {});
+    const render = (): void => {
+      const audio = getAudioState();
+      state.textContent = `audio: ${audio.muted ? "muted" : audio.context} · style ${audio.style} · last ${audio.last}${isMusicPlaying() ? " · music playing" : ""}`;
+      if (musicButton) musicButton.textContent = isMusicPlaying() ? "Stop music" : "Play music";
+    };
+    onAudioState(render);
+    setInterval(render, 500);
+    render();
+
+    const buildGrid = (styles: SfxStyle[]): void => {
+      grid.replaceChildren();
+      grid.style.gridTemplateColumns = `auto repeat(${styles.length}, 1fr)`;
+      grid.append(el("span", ""));
+      for (const kind of styles) grid.append(el("span", "sfx-col mono", kind));
+      for (const name of SOUND_NAMES) {
+        grid.append(el("span", "sfx-row-name mono", name));
+        for (const kind of styles) {
+          const button = el("button", "button small", "▶");
+          button.type = "button";
+          button.setAttribute("aria-label", `${name} in ${kind}`);
+          button.addEventListener("click", () => playSound(name, kind));
+          grid.append(button);
+        }
+      }
+      grid.append(el("span", "sfx-row-name mono", "use"));
+      for (const kind of styles) {
+        const label = el("label", "sfx-use");
+        const radio = el("input", "");
+        radio.type = "radio";
+        radio.name = "sfx-style";
+        radio.value = kind;
+        radio.checked = getStyle() === kind;
+        radio.addEventListener("change", () => {
+          setStyle(kind);
+          chrome.storage.local.set({ [STYLE_KEY]: kind }).catch(() => {});
+        });
+        label.append(radio, "Use this style");
+        grid.append(label);
+      }
+    };
+    buildGrid(SYNTH_STYLES);
+    void filesStyleAvailable().then((available) => {
+      if (available) buildGrid([...SYNTH_STYLES, "files"]);
     });
+
+    musicButton?.addEventListener("click", () => {
+      if (isMusicPlaying()) {
+        musicWanted = false;
+        stopMusic();
+      } else {
+        musicWanted = true;
+        void startMusic(MUSIC_URL);
+      }
+      setTimeout(render, 100);
+    });
+    box?.addEventListener("change", () => saveMuted(box.checked));
   }
 }
 

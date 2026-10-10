@@ -1115,10 +1115,21 @@ h2 { margin: 0 0 12px; font: 400 22px/1.2 var(--serif); }
 .dots { display: flex; gap: 8px; }
 .dot { width: 8px; height: 8px; padding: 0; border: 0; border-radius: 50%; background: rgba(175,169,236,.25); cursor: pointer; }
 .dot.selected { background: var(--sth-orb-mid); box-shadow: 0 0 8px rgba(175,169,236,.7); }
+.sound-toggle { position: fixed; top: 16px; right: 16px; z-index: 2; width: 40px; height: 40px; border: 1px solid var(--sth-hairline-soft); border-radius: 12px; background: var(--sth-raised); color: var(--sth-text-2); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.sound-toggle:hover { background: var(--sth-raised-hover); color: var(--sth-text); }
+.sound-toggle svg { display: block; }
 .sfx-test { margin-top: 48px; padding-top: 24px; border-top: 1px solid var(--sth-hairline-soft); }
-.sfx-buttons { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
-.sfx-buttons .button { margin-top: 0; height: 36px; font-family: var(--mono); font-weight: 500; }
-.mute-row { display: inline-flex; align-items: center; gap: 8px; margin-top: 16px; color: var(--sth-text-2); font-size: 14px; }
+.audio-state { margin: 0 0 16px; color: var(--sth-text-3); font-size: 12px; }
+.mono { font-family: var(--mono); }
+.sfx-grid { display: grid; align-items: center; gap: 8px 10px; text-align: center; }
+.sfx-col { color: var(--sth-text-2); font-size: 12px; }
+.sfx-row-name { color: var(--sth-text-3); font-size: 12px; text-align: right; }
+.sfx-grid .button.small { height: 34px; margin: 0; padding: 0; font-size: 12px; }
+.sfx-use { display: inline-flex; align-items: center; justify-content: center; gap: 6px; color: var(--sth-text-2); font-size: 12px; }
+.sfx-use input { accent-color: #7F77DD; }
+.sfx-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 16px; margin-top: 16px; }
+.sfx-row .button { margin-top: 0; }
+.mute-row { display: inline-flex; align-items: center; gap: 8px; color: var(--sth-text-2); font-size: 14px; }
 .mute-row input { accent-color: #7F77DD; }
 @media (max-width: 520px) { .visuals { grid-template-columns: 1fr; } }
 @media (prefers-reduced-motion: reduce) {
