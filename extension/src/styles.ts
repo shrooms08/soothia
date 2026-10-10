@@ -251,6 +251,20 @@ export const STYLES = `
 }
 .card[hidden] { display: none; }
 
+/* Card stars: tiny chrome four-point stars in empty corners, under all content. */
+.card-stars { position: absolute; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; }
+.card-star { position: absolute; width: 8px; height: 8px; opacity: .2; animation: sthCardTwinkle 5.5s ease-in-out infinite; }
+.card-star svg { display: block; width: 100%; height: 100%; overflow: visible; }
+.card-star:nth-child(1) { right: 16px; top: 12px; width: 9px; height: 9px; animation-duration: 4.6s; animation-delay: .4s; }
+.card-star:nth-child(2) { right: 34px; top: 30px; width: 6px; height: 6px; animation-duration: 6.4s; animation-delay: 2.1s; }
+.card-star:nth-child(3) { left: 12px; bottom: 14px; width: 8px; height: 8px; animation-duration: 5.2s; animation-delay: 1.3s; }
+.card-star:nth-child(4) { right: 14px; bottom: 12px; width: 10px; height: 10px; animation-duration: 6.8s; animation-delay: 3.2s; }
+.card-star:nth-child(5) { right: 36px; bottom: 28px; width: 6px; height: 6px; animation-duration: 4.2s; animation-delay: .9s; }
+.card-star:nth-child(6) { right: 8px; top: 48%; width: 7px; height: 7px; animation-duration: 7s; animation-delay: 2.7s; }
+/* Sheets are narrow and busy: keep three. */
+.card:has(.has-sheet) .card-star:nth-child(n+4) { display: none; }
+@keyframes sthCardTwinkle { 0%,100% { opacity: .12; transform: scale(.9); } 50% { opacity: .3; transform: scale(1.15) rotate(8deg); } }
+
 .card-head {
   display: flex;
   align-items: center;
@@ -1045,6 +1059,7 @@ input[type="number"].input { font-family: var(--sth-font-mono); }
   .orb[data-state="thinking"] .orb-arc { opacity: 1; }
   .orb-stars .star, .flourish .star { opacity: 1; transform: none; }
   .orb.success .orb-body { background: var(--sth-orb-fill-bright); box-shadow: var(--sth-orb-glow-bright); }
+  .card-star { opacity: .16; transform: none; }
 }
 `;
 

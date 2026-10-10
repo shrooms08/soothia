@@ -190,7 +190,7 @@ function tileNode(
     link.prepend(el("span", "live-dot"));
     actions.append(link, button("Bet", "button", () => onBet(target)));
   } else if (market) {
-    const odds = market.yesPrice === null ? "YES \u2013" : `YES ${Math.round(market.yesPrice * 100)}%`;
+    const odds = market.yesPrice === null ? "YES \u2013" : `YES ${(market.yesPrice * 100).toFixed(1)}%`;
     const oddsNode = el("span", "odds", odds);
     oddsNode.title = market.title;
     const target: BuyTarget = { marketId: market.id, title: market.title, yesPrice: market.yesPrice, noPrice: market.noPrice };
@@ -263,6 +263,11 @@ async function mount(): Promise<void> {
   card.hidden = true;
   card.setAttribute("role", "dialog");
   card.setAttribute("aria-label", "Soothia");
+  // A few tiny chrome stars in the card's empty corners, behind everything.
+  const cardStars = el("div", "card-stars");
+  cardStars.setAttribute("aria-hidden", "true");
+  for (let i = 0; i < 6; i++) cardStars.append(starSvg("card-star"));
+  card.append(cardStars);
   const phantomRow = statusRow();
   const proxyRow = statusRow();
   const body = el("div", "body");

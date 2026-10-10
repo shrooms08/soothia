@@ -45,7 +45,7 @@ type Step = (typeof STEPS)[number];
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 const usd = (value: number): string => `$${value.toFixed(2)}`;
-const pct = (price: number | null): string => (price === null ? "–" : `${Math.round(price * 100)}%`);
+const pct = (price: number | null): string => (price === null ? "–" : `${(price * 100).toFixed(1)}%`);
 
 function problem(response: ApiResponse<unknown>): string {
   const error = (response.body ?? {}) as ApiError;
