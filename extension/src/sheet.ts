@@ -2,7 +2,7 @@
 // market. It owns the create flow: quote -> build -> simulate -> Phantom
 // signs -> send -> confirm -> register. Money moves only in the send step,
 // and only when Dry run is off.
-import { button, domainName, el, externalLink, shortAddress } from "./dom";
+import { button, domainName, el, externalLink, icon, shortAddress, starSvg, withMono } from "./dom";
 import type {
   ApiError,
   ApiPath,
@@ -193,7 +193,7 @@ export function openSheet(host: SheetHost): Sheet {
     input.value = kind;
     input.checked = kind === marketType;
     const feeLabel = el("span", "type-fee", TYPE_COPY[kind].fee);
-    const head = el("span", "type-name", `${TYPE_COPY[kind].name} \u00b7 `);
+    const head = el("span", "type-name", TYPE_COPY[kind].name);
     head.append(feeLabel);
     const text = el("span", "type-text");
     text.append(head, el("span", "type-blurb", TYPE_COPY[kind].blurb));
@@ -229,18 +229,20 @@ export function openSheet(host: SheetHost): Sheet {
 
   const rule = el("details", "rule");
   const ruleText = el("p", "rule-text", "Connect Phantom to see the exact rule Panta will receive.");
-  rule.append(el("summary", "rule-summary", "How it resolves"), ruleText);
-  rule.addEventListener("toggle", () => host.layout());
-  const resolver = el("p", "muted", "Panta's AI resolver settles it from these sources, with a 1-hour dispute window.");
-
   const sources = el("ul", "sources");
+  const resolver = el("p", "note", "Panta's AI resolver settles it from these sources, with a 1-hour dispute window.");
+  const ruleBody = el("div", "rule-body");
+  ruleBody.append(sources, resolver, ruleText);
+  rule.append(el("summary", "rule-summary", "How it resolves"), ruleBody);
+  rule.addEventListener("toggle", () => host.layout());
+  // The category image is still fetched; the sheet's design does not show it, so it stays hidden.
   const image = el("img", "thumb");
   image.alt = "";
   image.hidden = true;
 
   const walletRow = el("div", "wallet");
   // Says what was shortened so the text fits in one Solana transaction.
-  const fitNote = el("p", "muted fit-note");
+  const fitNote = el("p", "note fit-note");
   const missing = el("p", "warn");
   const fee = el("div", "fee");
   const createButton = button("Create market", "button primary wide", () => void create());
@@ -258,32 +260,31 @@ export function openSheet(host: SheetHost): Sheet {
   }
 
   const row = el("div", "field-row");
-  row.append(field("Category", categorySelect), field("Ends (UTC date)", dateInput));
-  const imageRow = el("div", "image-row");
-  imageRow.append(image, sources);
+  row.append(field("Buying window closes", windowSelect), field("Ends (UTC date)", dateInput));
+  const typeField = el("div", "field");
+  typeField.append(el("span", "field-label", "Market type"), typeGroup);
 
   form.append(
     field("Question", questionInput, counter),
+    typeField,
     row,
-    el("span", "field-label", "Market type"),
-    typeGroup,
-    field("Buying window closes", windowSelect),
+    field("Category", categorySelect),
     rule,
-    el("span", "field-label", "Sources of truth"),
-    imageRow,
-    resolver,
     walletRow,
     fee,
     fitNote,
     missing,
-    createButton,
+    image,
   );
 
   const header = el("div", "sheet-head");
-  header.append(button("‹ Back", "link", () => host.back()), el("h3", "sheet-title", "Review your market"));
+  header.append(button("‹ Back", "back", () => host.back()), el("h3", "sheet-title", "Make it a market"));
 
+  // The create button sits in a footer that stays put while the form scrolls.
+  const foot = el("div", "sheet-foot");
+  foot.append(status, createButton);
   const node = el("div", "sheet");
-  node.append(header, form, outcome, steps, status);
+  node.append(header, form, outcome, steps, foot);
 
   // ---- Rendering ----
 
@@ -298,8 +299,10 @@ export function openSheet(host: SheetHost): Sheet {
     const index = active === "done" ? STEPS.length : active === null ? -1 : STEPS.indexOf(active);
     steps.replaceChildren(
       ...STEPS.map((name, position) => {
-        const item = el("li", "step", name);
-        item.dataset.state = position < index ? "done" : position === index ? (failed ? "error" : "active") : "todo";
+        const state = position < index ? "done" : position === index ? (failed ? "error" : "active") : "todo";
+        const item = el("li", "step");
+        item.dataset.state = state;
+        item.append(el("span", "step-icon"), el("span", "step-label", state === "active" ? `${name}…` : name));
         return item;
       }),
     );
@@ -307,25 +310,36 @@ export function openSheet(host: SheetHost): Sheet {
   }
 
   function renderWallet(): void {
+    walletRow.classList.toggle("disconnected", !address);
     if (!address) {
-      walletRow.replaceChildren(button("Connect Phantom", "button", () => void connect()));
+      const connectButton = button("Connect Phantom", "button connect", () => void connect());
+      connectButton.prepend(el("span", "phantom-badge", "P"));
+      walletRow.replaceChildren(connectButton);
       return;
     }
     const holdings = balances
-      ? `${balances.sol.toFixed(3)} SOL · ${balances.usdc.toFixed(2)} USDC`
+      ? `${balances.sol.toFixed(4)} SOL · ${balances.usdc.toFixed(2)} USDC`
       : "checking balances…";
     const who = el("span", "wallet-address", shortAddress(address));
     who.title = address;
-    walletRow.replaceChildren(who, el("span", "wallet-holdings", holdings), button("Disconnect", "link", () => void disconnect()));
+    const text = el("span", "wallet-text");
+    text.append(who, el("span", "wallet-holdings", holdings));
+    walletRow.replaceChildren(el("span", "wallet-dot"), text, button("Disconnect", "ghost", () => void disconnect()));
   }
 
   function renderFee(): void {
     if (!address) fee.replaceChildren("Connect Phantom to see the live fee.");
     else if (quote) {
       const { paymentUsdc, breakdown } = quote;
+      const row = (label: string, value: string, total = false): HTMLElement => {
+        const line = el("div", total ? "fee-row total" : "fee-row", label);
+        line.append(el("span", "mono", value));
+        return line;
+      };
       fee.replaceChildren(
-        el("strong", "fee-total", `${amount(paymentUsdc)} USDC total`),
-        `: ${amount(breakdown.liquidityUsdc)} seeds your market's liquidity, ${amount(breakdown.platformFeeUsdc)} is Panta's fee`,
+        row("Total", `${amount(paymentUsdc)} USDC`, true),
+        row("Seeds your market's liquidity", amount(breakdown.liquidityUsdc)),
+        row("Panta's fee", amount(breakdown.platformFeeUsdc)),
       );
     } else if (quoting) fee.replaceChildren("Getting the live fee…");
     else if (quoteError) fee.replaceChildren(quoteError, " ", button("Try again", "link", () => requestQuote(0)));
@@ -348,22 +362,34 @@ export function openSheet(host: SheetHost): Sheet {
     const { dryRun, skipChecks } = host.settings();
     const short = shortfall();
     const overridden = short !== "" && dryRun && skipChecks;
-    missing.textContent = !short
-      ? ""
-      : overridden
-        ? `This wallet is missing ${short}. Dry run: balance check skipped.`
-        : `This wallet is missing ${short}. Add it, then come back.`;
-    createButton.textContent = dryRun
-      ? "Create (dry run, nothing is sent)"
-      : quote
-        ? `Create market · ${amount(quote.paymentUsdc)} USDC`
-        : "Create market";
+    if (!short) missing.replaceChildren();
+    else {
+      const text = el("span", "");
+      text.append(
+        ...withMono(
+          overridden
+            ? `This wallet is missing ${short}. Dry run: balance check skipped.`
+            : `This wallet is missing ${short}. Add it, then come back.`,
+        ),
+      );
+      missing.replaceChildren(icon("warn"), text);
+    }
+    createButton.classList.toggle("dry", dryRun);
+    createButton.classList.toggle("primary", !dryRun);
+    createButton.replaceChildren(
+      ...(dryRun
+        ? ["Create (dry run, nothing is sent)"]
+        : quote
+          ? ["Create market · ", el("span", "mono", `${amount(quote.paymentUsdc)} USDC`)]
+          : ["Create market"]),
+    );
     const blocked = busy || !address || !quote || !balances || (short !== "" && !overridden);
     createButton.disabled = blocked;
   }
 
   function render(): void {
-    counter.textContent = ` ${questionInput.value.length}/${QUESTION_MAX_LENGTH}`;
+    counter.textContent = `${questionInput.value.length}/${QUESTION_MAX_LENGTH}`;
+    counter.classList.toggle("over", questionInput.value.length >= QUESTION_MAX_LENGTH);
     renderWallet();
     renderFee();
     renderGate();
@@ -391,10 +417,10 @@ export function openSheet(host: SheetHost): Sheet {
     ruleText.textContent = next.resolutionRule;
     sources.replaceChildren(
       ...next.sourcesOfTruth.map((url) => {
-        // Shown by domain ("coingecko.com"); the link and tooltip carry the full address.
-        const item = el("li", "source");
+        // Shown as a domain chip ("coingecko.com"); the link and tooltip carry the full address.
+        const item = el("li", /^https?:\/\//i.test(url) ? "source-item" : "source");
         if (/^https?:\/\//i.test(url)) {
-          const link = externalLink(domainName(url), url, "link");
+          const link = externalLink(domainName(url), url, "");
           link.title = url;
           item.append(link);
         } else item.append(url);
@@ -731,11 +757,12 @@ export function openSheet(host: SheetHost): Sheet {
       host.debug({ register: `on-chain, not registered yet (${result.registerError ?? "unknown"})` });
       showSteps("Registering");
       setStatus("");
+      outcome.classList.remove("success");
       outcome.replaceChildren(
         el("p", "line", "Your market is on-chain, finishing registration..."),
-        el("p", "muted", "You have paid once and will not be charged again."),
+        el("p", "note", "You have paid once and will not be charged again."),
         button("Retry", "button", again),
-        externalLink("See the transaction on Solscan", `https://solscan.io/tx/${signature}`, "link block"),
+        externalLink("Transaction on Solscan", `https://solscan.io/tx/${signature}`, "link mono ext"),
       );
     } else {
       host.savePending(null);
@@ -749,17 +776,23 @@ export function openSheet(host: SheetHost): Sheet {
         `&url=${encodeURIComponent(result.marketUrl)}`;
       const actions = el("div", "actions");
       const marketId = result.marketId;
-      actions.append(
-        button("Bet on it", "button primary", () => host.bet({ marketId, title: question })),
-        externalLink("View on Panta", result.marketUrl, "button"),
+      const flourish = el("div", "flourish");
+      flourish.append(starSvg(), starSvg(), starSvg());
+      const grid = el("div", "button-grid");
+      grid.append(
         externalLink("Share on X", share, "button"),
+        button("Bet on it", "button", () => host.bet({ marketId, title: question })),
       );
+      actions.className = "button-stack";
+      actions.append(externalLink("View on Panta", result.marketUrl, "button primary wide ext"), grid);
+      outcome.classList.add("success");
       outcome.replaceChildren(
-        el("h3", "sheet-title", "Your market is live"),
-        el("p", "question", question),
+        flourish,
+        el("h3", "success-title", "Your market is live"),
+        el("p", "success-sub", question),
         actions,
-        externalLink("Transaction on Solscan", `https://solscan.io/tx/${signature}`, "link block"),
-        button("Done", "link", () => host.back()),
+        externalLink("Transaction on Solscan", `https://solscan.io/tx/${signature}`, "link mono ext centered"),
+        button("Done", "ghost centered", () => host.back()),
       );
     }
     outcome.hidden = false;

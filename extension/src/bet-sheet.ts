@@ -1,7 +1,7 @@
 // The bet sheet: YES or NO on an open market during its buying window.
 // quote -> build -> simulate -> Phantom signs -> send -> confirm -> Panta
 // records it. Money moves only in the send step, and only with Dry run off.
-import { button, el, externalLink, shortAddress } from "./dom";
+import { button, el, externalLink, icon, shortAddress, starSvg, withMono } from "./dom";
 import type {
   ApiError,
   ApiPath,
@@ -26,6 +26,8 @@ export interface BetHost {
   layout(): void;
   isVisible(): boolean;
   back(): void;
+  /** Fires the orb's success pulse when a bet lands. */
+  celebrate?: () => void;
 }
 
 type Side = "yes" | "no";
@@ -83,6 +85,7 @@ export function openBetSheet(host: BetHost): Sheet {
 
   const title = el("p", "question", target.title);
   const sides = el("div", "sides");
+  sides.setAttribute("role", "radiogroup");
   const sideButtons = new Map<Side, HTMLButtonElement>();
   for (const kind of ["yes", "no"] as const) {
     const node = button("", `side side-${kind}`, () => {
@@ -90,6 +93,8 @@ export function openBetSheet(host: BetHost): Sheet {
       renderSides();
       requestQuote(0);
     });
+    node.setAttribute("role", "radio");
+    node.append(el("span", "side-label", kind.toUpperCase()), el("span", "side-pct", ""));
     sideButtons.set(kind, node);
     sides.append(node);
   }
@@ -111,23 +116,31 @@ export function openBetSheet(host: BetHost): Sheet {
       }),
     );
   }
-  chips.append(customInput);
+  const custom = el("label", "custom");
+  custom.append(el("span", "custom-sign", "$"), customInput);
+  chips.append(custom);
 
-  const quoteBox = el("div", "fee");
-  const payout = el("p", "muted");
+  const quoteBox = el("div", "quote-box");
+  const payout = el("p", "note");
   const walletRow = el("div", "wallet");
   const missing = el("p", "warn");
-  const buyButton = button("Buy", "button primary wide", () => void buy());
+  const buyButton = button("Buy", "button buy wide", () => void buy());
+  buyButton.dataset.side = side;
   const status = el("p", "line status-line");
   status.setAttribute("aria-live", "polite");
   const steps = el("ol", "steps");
   steps.hidden = true;
 
-  form.append(title, sides, el("span", "field-label", "Amount"), chips, quoteBox, payout, walletRow, missing, buyButton);
+  const amountField = el("div", "field");
+  amountField.append(el("span", "field-label", "Amount"), chips);
+  quoteBox.append(payout);
+  form.append(title, sides, amountField, quoteBox, walletRow, missing);
   const header = el("div", "sheet-head");
-  header.append(button("‹ Back", "link", () => host.back()), el("h3", "sheet-title", "Place a bet"));
+  header.append(button("‹ Back", "back", () => host.back()), el("h3", "sheet-title", "Place a bet"));
+  const foot = el("div", "sheet-foot");
+  foot.append(status, buyButton);
   const node = el("div", "sheet");
-  node.append(header, form, outcome, steps, status);
+  node.append(header, form, outcome, steps, foot);
 
   // ---- Rendering ----
 
@@ -141,8 +154,10 @@ export function openBetSheet(host: BetHost): Sheet {
     const index = active === "done" ? STEPS.length : active === null ? -1 : STEPS.indexOf(active);
     steps.replaceChildren(
       ...STEPS.map((name, position) => {
-        const item = el("li", "step", name);
-        item.dataset.state = position < index ? "done" : position === index ? (failed ? "error" : "active") : "todo";
+        const state = position < index ? "done" : position === index ? (failed ? "error" : "active") : "todo";
+        const item = el("li", "step");
+        item.dataset.state = state;
+        item.append(el("span", "step-icon"), el("span", "step-label", state === "active" ? `${name}…` : name));
         return item;
       }),
     );
@@ -152,44 +167,62 @@ export function openBetSheet(host: BetHost): Sheet {
   function renderSides(): void {
     for (const [kind, node] of sideButtons) {
       const price = kind === "yes" ? target.yesPrice : target.noPrice;
-      node.textContent = `${kind.toUpperCase()} ${pct(price)}`;
+      node.querySelector(".side-pct")!.textContent = pct(price);
       node.title = price === null ? "No price yet" : `${usd(price)} per share`;
       node.classList.toggle("selected", kind === side);
-      node.setAttribute("aria-pressed", String(kind === side));
+      node.setAttribute("aria-checked", String(kind === side));
     }
+    buyButton.dataset.side = side;
   }
 
   function renderChips(): void {
     for (const chip of chips.querySelectorAll<HTMLButtonElement>(".chip-button")) {
-      chip.classList.toggle("selected", Number(chip.textContent!.slice(1)).toFixed(2) === amount && !customInput.value);
+      const picked = Number(chip.textContent!.slice(1)).toFixed(2) === amount && !customInput.value;
+      chip.classList.toggle("selected", picked);
+      chip.setAttribute("aria-pressed", String(picked));
     }
   }
 
   function renderWallet(): void {
+    walletRow.classList.toggle("disconnected", !address);
     if (!address) {
-      walletRow.replaceChildren(button("Connect Phantom", "button", () => void connect()));
+      const connectButton = button("Connect Phantom", "button connect", () => void connect());
+      connectButton.prepend(el("span", "phantom-badge", "P"));
+      walletRow.replaceChildren(connectButton);
       return;
     }
     const holdings = balances
-      ? `${balances.sol.toFixed(3)} SOL · ${balances.usdc.toFixed(2)} USDC`
+      ? `${balances.sol.toFixed(4)} SOL · ${balances.usdc.toFixed(2)} USDC`
       : "checking balances…";
     const who = el("span", "wallet-address", shortAddress(address));
     who.title = address;
-    walletRow.replaceChildren(who, el("span", "wallet-holdings", holdings), button("Disconnect", "link", () => void disconnect()));
+    const text = el("span", "wallet-text");
+    text.append(who, el("span", "wallet-holdings", holdings));
+    walletRow.replaceChildren(el("span", "wallet-dot"), text, button("Disconnect", "ghost", () => void disconnect()));
   }
 
   function renderQuote(): void {
+    const mono = (text: string, extra = ""): HTMLElement => el("span", `mono ${extra}`, text);
     if (!address) quoteBox.replaceChildren("Connect Phantom to see the price.");
     else if (quote) {
-      quoteBox.replaceChildren(
-        `You get ~${quote.shares.toFixed(2)} ${quote.side.toUpperCase()} shares at ~${usd(quote.avgPrice)} each. Fee ${usd(quote.feeUsdc)}. `,
-        el("strong", "fee-total", `Total ${usd(quote.totalUsdc)}.`),
+      const line = el("div", "");
+      line.append(
+        "You get ",
+        mono(`~${quote.shares.toFixed(2)} ${quote.side.toUpperCase()}`, quote.side),
+        " shares at ",
+        mono(`~${usd(quote.avgPrice)}`),
+        " each. Fee ",
+        mono(usd(quote.feeUsdc)),
+        ". Total ",
+        mono(usd(quote.totalUsdc)),
+        ".",
       );
       const win = quote.shares * quote.payoutPerShareUsdc;
       payout.textContent = `If ${quote.side.toUpperCase()} wins, each share pays ~${usd(quote.payoutPerShareUsdc)}: about ${usd(win)} back on ${usd(quote.totalUsdc)} spent.`;
+      quoteBox.replaceChildren(line, payout);
     } else if (quoting) quoteBox.replaceChildren("Getting the price…");
     else if (quoteError) quoteBox.replaceChildren(quoteError, " ", button("Try again", "link", () => requestQuote(0)));
-    else quoteBox.replaceChildren("");
+    else quoteBox.replaceChildren();
     if (!quote) payout.textContent = "";
   }
 
@@ -206,12 +239,21 @@ export function openBetSheet(host: BetHost): Sheet {
   function renderGate(): void {
     const { dryRun } = host.settings();
     const short = shortfall();
-    missing.textContent = short ? `This wallet is missing ${short}. Add it, then come back.` : "";
-    buyButton.textContent = dryRun
-      ? `Buy ${side.toUpperCase()} (dry run, nothing is sent)`
-      : quote
-        ? `Buy ${side.toUpperCase()} · ${usd(quote.totalUsdc)}`
-        : `Buy ${side.toUpperCase()}`;
+    if (!short) missing.replaceChildren();
+    else {
+      const text = el("span", "");
+      text.append(...withMono(`This wallet is missing ${short}. Add it, then come back.`));
+      missing.replaceChildren(icon("warn"), text);
+    }
+    buyButton.classList.toggle("dry", dryRun);
+    buyButton.classList.toggle("buy", !dryRun);
+    buyButton.replaceChildren(
+      ...(dryRun
+        ? [`Buy ${side.toUpperCase()} (dry run, nothing is sent)`]
+        : quote
+          ? [`Buy ${side.toUpperCase()} · `, el("span", "mono", usd(quote.totalUsdc))]
+          : [`Buy ${side.toUpperCase()}`]),
+    );
     buyButton.disabled = busy || !address || !quote || !balances || short !== "";
   }
 
@@ -433,7 +475,8 @@ export function openBetSheet(host: BetHost): Sheet {
       else await sleep(3000);
     }
     if (disposed) return;
-    const solscan = externalLink("Transaction on Solscan", `https://solscan.io/tx/${signature}`, "link block");
+    const solscan = externalLink("Transaction on Solscan", `https://solscan.io/tx/${signature}`, "link mono ext centered");
+    outcome.classList.remove("success");
 
     if (!result || result.status === "pending") {
       host.debug({ register: "still unconfirmed" });
@@ -457,19 +500,22 @@ export function openBetSheet(host: BetHost): Sheet {
       host.debug({ register: recorded ? `recorded (${result.verified ?? "verified"}, attributed ${result.attributed})${issues ? `; ${issues}` : ""}` : `on-chain, not recorded (${issues})` });
       showSteps(recorded ? "done" : "Recording", !recorded);
       setStatus("");
-      const actions = el("div", "actions");
-      actions.append(externalLink("View on Panta", result.marketUrl, "button primary"), button("Done", "button", () => host.back()));
-      outcome.replaceChildren(
-        el("h3", "sheet-title", "Bet placed"),
-        el("p", "question", target.title),
-        el(
-          "p",
-          "line",
-          `${quote ? `~${quote.shares.toFixed(2)} ` : ""}${side.toUpperCase()} shares are yours${quote ? ` for ${usd(quote.totalUsdc)} (${usd(quote.amountUsdc)} stake + ${usd(quote.feeUsdc)} fee)` : ""}.${recorded ? "" : " Panta's records are catching up; the shares are on-chain."}`,
-        ),
-        actions,
-        solscan,
+      host.celebrate?.();
+      const flourish = el("div", "flourish");
+      flourish.append(starSvg(), starSvg(), starSvg());
+      const summary = el("div", "summary-box");
+      summary.append(el("span", `mono ${side}`, `${quote ? `~${quote.shares.toFixed(2)} ` : ""}${side.toUpperCase()}`), " shares are yours");
+      if (quote) {
+        summary.append(" for ", el("span", "mono", usd(quote.totalUsdc)), " ", el("span", "muted-inline", `(${usd(quote.amountUsdc)} stake + ${usd(quote.feeUsdc)} fee)`));
+      }
+      if (!recorded) summary.append(" Panta's records are catching up; the shares are on-chain.");
+      const actions = el("div", "button-grid");
+      actions.append(
+        externalLink("View on Panta", result.marketUrl, "button primary tall ext"),
+        button("Done", "button tall", () => host.back()),
       );
+      outcome.classList.add("success");
+      outcome.replaceChildren(flourish, el("h3", "success-title", "Bet placed"), el("p", "success-sub", target.title), summary, actions, solscan);
     }
     outcome.hidden = false;
     host.layout();

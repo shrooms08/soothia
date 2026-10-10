@@ -5,10 +5,11 @@
   "scripts": {
     "catalog-check": "tsx catalog-check.ts",
     "typecheck": "tsc --noEmit",
-    "make-category-images": "tsx make-category-images.ts"
+    "make-brand-assets": "node make-brand-assets.mjs"
   },
   "devDependencies": {
     "@types/node": "^24",
+    "playwright": "^1.64.0",
     "sharp": "^0.35.5",
     "tsx": "^4",
     "typescript": "^5"

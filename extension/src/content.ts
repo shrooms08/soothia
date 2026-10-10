@@ -1,6 +1,7 @@
 // Isolated-world content script: mounts the orb and card inside one closed
 // shadow root. Nothing here touches the page's own DOM or styles.
-import { button, el, endDate, externalLink } from "./dom";
+import { button, el, endDate, externalLink, icon, starSvg } from "./dom";
+import { loadFonts } from "./fonts";
 import {
   API_REQUEST,
   DETECT_REQUEST,
@@ -116,11 +117,13 @@ function savePosition(position: OrbPosition): void {
 
 // A button that looks present but does nothing yet. aria-disabled (not
 // disabled) keeps the hover tooltip working.
-function comingNext(label: string, className: string): HTMLButtonElement {
+function comingNext(label: string, className: string, tip = "Coming next"): HTMLElement {
   const node = button(label, className);
-  node.title = "Coming next";
   node.setAttribute("aria-disabled", "true");
-  return node;
+  const wrap = el("span", "tip");
+  wrap.dataset.tip = tip;
+  wrap.append(node);
+  return wrap;
 }
 
 /** A market the user created from a claim on this page. */
@@ -162,15 +165,18 @@ function tileNode(
   const actions = el("div", "actions");
   if (live) {
     const target: BuyTarget = { marketId: live.marketId, title: live.title, yesPrice: null, noPrice: null };
-    actions.append(externalLink("Live on Panta", live.marketUrl, "link"), button("Bet", "button primary", () => onBet(target)));
+    const link = externalLink("Live on Panta", live.marketUrl, "link ext");
+    link.prepend(el("span", "live-dot"));
+    actions.append(link, button("Bet", "button", () => onBet(target)));
   } else if (market) {
     const odds = market.yesPrice === null ? "YES \u2013" : `YES ${Math.round(market.yesPrice * 100)}%`;
     const oddsNode = el("span", "odds", odds);
     oddsNode.title = market.title;
     const target: BuyTarget = { marketId: market.id, title: market.title, yesPrice: market.yesPrice, noPrice: market.noPrice };
-    actions.append(oddsNode, button("Bet", "button primary", () => onBet(target)));
+    actions.append(oddsNode, button("Bet", "button", () => onBet(target)));
   } else {
-    actions.append(button("Make it a market", "button", onMake));
+    actions.classList.add("end");
+    actions.append(button("Make it a market", "button primary", onMake));
   }
 
   tile.append(
@@ -213,9 +219,24 @@ async function mount(): Promise<void> {
   orb.setAttribute("aria-label", "Soothia");
   orb.setAttribute("aria-expanded", "false");
   orb.dataset.state = "idle";
-  const badge = el("span", "badge");
-  badge.hidden = true;
-  orb.append(el("span", "ring"), badge);
+  const orbBody = el("span", "orb-body");
+  orbBody.append(el("span", "orb-shimmer"));
+  const orbStars = el("span", "orb-stars");
+  orb.append(orbBody, starSvg("orb-glint"), el("span", "orb-arc"), orbStars, el("span", "orb-pulse"));
+
+  // Light pages (Wikipedia, BBC) get the orb's edge shadow and star drop shadows.
+  function pageIsLight(): boolean {
+    for (const node of [document.body, document.documentElement]) {
+      const match = /rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d.]+))?/.exec(getComputedStyle(node).backgroundColor);
+      if (!match || (match[4] !== undefined && Number(match[4]) === 0)) continue;
+      const [r, g, b] = [Number(match[1]), Number(match[2]), Number(match[3])];
+      return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 > 0.6;
+    }
+    return true; // No background set: the page is white.
+  }
+  function applyTheme(): void {
+    host.dataset.theme = pageIsLight() ? "light" : "dark";
+  }
 
   const card = el("div", "card");
   card.hidden = true;
@@ -228,14 +249,18 @@ async function mount(): Promise<void> {
   const betsPane = el("div", "body");
   betsPane.hidden = true;
   const tabs = el("div", "tabs");
+  tabs.setAttribute("role", "tablist");
   const claimsTab = button("This page", "tab selected", () => showTab("claims"));
   const betsTab = button("My bets", "tab", () => showTab("bets"));
+  for (const tab of [claimsTab, betsTab]) tab.setAttribute("role", "tab");
   tabs.append(claimsTab, betsTab);
   function showTab(which: "claims" | "bets"): void {
     body.hidden = which !== "claims";
     betsPane.hidden = which !== "bets";
     claimsTab.classList.toggle("selected", which === "claims");
     betsTab.classList.toggle("selected", which === "bets");
+    claimsTab.setAttribute("aria-selected", String(which === "claims"));
+    betsTab.setAttribute("aria-selected", String(which === "bets"));
     if (which === "bets") void renderBets();
     layout();
   }
@@ -265,7 +290,16 @@ async function mount(): Promise<void> {
     phantomRow.row,
     proxyRow.row,
   );
-  card.append(el("h2", "title", "Soothia"), tabs, body, betsPane, debug);
+  const head = el("div", "card-head");
+  const brand = el("div", "brand");
+  const mark = el("span", "mark");
+  mark.append(el("span", "mark-body"), starSvg("star"));
+  brand.append(mark, el("h2", "wordmark", "Soothia"));
+  const close = button("", "close", () => setOpen(false));
+  close.setAttribute("aria-label", "Close");
+  close.append(icon("close"));
+  head.append(brand, close);
+  card.append(head, tabs, body, betsPane, debug);
 
   // Typing in the sheet must not trigger the page's keyboard shortcuts (X
   // has many). Escape still closes the card: that listener runs in capture.
@@ -347,21 +381,38 @@ async function mount(): Promise<void> {
   // ---- Claims ----
 
   function setOrb(state: OrbState, count = 0): void {
+    const was = orb.dataset.state;
     orb.dataset.state = state;
-    badge.hidden = state !== "found";
-    badge.textContent = String(count);
+    // One to three chrome stars up-left of the orb, one per claim; they
+    // twinkle in once when they first appear.
+    if (state !== "found") orbStars.replaceChildren();
+    else if (was !== "found" || orbStars.childElementCount !== Math.min(count, 3)) {
+      orbStars.replaceChildren(...Array.from({ length: Math.min(Math.max(count, 1), 3) }, () => starSvg("star")));
+    }
     orb.setAttribute("aria-label", state === "found" ? `Soothia, ${count} found` : "Soothia");
+  }
+
+  // One-shot pulse when a market is created or a bet lands.
+  function pulseOrb(): void {
+    orb.classList.remove("success");
+    void orb.offsetWidth; // restart the animation
+    orb.classList.add("success");
+    setTimeout(() => orb.classList.remove("success"), 1300);
   }
 
   function line(text: string): HTMLElement {
     return el("p", "line", text);
   }
 
+  /** The centered empty / skipped / error block from the sheet. */
+  function stateBlock(kind: "empty" | "skipped" | "error" | "watching", text: string, ...extra: HTMLElement[]): HTMLElement {
+    const block = el("div", `state ${kind}`);
+    block.append(el("span", "state-orb"), el("p", "state-text", text), ...extra);
+    return block;
+  }
+
   function rescanButton(): HTMLButtonElement {
-    const button = el("button", "button", "Scan again");
-    button.type = "button";
-    button.addEventListener("click", rescan);
-    return button;
+    return button("Scan again", "button", rescan);
   }
 
   // ---- Review sheet ----
@@ -395,6 +446,7 @@ async function mount(): Promise<void> {
       layout,
       isVisible: () => !card.hidden && document.visibilityState === "visible",
       back: showTiles,
+      celebrate: pulseOrb,
     });
     body.replaceChildren(sheet.node);
     layout();
@@ -435,27 +487,26 @@ async function mount(): Promise<void> {
   async function renderBets(): Promise<void> {
     const owner = await wallet.publicKey();
     if (!owner) {
-      betsPane.replaceChildren(
-        line("Connect Phantom to see your bets."),
-        button("Connect Phantom", "button", async () => {
-          const result = await wallet.connect();
-          if (result.ok) void renderBets();
-        }),
-      );
+      const connect = button("Connect Phantom", "button connect", async () => {
+        const result = await wallet.connect();
+        if (result.ok) void renderBets();
+      });
+      connect.prepend(el("span", "phantom-badge", "P"));
+      betsPane.replaceChildren(stateBlock("empty", "Connect Phantom to see your bets."), connect);
       layout();
       return;
     }
-    betsPane.replaceChildren(line("Loading your bets\u2026"));
+    betsPane.replaceChildren(stateBlock("watching", "Loading your bets\u2026"));
     layout();
     const response = await api<{ positions: Position[] }>("/positions", { wallet: owner });
     if (!response.ok || !response.body) {
-      betsPane.replaceChildren(line("I couldn't load your bets just now."), button("Try again", "link", () => void renderBets()));
+      betsPane.replaceChildren(stateBlock("error", "Couldn't load your bets.", button("Try again", "button", () => void renderBets())));
       layout();
       return;
     }
     const positions = (response.body as { positions: Position[] }).positions;
     if (positions.length === 0) {
-      betsPane.replaceChildren(line("No bets yet."), button("Refresh", "link", () => void renderBets()));
+      betsPane.replaceChildren(refreshRow(), stateBlock("empty", "No bets yet."));
       layout();
       return;
     }
@@ -463,43 +514,50 @@ async function mount(): Promise<void> {
     const byMarket = new Map<string, Position[]>();
     for (const position of positions) byMarket.set(position.marketId, [...(byMarket.get(position.marketId) ?? []), position]);
     betsPane.replaceChildren(
+      refreshRow(),
       ...[...byMarket.values()].map((held) => {
         const first = held[0];
-        const block = el("div", "tile");
+        const block = el("div", "tile market");
         block.append(el("p", "question", first.title || shortAddressLike(first.marketId)));
+        const rows = el("div", "positions");
         for (const position of held) {
           const row = el("div", "position");
-          const meta = el("div", "meta");
-          meta.append(
-            el("span", `chip side-chip-${position.side}`, position.side.toUpperCase()),
+          row.append(
+            el("span", `side-chip side-chip-${position.side}`, position.side.toUpperCase()),
             el(
               "span",
-              "ends",
+              "position-text",
               `${position.shares.toFixed(2)} shares \u00b7 ${position.phase}${position.outcome ? ` \u00b7 ${position.outcome.toUpperCase()} won` : ""}`,
             ),
           );
-          if (position.claimed) meta.append(el("span", "muted", "Claimed"));
-          else if (position.claimable) meta.append(button("Claim", "button primary small", () => void claim(position, row)));
-          else {
-            const claimButton = comingNext("Claim", "button small");
-            claimButton.title = "Available after the market resolves";
-            meta.append(claimButton);
-          }
-          row.append(meta);
-          block.append(row);
+          rows.append(row);
         }
+        block.append(rows);
         if (first.creatorSeedShares) {
           const seed = first.creatorSeedShares.toFixed(first.creatorSeedShares % 1 ? 2 : 0);
-          block.append(el("p", "muted", `Includes ${seed} YES + ${seed} NO from your creation seed.`));
+          block.append(el("p", "note", `Includes ${seed} YES + ${seed} NO from your creation seed.`));
         }
+        // One claim control per market: for the side that can be claimed.
+        const claimable = held.find((position) => position.claimable && !position.claimed);
+        const claimed = held.some((position) => position.claimed);
         const actions = el("div", "actions");
-        actions.append(externalLink("View on Panta", first.marketUrl, "link"));
+        actions.append(externalLink("View on Panta", first.marketUrl, "link ext"));
+        if (claimed && !claimable) actions.append(el("span", "note", "Claimed"));
+        else if (claimable) actions.append(button("Claim", "button primary small", () => void claim(claimable, block)));
+        else actions.append(comingNext("Claim", "button small", "Available after the market resolves"));
         block.append(actions);
         return block;
       }),
-      button("Refresh", "link", () => void renderBets()),
     );
     layout();
+  }
+
+  function refreshRow(): HTMLElement {
+    const row = el("div", "refresh-row");
+    const link = button("Refresh", "link", () => void renderBets());
+    link.prepend(icon("refresh"));
+    row.append(link);
+    return row;
   }
 
   function shortAddressLike(id: string): string {
@@ -595,8 +653,10 @@ async function mount(): Promise<void> {
       layout,
       isVisible: () => !card.hidden && document.visibilityState === "visible",
       back: showTiles,
-      created: (market) =>
-        liveMarkets.set(tile.claim.id, { marketId: market.marketId, marketUrl: market.marketUrl, title: tile.claim.question }),
+      created: (market) => {
+        liveMarkets.set(tile.claim.id, { marketId: market.marketId, marketUrl: market.marketUrl, title: tile.claim.question });
+        pulseOrb();
+      },
       bet: (target) => openBet({ ...target, yesPrice: null, noPrice: null }),
       savePending,
     });
@@ -609,11 +669,11 @@ async function mount(): Promise<void> {
     switch (view.kind) {
       case "watching":
         setOrb("idle");
-        body.replaceChildren(line("I'm watching this page."));
+        body.replaceChildren(stateBlock("watching", "I'm watching this page."));
         break;
       case "thinking":
         setOrb("thinking");
-        body.replaceChildren(line("Reading this page\u2026"));
+        body.replaceChildren(stateBlock("watching", "Reading this page\u2026"));
         break;
       case "tiles":
         tiles = view.tiles;
@@ -622,18 +682,18 @@ async function mount(): Promise<void> {
         break;
       case "empty":
         setOrb("idle");
-        body.replaceChildren(line("Nothing to call here."));
+        body.replaceChildren(stateBlock("empty", "Nothing to call here."));
         break;
       case "skipped":
         setOrb("idle");
-        body.replaceChildren(line("Not enough to read on this page."));
+        body.replaceChildren(stateBlock("skipped", "Not enough to read on this page."));
         break;
       case "error":
         setOrb("idle");
         if (view.reason === "limit") {
-          body.replaceChildren(line("That's all my calls for today. I'll be back tomorrow."));
+          body.replaceChildren(stateBlock("error", "That's all my calls for today. I'll be back tomorrow."));
         } else {
-          body.replaceChildren(line("I couldn't read this one just now."), rescanButton());
+          body.replaceChildren(stateBlock("error", "I couldn't read this one just now.", rescanButton()));
         }
         break;
     }
@@ -916,6 +976,10 @@ async function mount(): Promise<void> {
 
   renderPhantom();
   proxyRow.set("Proxy: checking…", "idle");
+  loadFonts();
+  applyTheme();
+  // Sites can set their background after load (themes, dark mode toggles).
+  setTimeout(applyTheme, 1500);
   renderDebug();
   setCreateDebug({});
   await loadSettings();
