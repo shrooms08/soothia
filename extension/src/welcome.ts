@@ -1,6 +1,7 @@
 // The welcome page (welcome.html): a four-step stepper shown once after
 // install, soft onboarding music, and a sound check behind ?sfx=1.
 import { el, icon } from "./dom";
+import { MUSIC_CONTROL, type MusicAction, type MusicStatus } from "./messages";
 import { installMusicHooks, isMusicPlaying, startMusic, stopMusic } from "./music";
 import {
   armSounds,
@@ -10,6 +11,7 @@ import {
   isMuted,
   onAudioState,
   playSound,
+  setDuckHook,
   setMuted,
   setStyle,
   SOUND_NAMES,
@@ -69,7 +71,29 @@ function go(target: number): void {
   document.getElementById("welcome")?.classList.toggle("found", step === 1 || step === 4);
 }
 
+// ---- Music: the offscreen player when it works, the in-page path otherwise ----
+
+let offscreenMusic = false;
+let loggedFallback = false;
+
+function musicMessage(action: MusicAction): Promise<MusicStatus | undefined> {
+  return chrome.runtime.sendMessage({ type: MUSIC_CONTROL, action }).catch(() => undefined) as Promise<MusicStatus | undefined>;
+}
+
+function showHint(reason: string): void {
+  if (!loggedFallback) {
+    loggedFallback = true;
+    console.info(`Soothia: onboarding music falls back to starting on a tap (${reason}).`);
+  }
+  document.getElementById("sound-hint")?.removeAttribute("hidden");
+}
+
+function musicIsPlaying(): boolean {
+  return offscreenMusic || isMusicPlaying();
+}
+
 function leave(): void {
+  if (offscreenMusic) void musicMessage("stop");
   stopMusic();
 }
 
@@ -113,6 +137,10 @@ if (sky) {
 
 armSounds(window);
 installMusicHooks();
+// UI sounds duck whichever player is active.
+setDuckHook(() => {
+  if (offscreenMusic) void musicMessage("duck");
+});
 
 const soundToggle = document.getElementById("sound-toggle") as HTMLButtonElement | null;
 function renderToggle(): void {
@@ -128,6 +156,7 @@ function saveMuted(value: boolean): void {
   setMuted(value);
   renderToggle();
   chrome.storage.local.set({ [MUTED_KEY]: value }).catch(() => {});
+  if (offscreenMusic) void musicMessage(value ? "mute" : "unmute");
 }
 soundToggle?.addEventListener("click", () => saveMuted(!isMuted()));
 
@@ -141,18 +170,32 @@ chrome.storage.local
   })
   .catch(renderToggle);
 
-// Music starts on the first gesture, once the context is running.
+// The background creates the offscreen player so music starts on load. If
+// that fails or is blocked, the in-page player starts on the first gesture.
 let musicWanted = true;
 function startMusicSoon(): void {
-  if (!musicWanted || isMusicPlaying()) return;
+  if (!musicWanted || offscreenMusic || isMusicPlaying()) return;
   setTimeout(() => void startMusic(MUSIC_URL), 150);
 }
 for (const type of ["pointerdown", "keydown", "touchstart"]) {
   window.addEventListener(type, startMusicSoon, { capture: true, passive: true });
 }
+void musicMessage("ensure").then((status) => {
+  if (status?.playing) {
+    offscreenMusic = true;
+    document.getElementById("sound-hint")?.setAttribute("hidden", "");
+  } else showHint(status?.error || "no offscreen player");
+});
 
 // Dev-only sound check: welcome.html?sfx=1
-const devHooks = { getAudioState, isMusicPlaying, playSound, startMusic: () => startMusic(MUSIC_URL), stopMusic };
+const devHooks = {
+  getAudioState,
+  isMusicPlaying: musicIsPlaying,
+  isOffscreenMusic: () => offscreenMusic,
+  playSound,
+  startMusic: () => startMusic(MUSIC_URL),
+  stopMusic,
+};
 (window as unknown as { soothiaAudio?: typeof devHooks }).soothiaAudio = devHooks;
 
 if (new URLSearchParams(location.search).get("sfx") === "1") {
@@ -165,8 +208,8 @@ if (new URLSearchParams(location.search).get("sfx") === "1") {
     test.hidden = false;
     const render = (): void => {
       const audio = getAudioState();
-      state.textContent = `audio: ${audio.muted ? "muted" : audio.context} · style ${audio.style} · last ${audio.last}${isMusicPlaying() ? " · music playing" : ""}`;
-      if (musicButton) musicButton.textContent = isMusicPlaying() ? "Stop music" : "Play music";
+      state.textContent = `audio: ${audio.muted ? "muted" : audio.context} · style ${audio.style} · last ${audio.last}${musicIsPlaying() ? ` · music playing (${offscreenMusic ? "offscreen" : "in page"})` : ""}`;
+      if (musicButton) musicButton.textContent = musicIsPlaying() ? "Stop music" : "Play music";
     };
     onAudioState(render);
     setInterval(render, 500);
@@ -209,14 +252,21 @@ if (new URLSearchParams(location.search).get("sfx") === "1") {
     });
 
     musicButton?.addEventListener("click", () => {
-      if (isMusicPlaying()) {
+      if (musicIsPlaying()) {
         musicWanted = false;
+        if (offscreenMusic) {
+          offscreenMusic = false;
+          void musicMessage("stop");
+        }
         stopMusic();
       } else {
         musicWanted = true;
-        void startMusic(MUSIC_URL);
+        void musicMessage("ensure").then((status) => {
+          if (status?.playing) offscreenMusic = true;
+          else void startMusic(MUSIC_URL);
+        });
       }
-      setTimeout(render, 100);
+      setTimeout(render, 300);
     });
     box?.addEventListener("change", () => saveMuted(box.checked));
   }

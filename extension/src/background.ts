@@ -8,7 +8,9 @@ import {
   HEALTH_REQUEST,
   IMAGE_REQUEST,
   INJECT_SIGNER,
+  MUSIC_CONTROL,
   OPEN_WELCOME,
+  type MusicStatus,
   type ApiRequestMessage,
   type ApiResponse,
   type Claim,
@@ -198,9 +200,72 @@ async function injectSigner(tabId: number | undefined): Promise<boolean> {
   }
 }
 
-function openWelcome(): Promise<unknown> {
-  return chrome.tabs.create({ url: chrome.runtime.getURL("welcome.html") });
+const MUTED_KEY = "soothia:muted";
+const WELCOME_URL = chrome.runtime.getURL("welcome.html");
+// Tabs showing the welcome page; the music stops when the last one goes.
+const welcomeTabs = new Set<number>();
+
+async function hasOffscreen(): Promise<boolean> {
+  try {
+    const contexts = await chrome.runtime.getContexts({ contextTypes: ["OFFSCREEN_DOCUMENT" as chrome.runtime.ContextType] });
+    return contexts.length > 0;
+  } catch {
+    return false;
+  }
 }
+
+// One creation at a time: the install path and the page's "ensure" overlap.
+let musicStarting: Promise<MusicStatus> | null = null;
+
+/** Creates the offscreen music player and starts the loop. Resolves to its status. */
+function startMusic(): Promise<MusicStatus> {
+  if (!musicStarting) {
+    musicStarting = startMusicNow().finally(() => {
+      musicStarting = null;
+    });
+  }
+  return musicStarting;
+}
+
+async function startMusicNow(): Promise<MusicStatus> {
+  try {
+    if (!chrome.offscreen) return { playing: false, muted: false, error: "offscreen API unavailable" };
+    if (!(await hasOffscreen())) {
+      await chrome.offscreen.createDocument({
+        url: "offscreen.html",
+        reasons: ["AUDIO_PLAYBACK" as chrome.offscreen.Reason],
+        justification: "Plays onboarding music while the welcome page is open",
+      });
+    }
+    const muted = (await chrome.storage.local.get(MUTED_KEY))[MUTED_KEY] === true;
+    const status = (await chrome.runtime.sendMessage({ type: MUSIC_CONTROL, action: "start", muted })) as MusicStatus | undefined;
+    return status ?? { playing: false, muted, error: "no answer from the player" };
+  } catch (error) {
+    return { playing: false, muted: false, error: String((error as Error)?.message ?? error) };
+  }
+}
+
+/** Fades the music out; the offscreen document closes itself afterwards. */
+async function stopMusic(): Promise<void> {
+  if (!(await hasOffscreen())) return;
+  await chrome.runtime.sendMessage({ type: MUSIC_CONTROL, action: "stop" }).catch(() => {});
+}
+
+async function openWelcome(): Promise<void> {
+  const tab = await chrome.tabs.create({ url: WELCOME_URL });
+  if (tab.id !== undefined) welcomeTabs.add(tab.id);
+  void startMusic();
+}
+
+chrome.tabs.onRemoved.addListener((tabId) => {
+  if (!welcomeTabs.delete(tabId)) return;
+  if (welcomeTabs.size === 0) void stopMusic();
+});
+chrome.tabs.onUpdated.addListener((tabId, change) => {
+  if (!change.url) return;
+  if (change.url.startsWith(WELCOME_URL)) welcomeTabs.add(tabId);
+  else if (welcomeTabs.delete(tabId) && welcomeTabs.size === 0) void stopMusic();
+});
 
 // First install only: updates do not reopen the welcome page.
 chrome.runtime.onInstalled.addListener((details) => {
@@ -230,5 +295,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     case OPEN_WELCOME:
       openWelcome().then(() => sendResponse(true), () => sendResponse(false));
       return true;
+    case MUSIC_CONTROL:
+      // The welcome page asks the background to make sure the player exists.
+      if (message.action === "ensure") {
+        if (sender.tab?.id !== undefined) welcomeTabs.add(sender.tab.id);
+        startMusic().then(sendResponse);
+        return true;
+      }
+      return; // Other actions are answered by the offscreen document itself.
   }
 });

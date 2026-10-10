@@ -1,11 +1,12 @@
 {
   "manifest_version": 3,
   "name": "Soothia",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "description": "See the odds on everything you read.",
   "permissions": [
     "storage",
-    "scripting"
+    "scripting",
+    "offscreen"
   ],
   "host_permissions": [
     "<all_urls>"

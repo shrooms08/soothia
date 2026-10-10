@@ -1068,8 +1068,12 @@ a { color: var(--sth-link); }
 .sky-star { position: absolute; animation: skyTwinkle 8s ease-in-out infinite; }
 .star { display: block; width: 100%; height: 100%; overflow: visible; }
 .welcome { position: relative; z-index: 1; width: min(560px, 100% - 32px); padding: 40px 0 56px; text-align: center; }
+@keyframes floatY { 0%, 100% { transform: translateY(5px); } 50% { transform: translateY(-5px); } }
+@keyframes floatGlow { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
 .orb-wrap { display: flex; justify-content: center; margin-bottom: 36px; }
-.orb { position: relative; width: 112px; height: 112px; }
+/* The orb floats about 10px over 5s; the glow is brightest at the top. */
+.orb { position: relative; width: 112px; height: 112px; animation: floatY 5s ease-in-out infinite; }
+.orb::before { content: ""; position: absolute; inset: 0; border-radius: 50%; box-shadow: 0 0 50px 14px rgba(175,169,236,.45), 0 0 120px 30px rgba(127,119,221,.3); animation: floatGlow 5s ease-in-out infinite; }
 .orb-body { position: absolute; inset: 0; border-radius: 50%; overflow: hidden; background: var(--sth-orb-fill); animation: breathe 4.8s ease-in-out infinite; }
 .orb-shimmer { position: absolute; inset: -20%; background: radial-gradient(circle at 30% 30%, rgba(255,255,255,.75) 0%, rgba(255,255,255,0) 32%), radial-gradient(circle at 72% 70%, rgba(127,119,221,.35) 0%, rgba(127,119,221,0) 36%); animation: shimmer 9s ease-in-out infinite; }
 .orb-glint { position: absolute; right: -13px; top: -17px; width: 44px; height: 44px; }
@@ -1115,7 +1119,10 @@ h2 { margin: 0 0 12px; font: 400 22px/1.2 var(--serif); }
 .dots { display: flex; gap: 8px; }
 .dot { width: 8px; height: 8px; padding: 0; border: 0; border-radius: 50%; background: rgba(175,169,236,.25); cursor: pointer; }
 .dot.selected { background: var(--sth-orb-mid); box-shadow: 0 0 8px rgba(175,169,236,.7); }
-.sound-toggle { position: fixed; top: 16px; right: 16px; z-index: 2; width: 40px; height: 40px; border: 1px solid var(--sth-hairline-soft); border-radius: 12px; background: var(--sth-raised); color: var(--sth-text-2); display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.sound-corner { position: fixed; top: 16px; right: 16px; z-index: 2; display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+.sound-hint { color: var(--sth-text-3); font: 400 11px/1 var(--sans); }
+.sound-hint[hidden] { display: none; }
+.sound-toggle { width: 40px; height: 40px; border: 1px solid var(--sth-hairline-soft); border-radius: 12px; background: var(--sth-raised); color: var(--sth-text-2); display: flex; align-items: center; justify-content: center; cursor: pointer; }
 .sound-toggle:hover { background: var(--sth-raised-hover); color: var(--sth-text); }
 .sound-toggle svg { display: block; }
 .sfx-test { margin-top: 48px; padding-top: 24px; border-top: 1px solid var(--sth-hairline-soft); }

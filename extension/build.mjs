@@ -3,7 +3,7 @@
 import { build } from "vite";
 import { cp, rm } from "node:fs/promises";
 
-const entries = ["background", "content", "wallet-bridge", "wallet-sign", "nav-hook", "welcome"];
+const entries = ["background", "content", "wallet-bridge", "wallet-sign", "nav-hook", "welcome", "offscreen"];
 
 await rm("dist", { recursive: true, force: true });
 

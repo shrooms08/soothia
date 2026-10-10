@@ -123,6 +123,15 @@ export const INJECT_SIGNER = "soothia:v1:inject-signer";
 export const IMAGE_REQUEST = "soothia:v1:image";
 // Open the bundled welcome page in a new tab.
 export const OPEN_WELCOME = "soothia:v1:open-welcome";
+// Onboarding music in the offscreen document (welcome page only).
+export const MUSIC_CONTROL = "soothia:v1:music";
+export type MusicAction = "ensure" | "start" | "stop" | "mute" | "unmute" | "duck" | "status";
+export interface MusicStatus {
+  playing: boolean;
+  muted: boolean;
+  /** Why playback is not running, when it is not. */
+  error: string;
+}
 
 export const API_ROUTES = {
   "/wallet/balances": "POST",
