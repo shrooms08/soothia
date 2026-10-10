@@ -134,7 +134,14 @@ export function openSheet(host: SheetHost): Sheet {
   let endTime = claim.endTime;
   let marketType: MarketType = DEFAULT_MARKET_TYPE;
   // Hours until buying closes, or LIVE_NOW for an event already under way.
-  let buyWindow: number | typeof LIVE_NOW = claim.eventLive ? LIVE_NOW : DEFAULT_BUY_WINDOW_HOURS;
+  // A fixture claim's buying should close before kickoff (its end time is three hours after it):
+  // the longest window that fits, else the usual default.
+  const kickoffWindow = (): number => {
+    const kickoffMs = Date.parse(claim.endTime) - 3 * 3600_000;
+    const fitting = BUY_WINDOW_CHOICES.filter((choice) => choice.hours <= 72 && Date.now() + choice.hours * 3600_000 < kickoffMs);
+    return fitting.length ? fitting[fitting.length - 1].hours : DEFAULT_BUY_WINDOW_HOURS;
+  };
+  let buyWindow: number | typeof LIVE_NOW = claim.eventLive ? LIVE_NOW : claim.fromFixture ? kickoffWindow() : DEFAULT_BUY_WINDOW_HOURS;
   let address: string | null = null;
   let balances: Balances | null = null;
   let quote: Quote | null = null;
