@@ -66,8 +66,12 @@ const mocks = {
   "/buy/build": { orderId: "ord_mock", txBase64, bytes: 706, expectedShares: 1.996677, expiresAt: soon },
   "/buy/send": buyStatus,
   "/buy/status": buyStatus,
-  "/market": { marketId: MARKET, title: tiles[1].claim.question, yesPrice: 0.5, noPrice: 0.5, endTime: "2026-06-30T23:59:59Z", marketUrl: MARKET_URL },
-  "/creator/markets": { markets: [] },
+  "/market": {
+    marketId: MARKET, title: tiles[0].claim.question, yesPrice: 0.5, noPrice: 0.5, endTime: "2026-12-31T23:59:59Z", marketUrl: MARKET_URL,
+    primaryPhaseEnd: new Date(Date.now() + 36 * 3600_000).toISOString(),
+    liquidity: { totalVolumeUsdc: 6, royaltyBps: 2000, skewBps: 5832, creatorFeesUsdc: 0, isGraduated: false, graduationThresholdUsdc: 1000 },
+  },
+  "/creator/markets": { markets: [{ marketId: MARKET, question: tiles[0].claim.question, liquidityUsdc: 5, pageUrl: "https://x.com/example/status/1", signature: SIG, createdAt: soon, marketUrl: MARKET_URL, registered: true }] },
   "/positions": {
     positions: [
       { marketId: MARKET, title: tiles[0].claim.question, side: "yes", shares: 7, phase: "primary", claimable: false, claimed: false, outcome: null, marketUrl: MARKET_URL, creatorSeedShares: 5 },
@@ -98,6 +102,7 @@ const SHOTS = [
   ["dark-success-market-live", "dark", "success-create", 7000],
   ["dark-success-bet-placed", "dark", "success-bet", 7000],
   ["dark-my-bets", "dark", "mybets", 2200],
+  ["creator-earnings", "dark", "mybets", 2200],
 ];
 
 const userDataDir = `${root}design/tools/.chromium-profile`;
