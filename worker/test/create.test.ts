@@ -324,8 +324,9 @@ test("/stats counts only processed buys, sums base units, and dedupes wallets ac
   assert.equal(stats.betsPlaced, 201);
   assert.equal(stats.volumeUsdc, 202.5);
   assert.equal(stats.uniqueWallets, 150);
+  assert.equal(stats.complete, true);
   const empty = await aggregateTrades(async () => null);
-  assert.deepEqual(empty, { betsPlaced: 0, volumeUsdc: 0, uniqueWallets: 0 });
+  assert.deepEqual(empty, { betsPlaced: 0, volumeUsdc: 0, uniqueWallets: 0, complete: false }, "a failed fetch is marked incomplete, never served as zeros");
 });
 
 test("market liquidity fields come from the detail row, or null when Panta omits them", async () => {

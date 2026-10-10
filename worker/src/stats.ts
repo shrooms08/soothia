@@ -9,6 +9,8 @@ import { reconcileDeps, reconcileOrders } from "./reconcile";
 import { cacheGet, cachePut } from "./store";
 
 const CACHE_KEY = "stats:v1";
+const LAST_GOOD_KEY = "stats:last-good";
+let lastGoodStats: Stats | null = null;
 const CACHE_TTL_SEC = 60;
 const PAGE_LIMIT = 200;
 const MAX_PAGES = 10;
@@ -34,13 +36,16 @@ interface TradesPage {
 }
 
 /** Attributed buys: count, volume and distinct wallets. `fetchPage` is injectable for tests. */
-export async function aggregateTrades(fetchPage: (offset: number) => Promise<TradesPage | null>): Promise<Pick<Stats, "betsPlaced" | "volumeUsdc" | "uniqueWallets">> {
+export async function aggregateTrades(fetchPage: (offset: number) => Promise<TradesPage | null>): Promise<Pick<Stats, "betsPlaced" | "volumeUsdc" | "uniqueWallets"> & { complete: boolean }> {
   let betsPlaced = 0;
   let volumeBase = 0;
+  let complete = true;
   const wallets = new Set<string>();
   for (let page = 0; page < MAX_PAGES; page++) {
     const body = await fetchPage(page * PAGE_LIMIT);
-    const items = body?.items ?? [];
+    // A failed page means the numbers are not the truth; the caller keeps the last good ones.
+    if (!body) { complete = false; break; }
+    const items = body.items ?? [];
     for (const row of items) {
       // Only confirmed buys count as bets; claims are payouts, not bets.
       if (row.kind !== "buy" || row.status !== "processed") continue;
@@ -50,7 +55,7 @@ export async function aggregateTrades(fetchPage: (offset: number) => Promise<Tra
     }
     if (items.length < PAGE_LIMIT) break;
   }
-  return { betsPlaced, volumeUsdc: Math.round(volumeBase / 10_000) / 100, uniqueWallets: wallets.size };
+  return { betsPlaced, volumeUsdc: Math.round(volumeBase / 10_000) / 100, uniqueWallets: wallets.size, complete };
 }
 
 /** Registered markets across every creator:<wallet> record. */
@@ -97,12 +102,20 @@ export async function handleStats(request: Request, env: Env, ctx?: ExecutionCon
   // A refresh is a good moment to finish any bet the client never called back about.
   ctx?.waitUntil(reconcileOrders(reconcileDeps(env)).catch(() => {}));
 
-  const trades = await aggregateTrades((offset) => pantaTrades(env, offset));
+  const { complete, ...trades } = await aggregateTrades((offset) => pantaTrades(env, offset));
+  if (!complete) {
+    // Panta did not answer: serve the last good numbers rather than zeros, and do not cache zeros.
+    const last = lastGoodStats ?? (await cacheGet<Stats>(LAST_GOOD_KEY));
+    if (last) return new Response(JSON.stringify(last), { headers });
+    return new Response(JSON.stringify({ error: "upstream_unavailable" }), { status: 503, headers });
+  }
   const stats: Stats = {
     marketsCreated: await countMarkets(env),
     ...trades,
     updatedAt: new Date().toISOString(),
   };
+  lastGoodStats = stats;
   await cachePut(CACHE_KEY, stats, CACHE_TTL_SEC);
+  await cachePut(LAST_GOOD_KEY, stats, 24 * 3600);
   return new Response(JSON.stringify(stats), { headers });
 }
