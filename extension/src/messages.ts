@@ -121,6 +121,8 @@ export const API_REQUEST = "soothia:v1:api";
 export const INJECT_SIGNER = "soothia:v1:inject-signer";
 // Fetch a category image as a data: URL (page CSP can block the direct load).
 export const IMAGE_REQUEST = "soothia:v1:image";
+// Open the bundled welcome page in a new tab.
+export const OPEN_WELCOME = "soothia:v1:open-welcome";
 
 export const API_ROUTES = {
   "/wallet/balances": "POST",

@@ -75,12 +75,20 @@ export function starSvg(className = "star"): HTMLElement {
 }
 
 /** A small inline icon from the sheet: close, refresh, warning. */
-export function icon(name: "close" | "refresh" | "warn"): SVGElement {
+export function icon(name: "close" | "refresh" | "warn" | "sound" | "muted"): SVGElement {
   const svg = document.createElementNS(SVG_NS, "svg");
   svg.setAttribute("aria-hidden", "true");
   const paths: Record<typeof name, [string, string]> = {
     close: ["14", `<path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>`],
     refresh: ["12", `<path d="M10 6a4 4 0 1 1-1.2-2.85M10 1.5v2.5H7.5" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round"/>`],
+    sound: [
+      "14",
+      `<path d="M2 5.5v3h2.2L7.5 11V3L4.2 5.5H2z" fill="currentColor"/><path d="M9.5 4.8a2.6 2.6 0 0 1 0 4.4M11.2 3a5 5 0 0 1 0 8" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round"/>`,
+    ],
+    muted: [
+      "14",
+      `<path d="M2 5.5v3h2.2L7.5 11V3L4.2 5.5H2z" fill="currentColor"/><path d="M9.3 5.2l3.4 3.6M12.7 5.2l-3.4 3.6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>`,
+    ],
     warn: [
       "16",
       `<path d="M8 1.8l6.6 11.6H1.4z" fill="none" stroke="#F2C069" stroke-width="1.4" stroke-linejoin="round"/><path d="M8 6.5v3.2M8 11.4v.2" stroke="#F2C069" stroke-width="1.5" stroke-linecap="round"/>`,

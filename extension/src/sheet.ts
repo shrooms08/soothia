@@ -60,6 +60,8 @@ export interface SheetHost {
   created(market: { marketId: string; marketUrl: string }): void;
   /** Open the bet sheet for a market (the success screen's "Bet on it"). */
   bet(target: { marketId: string; title: string }): void;
+  /** A sound cue: a real success, a dry-run completion, or a soft error. */
+  sound?: (name: "marketLive" | "open" | "softError") => void;
   savePending(pending: PendingCreate | null): void;
 }
 
@@ -622,6 +624,7 @@ export function openSheet(host: SheetHost): Sheet {
             : `built ${builtBytes} bytes; failed: ${simulation.logLine ?? JSON.stringify(simulation.err)}`,
       });
       if (!simulation?.ok && !lax) {
+        host.sound?.("softError");
         setStatus(simulation?.reason ?? "I couldn't test this transaction, so nothing was sent. Try again in a moment.");
         return;
       }
@@ -632,6 +635,7 @@ export function openSheet(host: SheetHost): Sheet {
       if (disposed) return;
       if (!signed.ok || !signed.signedTxBase64 || !signed.signature) {
         showSteps(null);
+        host.sound?.("softError");
         setStatus(
           !signed.ok && signed.reason === "rejected"
             ? "Cancelled in Phantom. Nothing was sent."
@@ -664,6 +668,7 @@ export function openSheet(host: SheetHost): Sheet {
           register: "not attempted (dry run)",
         });
         showSteps(null);
+        host.sound?.("open");
         setStatus("Dry run complete: Phantom signed it, nothing was sent.");
         return;
       }
@@ -744,6 +749,7 @@ export function openSheet(host: SheetHost): Sheet {
     } else if (result.status === "failed") {
       host.savePending(null);
       host.debug({ register: "transaction failed on-chain" });
+      host.sound?.("softError");
       showSteps("Confirming", true);
       setStatus("");
       outcome.replaceChildren(
@@ -769,6 +775,7 @@ export function openSheet(host: SheetHost): Sheet {
     } else {
       host.savePending(null);
       host.debug({ register: "registered" });
+      host.sound?.("marketLive");
       host.created({ marketId: result.marketId, marketUrl: result.marketUrl });
       showSteps("done");
       setStatus("");

@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Welcome to Soothia</title>
+<link rel="icon" href="icons/icon-32.png">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="chrome" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFFFFF"/><stop offset=".34" stop-color="#D3D1DE"/><stop offset=".5" stop-color="#6F6C82"/><stop offset=".64" stop-color="#F3F2F8"/><stop offset="1" stop-color="#8E8BA0"/></linearGradient>
+    <symbol id="star" viewBox="-50 -50 100 100"><path d="M0 -50 C3 -12 8 -4 32 0 C8 4 3 12 0 50 C-3 12 -8 4 -32 0 C-8 -4 -3 -12 0 -50Z" fill="url(#chrome)"/><path d="M0 -50 C3 -12 8 -4 32 0 L0 0Z" fill="#FFFFFF" opacity=".38"/><path d="M0 0 L-32 0 C-8 4 -3 12 0 50Z" fill="#0E0D14" opacity=".28"/></symbol>
+  </defs>
+</svg>
+<div class="sky" id="sky" aria-hidden="true"></div>
+<main class="welcome" id="welcome">
+  <div class="orb-wrap"><div class="orb"><span class="orb-body"><span class="orb-shimmer"></span></span><svg class="star orb-glint"><use href="#star"/></svg><span class="orb-stars"><svg class="star"><use href="#star"/></svg><svg class="star"><use href="#star"/></svg><svg class="star"><use href="#star"/></svg></span></div></div>
+
+  <section class="step" data-step="1">
+    <h1>Hi, I'm Soothia.</h1>
+    <p>I read pages with you and glow when I spot something you can bet on.</p>
+  </section>
+
+  <section class="step" data-step="2" hidden>
+    <h1>How it works</h1>
+    <div class="visuals">
+      <div class="visual"><div class="mini-orb"><span class="mini-body"></span><svg class="star s1"><use href="#star"/></svg><svg class="star s2"><use href="#star"/></svg><svg class="star s3"><use href="#star"/></svg></div><span>Read</span></div>
+      <div class="visual"><div class="mini-tile"><span class="mini-chip">Crypto</span><span class="mini-q">Will BTC reach a new all-time high?</span><span class="mini-btn">Make it a market</span></div><span>Make it a market</span></div>
+      <div class="visual"><div class="mini-pill"><span class="yes">YES 62%</span><span class="no">NO 38%</span></div><span>Bet</span></div>
+    </div>
+    <p>Spot a claim, turn it into a live market on Panta, then bet YES or NO.</p>
+  </section>
+
+  <section class="step" data-step="3" hidden>
+    <h1>What you need</h1>
+    <p>Phantom, plus a little USDC and SOL on Solana. Breaking markets cost 20 USDC to create. Bets start at $1.</p>
+    <a class="button" href="https://phantom.com" target="_blank" rel="noopener">Get Phantom ↗</a>
+  </section>
+
+  <section class="step" data-step="4" hidden>
+    <h1>Try it</h1>
+    <p>Open a post and watch me light up.</p>
+    <a class="button primary" id="show-me" href="https://x.com/intangiblecoins/status/2002741524950344005" target="_blank" rel="noopener">Show me</a>
+    <p class="pin"><a href="#" id="pin-link">Pin me to your toolbar</a><span class="pin-how" id="pin-how" hidden>Click the puzzle icon, then the pin next to Soothia.</span></p>
+  </section>
+
+  <nav class="stepper" aria-label="Steps">
+    <button class="nav-btn" id="back" type="button">Back</button>
+    <div class="dots" id="dots" role="tablist"></div>
+    <button class="nav-btn primary" id="next" type="button">Next</button>
+  </nav>
+
+  <section class="sfx-test" id="sfx-test" hidden>
+    <h2>Sound check</h2>
+    <div class="sfx-buttons" id="sfx-buttons"></div>
+    <label class="mute-row"><input type="checkbox" id="mute"> Mute sounds</label>
+  </section>
+</main>
+<script src="welcome.js"></script>
+</body>
+</html>

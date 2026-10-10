@@ -8,6 +8,7 @@ import {
   HEALTH_REQUEST,
   IMAGE_REQUEST,
   INJECT_SIGNER,
+  OPEN_WELCOME,
   type ApiRequestMessage,
   type ApiResponse,
   type Claim,
@@ -197,6 +198,15 @@ async function injectSigner(tabId: number | undefined): Promise<boolean> {
   }
 }
 
+function openWelcome(): Promise<unknown> {
+  return chrome.tabs.create({ url: chrome.runtime.getURL("welcome.html") });
+}
+
+// First install only: updates do not reopen the welcome page.
+chrome.runtime.onInstalled.addListener((details) => {
+  if (details.reason === "install") openWelcome().catch(() => {});
+});
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   switch (message?.type) {
     case HEALTH_REQUEST:
@@ -216,6 +226,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return true;
     case INJECT_SIGNER:
       injectSigner(sender.tab?.id).then(sendResponse);
+      return true;
+    case OPEN_WELCOME:
+      openWelcome().then(() => sendResponse(true), () => sendResponse(false));
       return true;
   }
 });

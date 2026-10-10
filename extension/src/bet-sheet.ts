@@ -28,6 +28,8 @@ export interface BetHost {
   back(): void;
   /** Fires the orb's success pulse when a bet lands. */
   celebrate?: () => void;
+  /** A sound cue: a real success, a dry-run completion, or a soft error. */
+  sound?: (name: "betPlaced" | "open" | "softError") => void;
 }
 
 type Side = "yes" | "no";
@@ -415,6 +417,7 @@ export function openBetSheet(host: BetHost): Sheet {
             : `built ${bytes} bytes; failed: ${simulation.logLine ?? JSON.stringify(simulation.err)}`,
       });
       if (!simulation?.ok) {
+        host.sound?.("softError");
         return setStatus(simulation?.reason ?? "I couldn't test this transaction, so nothing was sent. Try again in a moment.");
       }
 
@@ -424,6 +427,7 @@ export function openBetSheet(host: BetHost): Sheet {
       if (disposed) return;
       if (!signed.ok || !signed.signedTxBase64 || !signed.signature) {
         showSteps(null);
+        host.sound?.("softError");
         return setStatus(
           !signed.ok && signed.reason === "rejected" ? "Cancelled in Phantom. Nothing was sent." : "Phantom couldn't sign this. Nothing was sent.",
         );
@@ -437,6 +441,7 @@ export function openBetSheet(host: BetHost): Sheet {
       if (dryRun) {
         host.debug({ signature: `${signed.signature} (dry run, not sent; ${checked.bytes} bytes)`, register: "not attempted (dry run)" });
         showSteps(null);
+        host.sound?.("open");
         return setStatus("Dry run complete: Phantom signed it, nothing was sent.");
       }
 
@@ -491,6 +496,7 @@ export function openBetSheet(host: BetHost): Sheet {
       );
     } else if (result.status === "failed") {
       host.debug({ register: "transaction failed on-chain" });
+      host.sound?.("softError");
       showSteps("Confirming", true);
       setStatus("");
       outcome.replaceChildren(el("p", "line", "The transaction failed on Solana. No USDC was taken."), solscan, button("Back", "link", () => host.back()));
@@ -501,6 +507,7 @@ export function openBetSheet(host: BetHost): Sheet {
       showSteps(recorded ? "done" : "Recording", !recorded);
       setStatus("");
       host.celebrate?.();
+      host.sound?.("betPlaced");
       const flourish = el("div", "flourish");
       flourish.append(starSvg(), starSvg(), starSvg());
       const summary = el("div", "summary-box");

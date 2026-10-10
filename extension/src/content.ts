@@ -2,11 +2,13 @@
 // shadow root. Nothing here touches the page's own DOM or styles.
 import { button, el, endDate, externalLink, icon, starSvg } from "./dom";
 import { loadFonts } from "./fonts";
+import { armSounds, isMuted, playSound, setMuted, type SoundName } from "./sfx";
 import {
   API_REQUEST,
   DETECT_REQUEST,
   IMAGE_REQUEST,
   HEALTH_REQUEST,
+  OPEN_WELCOME,
   NAV_CHANGED,
   WALLET_REQUEST,
   WALLET_STATUS,
@@ -47,6 +49,10 @@ const DRY_RUN_KEY = "soothia:dryRun";
 const SKIP_CHECKS_KEY = "soothia:skipChecks";
 // A sent transaction whose market has not been seen registered yet.
 const PENDING_KEY = "soothia:pendingCreate";
+const MUTED_KEY = "soothia:muted";
+// Set once the first-run speech bubble has been dismissed.
+const BUBBLE_KEY = "soothia:bubbleShown";
+const BUBBLE_DELAY_MS = 1500;
 
 // Detection runs this long after the page (or a new URL) settles.
 const SETTLE_MS = 2000;
@@ -279,6 +285,16 @@ async function mount(): Promise<void> {
   const dryRunToggle = toggle("Dry run (sign only, never send)");
   const skipChecksToggle = toggle("In dry run, skip balance and simulation checks");
   const createInfo = el("dl", "scan");
+  // Replays for demos.
+  const replayRow = el("div", "replay");
+  replayRow.append(
+    button("Show welcome again", "link mono", () => {
+      chrome.runtime.sendMessage({ type: OPEN_WELCOME }).catch(() => {});
+    }),
+    button("Reset first-run bubble", "link mono", () => {
+      chrome.storage.local.remove(BUBBLE_KEY).catch(() => {});
+    }),
+  );
 
   debug.append(
     el("summary", "debug-summary", "debug"),
@@ -287,6 +303,7 @@ async function mount(): Promise<void> {
     dryRunToggle.row,
     skipChecksToggle.row,
     createInfo,
+    replayRow,
     phantomRow.row,
     proxyRow.row,
   );
@@ -298,7 +315,28 @@ async function mount(): Promise<void> {
   const close = button("", "close", () => setOpen(false));
   close.setAttribute("aria-label", "Close");
   close.append(icon("close"));
-  head.append(brand, close);
+  // Mute toggle, next to the close button. Default is sound on.
+  const muteButton = button("", "close mute", () => void toggleMute());
+  function renderMute(): void {
+    const label = isMuted() ? "Unmute sounds" : "Mute sounds";
+    muteButton.setAttribute("aria-label", label);
+    muteButton.title = label;
+    muteButton.replaceChildren(icon(isMuted() ? "muted" : "sound"));
+  }
+  async function toggleMute(): Promise<void> {
+    setMuted(!isMuted());
+    renderMute();
+    chrome.storage.local.set({ [MUTED_KEY]: isMuted() }).catch(() => {});
+  }
+  const headActions = el("div", "head-actions");
+  headActions.append(muteButton, close);
+  head.append(brand, headActions);
+
+  function sound(name: SoundName): void {
+    playSound(name);
+  }
+  armSounds(shadow);
+  armSounds(document);
   card.append(head, tabs, body, betsPane, debug);
 
   // Typing in the sheet must not trigger the page's keyboard shortcuts (X
@@ -307,7 +345,37 @@ async function mount(): Promise<void> {
     card.addEventListener(type, (event) => event.stopPropagation());
   }
 
-  shadow.append(style, orb, card);
+  // First-run speech bubble, attached to the orb.
+  const bubble = el("div", "bubble");
+  bubble.setAttribute("role", "status");
+  bubble.hidden = true;
+  const bubbleClose = button("", "bubble-close", () => dismissBubble());
+  bubbleClose.setAttribute("aria-label", "Dismiss");
+  bubbleClose.append(icon("close"));
+  bubble.append(el("p", "bubble-text", "I'll glow when I spot something you can bet on. Click me anytime."), bubbleClose);
+  let bubbleTimer: ReturnType<typeof setTimeout> | undefined;
+
+  function dismissBubble(): void {
+    clearTimeout(bubbleTimer);
+    if (bubble.hidden) return;
+    bubble.hidden = true;
+    chrome.storage.local.set({ [BUBBLE_KEY]: true }).catch(() => {});
+  }
+
+  async function maybeShowBubble(): Promise<void> {
+    try {
+      if ((await chrome.storage.local.get(BUBBLE_KEY))[BUBBLE_KEY] === true) return;
+    } catch {
+      return;
+    }
+    bubbleTimer = setTimeout(() => {
+      if (!card.hidden) return;
+      bubble.hidden = false;
+      layout();
+    }, BUBBLE_DELAY_MS);
+  }
+
+  shadow.append(style, orb, card, bubble);
 
   // ---- Layout ----
 
@@ -323,6 +391,27 @@ async function mount(): Promise<void> {
     const orbTop = height - position.bottom - ORB_SIZE;
     orb.style.left = `${orbLeft}px`;
     orb.style.top = `${orbTop}px`;
+
+    if (!bubble.hidden) {
+      // Left of the orb, level with its middle; above it when there is no room.
+      const bubbleWidth = Math.min(240, width - EDGE_PADDING * 2);
+      bubble.style.width = `${bubbleWidth}px`;
+      const bubbleHeight = bubble.offsetHeight;
+      let bubbleLeft = orbLeft - CARD_GAP - bubbleWidth;
+      let bubbleTop = orbTop + ORB_SIZE / 2 - bubbleHeight / 2;
+      bubble.dataset.side = "left";
+      if (bubbleLeft < EDGE_PADDING) {
+        bubbleLeft = clamp(orbLeft + ORB_SIZE - bubbleWidth, EDGE_PADDING, width - bubbleWidth - EDGE_PADDING);
+        bubbleTop = orbTop - CARD_GAP - bubbleHeight;
+        bubble.dataset.side = "above";
+        if (bubbleTop < EDGE_PADDING) {
+          bubbleTop = orbTop + ORB_SIZE + CARD_GAP;
+          bubble.dataset.side = "below";
+        }
+      }
+      bubble.style.left = `${bubbleLeft}px`;
+      bubble.style.top = `${clamp(bubbleTop, EDGE_PADDING, height - bubbleHeight - EDGE_PADDING)}px`;
+    }
 
     if (card.hidden) return;
     const cardWidth = Math.min(CARD_WIDTH, width - EDGE_PADDING * 2);
@@ -380,9 +469,15 @@ async function mount(): Promise<void> {
 
   // ---- Claims ----
 
+  let foundSoundUrl = "";
+
   function setOrb(state: OrbState, count = 0): void {
     const was = orb.dataset.state;
     orb.dataset.state = state;
+    if (state === "found" && was !== "found" && foundSoundUrl !== watchedUrl) {
+      foundSoundUrl = watchedUrl;
+      sound("found");
+    }
     // One to three chrome stars up-left of the orb, one per claim; they
     // twinkle in once when they first appear.
     if (state !== "found") orbStars.replaceChildren();
@@ -448,6 +543,7 @@ async function mount(): Promise<void> {
       isVisible: () => !card.hidden && document.visibilityState === "visible",
       back: showTiles,
       celebrate: pulseOrb,
+      sound,
     });
     body.classList.add("has-sheet");
     body.replaceChildren(sheet.node);
@@ -666,6 +762,7 @@ async function mount(): Promise<void> {
         liveMarkets.set(tile.claim.id, { marketId: market.marketId, marketUrl: market.marketUrl, title: tile.claim.question });
         pulseOrb();
       },
+      sound,
       bet: (target) => openBet({ ...target, yesPrice: null, noPrice: null }),
       savePending,
     });
@@ -700,6 +797,7 @@ async function mount(): Promise<void> {
         break;
       case "error":
         setOrb("idle");
+        sound("softError");
         if (view.reason === "limit") {
           body.replaceChildren(stateBlock("error", "That's all my calls for today. I'll be back tomorrow."));
         } else {
@@ -797,13 +895,15 @@ async function mount(): Promise<void> {
   async function loadSettings(): Promise<void> {
     dryRunToggle.box.checked = true;
     try {
-      const stored = await chrome.storage.local.get([DRY_RUN_KEY, SKIP_CHECKS_KEY]);
+      const stored = await chrome.storage.local.get([DRY_RUN_KEY, SKIP_CHECKS_KEY, MUTED_KEY]);
       dryRunToggle.box.checked = stored[DRY_RUN_KEY] !== false;
       skipChecksToggle.box.checked = stored[SKIP_CHECKS_KEY] === true;
+      setMuted(stored[MUTED_KEY] === true);
     } catch {
       // Storage unavailable: stay in dry run.
     }
     skipChecksToggle.box.disabled = !dryRunToggle.box.checked;
+    renderMute();
   }
 
   dryRunToggle.box.addEventListener("change", () => {
@@ -905,6 +1005,8 @@ async function mount(): Promise<void> {
     card.hidden = !open;
     orb.setAttribute("aria-expanded", String(open));
     if (!open) return;
+    sound("open");
+    dismissBubble();
     renderPhantom();
     window.postMessage({ type: WALLET_REQUEST }, window.location.origin);
     void refreshProxy();
@@ -1036,6 +1138,7 @@ async function mount(): Promise<void> {
   await loadSettings();
   void resumePending();
   void loadCreatorMarkets();
+  void maybeShowBubble();
   render({ kind: "watching" });
   document.documentElement.append(host);
 
