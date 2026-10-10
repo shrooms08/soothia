@@ -33,6 +33,9 @@ img { display: block; max-width: 100%; height: auto; }
 /* Each star rests at its own --rest opacity and peaks bright, a little larger, with a soft glow. */
 @keyframes skyTwinkle { 0%,70%,100% { opacity: var(--rest, .4); transform: scale(1); filter: none; } 85% { opacity: .9; transform: scale(1.25) rotate(6deg); filter: drop-shadow(0 0 5px rgba(244,241,255,.85)); } }
 @keyframes rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+/* The orb floats about 10px over 5s, as on the welcome page; the glow is brightest at the top. */
+@keyframes floatY { 0%, 100% { transform: translateY(5px); } 50% { transform: translateY(-5px); } }
+@keyframes floatGlow { 0%, 100% { opacity: .35; } 50% { opacity: 1; } }
 
 /* Night sky */
 .sky { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
@@ -61,7 +64,9 @@ main, .footer { position: relative; z-index: 1; }
 /* Hero */
 .hero { max-width: 760px; margin: 0 auto; padding: 56px 24px 72px; text-align: center; }
 .hero-orb-wrap { display: flex; justify-content: center; margin-bottom: 40px; }
-.orb { position: relative; width: 120px; height: 120px; }
+.orb { position: relative; width: 120px; height: 120px; animation: floatY 5s ease-in-out infinite; }
+/* A glow layer under the ball that rides the float and brightens at the top of it. */
+.orb::before { content: ""; position: absolute; inset: 0; border-radius: 50%; box-shadow: 0 0 50px 14px rgba(175,169,236,.45), 0 0 120px 30px rgba(127,119,221,.3); animation: floatGlow 5s ease-in-out infinite; }
 .orb-body { position: absolute; inset: 0; border-radius: 50%; overflow: hidden; background: var(--sth-orb-fill); box-shadow: 0 0 40px 6px rgba(127,119,221,.45), 0 0 120px 20px rgba(83,74,183,.3); animation: breatheBig 4.8s ease-in-out infinite; }
 .orb-shimmer { position: absolute; inset: -20%; background: radial-gradient(circle at 30% 30%, rgba(255,255,255,.75) 0%, rgba(255,255,255,0) 32%), radial-gradient(circle at 72% 70%, rgba(127,119,221,.35) 0%, rgba(127,119,221,0) 36%); animation: shimmer 9s ease-in-out infinite; }
 /* The "eye": a soft highlight that drifts toward the cursor. */
