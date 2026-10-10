@@ -9,6 +9,7 @@ import {
   handleBuyStatus,
   handleClaimBuild,
   handleClaimSend,
+  handleCreatorFeesBuild,
   handleMarket,
   handlePositions,
   handleTxStatus,
@@ -25,6 +26,7 @@ import { handleDetect } from "./detect";
 import { corsHeaders, installId, json, type Env } from "./http";
 import { PANTA_BASE } from "./markets";
 import { handleMatch } from "./match";
+import { handleStats } from "./stats";
 import { handleBalances } from "./wallet";
 
 // Wallet and create routes: POST, and only from a Soothia install.
@@ -46,6 +48,7 @@ const INSTALL_ROUTES: Record<
   "/buy/status": handleBuyStatus,
   "/claim/build": handleClaimBuild,
   "/claim/send": handleClaimSend,
+  "/claim/creator-fees/build": handleCreatorFeesBuild,
 };
 
 // Query params documented for GET /markets/ (Panta names the phase filter `status`).
@@ -137,6 +140,8 @@ export default {
         return handlePositions(request, env);
       case "/market":
         return handleMarket(request, env);
+      case "/stats":
+        return handleStats(request, env);
       default:
         return json(request, { error: "not_found" }, 404);
     }

@@ -45,6 +45,8 @@ interface BuyRecord {
   quoteId: string;
   orderId?: string;
   signature?: string;
+  /** Creator-fee claims are not attributable through /trades/. */
+  kind?: "creator";
 }
 
 function parseSide(value: unknown): Side | null {
@@ -341,11 +343,58 @@ interface PantaPosition {
   outcome?: string | null;
 }
 
-interface MarketBrief {
+export interface MarketBrief {
   title: string;
   yesPrice: number | null;
   noPrice: number | null;
   endTime: string | null;
+  /** Buying window end (Panta `primaryPhaseEndTime`), ISO. */
+  primaryPhaseEnd: string | null;
+  /** Pool and creator-fee figures from the market detail; null when Panta omits them. */
+  liquidity: MarketLiquidity | null;
+}
+
+export interface MarketLiquidity {
+  /** All USDC that has gone into the market, seed included (`totalVolume`). */
+  totalVolumeUsdc: number;
+  /** Creator royalty share right now, in basis points (`currentRoyaltyBps`, 2000 = 20%). */
+  royaltyBps: number;
+  /** How one-sided the market is, in basis points (`currentSkewBps`). */
+  skewBps: number;
+  /** Creator fees accrued so far, USDC (`totalCreatorFees`). */
+  creatorFeesUsdc: number;
+  isGraduated: boolean;
+  /** Volume needed to graduate, USDC (`graduationThreshold`). */
+  graduationThresholdUsdc: number;
+}
+
+interface MarketDetail {
+  title?: string;
+  description?: string;
+  yesPrice?: string | null;
+  noPrice?: string | null;
+  endTime?: number;
+  primaryPhaseEndTime?: number;
+  totalVolume?: string;
+  currentRoyaltyBps?: string | number;
+  currentSkewBps?: string | number;
+  totalCreatorFees?: string;
+  isGraduated?: boolean;
+  graduationThreshold?: string;
+}
+
+/** Pool figures from a market detail row, or null when the fields are absent. */
+export function liquidityFrom(detail: MarketDetail): MarketLiquidity | null {
+  if (detail.totalVolume === undefined || detail.currentRoyaltyBps === undefined) return null;
+  const base = (value: string | undefined): number => Number(value ?? 0) / 1_000_000;
+  return {
+    totalVolumeUsdc: base(detail.totalVolume),
+    royaltyBps: Number(detail.currentRoyaltyBps),
+    skewBps: Number(detail.currentSkewBps ?? 0),
+    creatorFeesUsdc: base(detail.totalCreatorFees),
+    isGraduated: detail.isGraduated === true,
+    graduationThresholdUsdc: base(detail.graduationThreshold),
+  };
 }
 
 async function pantaGet<T>(env: Env, path: string): Promise<T | null> {
@@ -366,14 +415,8 @@ async function pantaGet<T>(env: Env, path: string): Promise<T | null> {
 export async function marketBrief(env: Env, marketId: string): Promise<MarketBrief | null> {
   const key = `mkt:${marketId}`;
   const cached = (await env.SOOTHIA_CACHE.get(key, "json")) as MarketBrief | null;
-  if (cached?.title) return cached;
-  const detail = await pantaGet<{
-    title?: string;
-    description?: string;
-    yesPrice?: string | null;
-    noPrice?: string | null;
-    endTime?: number;
-  }>(env, `/markets/${encodeURIComponent(marketId)}/`);
+  if (cached?.title && "liquidity" in cached) return cached;
+  const detail = await pantaGet<MarketDetail>(env, `/markets/${encodeURIComponent(marketId)}/`);
   if (!detail) return cached;
   const price = (value: string | null | undefined): number | null => {
     const parsed = Number.parseFloat(value ?? "");
@@ -384,8 +427,11 @@ export async function marketBrief(env: Env, marketId: string): Promise<MarketBri
     yesPrice: price(detail.yesPrice),
     noPrice: price(detail.noPrice),
     endTime: typeof detail.endTime === "number" ? new Date(detail.endTime * 1000).toISOString() : null,
+    primaryPhaseEnd: typeof detail.primaryPhaseEndTime === "number" ? new Date(detail.primaryPhaseEndTime * 1000).toISOString() : null,
+    liquidity: liquidityFrom(detail),
   };
-  if (brief.title) await env.SOOTHIA_CACHE.put(key, JSON.stringify(brief), { expirationTtl: 3600 });
+  // Pool figures move with every trade, so this cache is short.
+  if (brief.title) await env.SOOTHIA_CACHE.put(key, JSON.stringify(brief), { expirationTtl: 120 });
   return brief;
 }
 
@@ -489,9 +535,8 @@ export async function handleClaimSend(request: Request, env: Env, ctx: Execution
   }
   const signature = firstSignature(body.signedTxBase64);
   if (!signature) return json(request, { error: "not_signed" }, 400);
-  if (!(await loadRecord(env, `claim:${body.wallet}:${body.marketId}`))) {
-    return json(request, { error: "unknown_claim" }, 404);
-  }
+  const claimRecord = await loadRecord(env, `claim:${body.wallet}:${body.marketId}`);
+  if (!claimRecord) return json(request, { error: "unknown_claim" }, 404);
   try {
     await rpc<string>(env, "sendTransaction", [
       body.signedTxBase64,
@@ -505,17 +550,67 @@ export async function handleClaimSend(request: Request, env: Env, ctx: Execution
       return json(request, { error: "send_failed", signature, reason: simulationReason(message, logs) }, 400);
     }
   }
-  // Attribution for the claim once it confirms; the caller polls /tx/status.
-  ctx.waitUntil(
-    waitForConfirmation(env, signature, BACKGROUND_FINISH_WAIT_MS)
-      .then((state) =>
-        state.state === "confirmed"
-          ? pantaPostWithRetry(env, "/trades/", { signature, wallet: body.wallet, marketId: body.marketId })
-          : null,
-      )
-      .catch(() => {}),
-  );
+  // Attribution for a win claim once it confirms; the caller polls /tx/status.
+  // Panta refuses creator-fee claims on /trades/, so those are not reported.
+  if (claimRecord.kind !== "creator") {
+    ctx.waitUntil(
+      waitForConfirmation(env, signature, BACKGROUND_FINISH_WAIT_MS)
+        .then((state) =>
+          state.state === "confirmed"
+            ? pantaPostWithRetry(env, "/trades/", { signature, wallet: body.wallet, marketId: body.marketId })
+            : null,
+        )
+        .catch(() => {}),
+    );
+  }
   return json(request, { signature, status: "sent" });
+}
+
+// ---- POST /claim/creator-fees/build ----
+
+interface PantaCreatorFeesBuild {
+  claimableFeesUsdc?: string;
+  instructions?: BuiltInstruction[];
+}
+
+/**
+ * Builds the creator-fee claim for a market this wallet created. Panta only
+ * allows it once the market has graduated and fees have accrued; until then
+ * it answers MARKET_NOT_GRADUATED or NO_CREATOR_FEES, passed through here.
+ */
+export async function handleCreatorFeesBuild(request: Request, env: Env): Promise<Response> {
+  const body = await readJsonObject(request);
+  if (!body || !isAddress(body.wallet) || !isAddress(body.marketId)) return json(request, { error: "bad_request" }, 400);
+  const result = await pantaPostWithRetry<PantaCreatorFeesBuild>(env, "/claim/creator-fees/build/", {
+    wallet: body.wallet,
+    marketId: body.marketId,
+  });
+  if (!result.ok) return pantaFailure(request, result);
+  const build = result.data;
+  if (!Array.isArray(build.instructions) || build.instructions.length === 0) {
+    return json(request, { error: "build_failed", message: "Panta returned no instructions." }, 502);
+  }
+  try {
+    const assembled = await assembleWithFreshBlockhash(env, build.instructions, body.wallet);
+    const bytes = base64Bytes(assembled.txBase64);
+    if (bytes > MAX_BUILT_TRANSACTION_BYTES) return json(request, { error: "transaction_too_large", bytes }, 400);
+    await saveRecord(env, `claim:${body.wallet}:${body.marketId}`, {
+      wallet: body.wallet,
+      marketId: body.marketId,
+      side: "yes",
+      amountUsdc: "0",
+      quoteId: "creator",
+      kind: "creator",
+    });
+    return json(request, {
+      txBase64: assembled.txBase64,
+      bytes,
+      claimableFeesUsdc: Number(build.claimableFeesUsdc ?? 0) / 1_000_000,
+      lastValidBlockHeight: assembled.lastValidBlockHeight,
+    });
+  } catch {
+    return json(request, { error: "build_failed", message: "Could not assemble the transaction." }, 502);
+  }
 }
 
 export async function handleTxStatus(request: Request, env: Env): Promise<Response> {

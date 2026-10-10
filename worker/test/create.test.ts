@@ -306,3 +306,38 @@ test("bet amounts are two-decimal strings between 1.00 and 100.00 USDC", async (
   assert.equal(parseAmount("-1"), null);
   assert.equal(parseAmount("abc"), null);
 });
+
+test("/stats counts only processed buys, sums base units, and dedupes wallets across pages", async () => {
+  const { aggregateTrades } = await import("../src/stats");
+  const page1 = Array.from({ length: 200 }, (_, i) => ({ wallet: `w${i % 150}`, kind: "buy", status: "processed", amountUsdcBase: "1000000" }));
+  const page2 = [
+    { wallet: "w1", kind: "buy", status: "processed", amountUsdcBase: "2500000" },
+    { wallet: "w2", kind: "claim", status: "processed", amountUsdcBase: "9000000" },
+    { wallet: "w3", kind: "buy", status: "failed", amountUsdcBase: "9000000" },
+  ];
+  const seen: number[] = [];
+  const stats = await aggregateTrades(async (offset) => {
+    seen.push(offset);
+    return { items: offset === 0 ? page1 : page2 };
+  });
+  assert.deepEqual(seen, [0, 200]);
+  assert.equal(stats.betsPlaced, 201);
+  assert.equal(stats.volumeUsdc, 202.5);
+  assert.equal(stats.uniqueWallets, 150);
+  const empty = await aggregateTrades(async () => null);
+  assert.deepEqual(empty, { betsPlaced: 0, volumeUsdc: 0, uniqueWallets: 0 });
+});
+
+test("market liquidity fields come from the detail row, or null when Panta omits them", async () => {
+  const { liquidityFrom } = await import("../src/buy");
+  assert.equal(liquidityFrom({ title: "x" }), null);
+  const live = liquidityFrom({
+    totalVolume: "6000000",
+    currentRoyaltyBps: "2000",
+    currentSkewBps: "5832",
+    totalCreatorFees: "0",
+    isGraduated: false,
+    graduationThreshold: "1000000000",
+  })!;
+  assert.deepEqual(live, { totalVolumeUsdc: 6, royaltyBps: 2000, skewBps: 5832, creatorFeesUsdc: 0, isGraduated: false, graduationThresholdUsdc: 1000 });
+});
