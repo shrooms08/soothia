@@ -27,6 +27,7 @@ import { handleDetect } from "./detect";
 import { corsHeaders, installId, json, type Env } from "./http";
 import { PANTA_BASE } from "./markets";
 import { handleMatch } from "./match";
+import { reconcileDeps, reconcileOrders } from "./reconcile";
 import { handleStats } from "./stats";
 import { handleBalances } from "./wallet";
 
@@ -146,9 +147,14 @@ export default {
       case "/market":
         return handleMarket(request, env);
       case "/stats":
-        return handleStats(request, env);
+        return handleStats(request, env, ctx);
       default:
         return json(request, { error: "not_found" }, 404);
     }
+  },
+
+  // Every five minutes (wrangler.toml): finish bets that were sent but never reported.
+  async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(reconcileOrders(reconcileDeps(env)).catch(() => {}));
   },
 } satisfies ExportedHandler<Env>;

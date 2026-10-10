@@ -49,6 +49,10 @@ export interface BuyRecord {
   kind?: "creator";
   /** Where the order came from; "blink" for Solana Actions bet links. */
   source?: "blink";
+  /** Panta has stored the attribution for this order's signature. */
+  attributed?: boolean;
+  /** When the reconcile sweep last looked at this order (ms). */
+  reconciledAt?: number;
 }
 
 export function parseSide(value: unknown): Side | null {
@@ -263,6 +267,10 @@ export async function finishBuy(env: Env, record: BuyRecord, signature: string, 
     if (reported.ok) {
       status.attributed = reported.data.status === "processed";
       delete status.errors.report;
+      // Remember it, so the reconcile sweep leaves this order alone.
+      if (status.attributed && record.orderId) {
+        await saveRecord(env, record.orderId, { ...record, signature, attributed: true }).catch(() => {});
+      }
       break;
     }
     status.errors.report = (reported.error.code ?? "UPSTREAM_ERROR").toLowerCase();

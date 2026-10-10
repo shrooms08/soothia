@@ -18,3 +18,7 @@ directory = "./public"
 [[kv_namespaces]]
 binding = "SOOTHIA_CACHE"
 id = "603952ecd4ea42f3b372051b7fe789ff"
+
+# Reconcile sweep: finishes submit -> verify -> report for bets whose client never called back.
+[triggers]
+crons = ["*/5 * * * *"]
