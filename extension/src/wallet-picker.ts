@@ -58,6 +58,7 @@ export function pickWallet(container: HTMLElement, wallets: WalletInfo[]): Promi
     }
     panel.append(button("Cancel", "ghost centered", () => finish(null)));
     container.append(panel);
-    panel.querySelector<HTMLElement>(".wallet-option, .ghost")?.focus();
+    panel.scrollIntoView({ block: "nearest" });
+    panel.querySelector<HTMLElement>(".wallet-option, .ghost")?.focus({ preventScroll: true });
   });
 }
