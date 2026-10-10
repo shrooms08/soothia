@@ -14,7 +14,8 @@ import type { Env } from "./http";
 import { rpc } from "./rpc";
 import { kvPut } from "./store";
 
-export const PANTA_PROGRAM = "6gM5afTQBq5VZCfgpGqcsqzfWd5maLSCKWtGjbEobZMp";
+import { PANTA_PROGRAM } from "./pantaRules";
+export { PANTA_PROGRAM };
 const RECORD_TTL_SEC = 30 * 24 * 3600;
 const MAX_ORDERS_PER_RUN = 25;
 /** Leave an order alone for this long between looks. */

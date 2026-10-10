@@ -24,12 +24,13 @@ import {
   handleSimulate,
 } from "./create";
 import { handleDetect } from "./detect";
-import { corsHeaders, installId, json, type Env } from "./http";
+import { corsHeaders, installId, isAdmin, json, type Env } from "./http";
 import { PANTA_BASE } from "./markets";
 import { handleMatch } from "./match";
 import { handleMarkets, warmCatalog } from "./catalog";
 import { pendingCreatorCount } from "./creators";
 import { reconcileDeps, reconcileOrders } from "./reconcile";
+import { LIMITS, rateLimited } from "./ratelimit";
 import { budgetDirty, kvBudgetReport, reportBudgetToEdge } from "./store";
 import { handleStats } from "./stats";
 import { handleBalances } from "./wallet";
@@ -121,6 +122,13 @@ export default {
   },
 } satisfies ExportedHandler<Env>;
 
+/** A 429 when this IP has used up `limit` for `route`, otherwise null. */
+async function limited(request: Request, route: string, limit: { limit: number; windowSec: number }): Promise<Response | null> {
+  const retryAfter = await rateLimited(request, route, limit);
+  if (retryAfter === null) return null;
+  return json(request, { error: "rate_limited" }, 429, { "Retry-After": String(retryAfter) });
+}
+
 async function route(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   {
     // Solana Actions (bet links) have their own open CORS policy.
@@ -142,15 +150,24 @@ async function route(request: Request, env: Env, ctx: ExecutionContext): Promise
       }
       switch (path) {
         case "/detect":
-          return handleDetect(request, env);
+          return (await limited(request, "detect", LIMITS.detect)) ?? handleDetect(request, env);
         case "/match":
-          return handleMatch(request, env);
+          return (await limited(request, "match", LIMITS.match)) ?? handleMatch(request, env);
         default:
           return json(request, { error: "not_found" }, 404);
       }
     }
     if (request.method !== "GET") {
       return json(request, { error: "method_not_allowed" }, 405);
+    }
+
+    // Operator-only diagnostics: without the admin header these paths do not exist.
+    if (path.startsWith("/debug")) {
+      if (!isAdmin(request, env)) return json(request, { error: "not_found" }, 404);
+      if (path === "/debug/kv-budget") {
+        return json(request, { ...(await kvBudgetReport()), pendingCreatorWrites: pendingCreatorCount() });
+      }
+      return json(request, { error: "not_found" }, 404);
     }
 
     switch (path) {
@@ -170,8 +187,6 @@ async function route(request: Request, env: Env, ctx: ExecutionContext): Promise
         return handleStats(request, env, ctx);
       case "/markets":
         return handleMarkets(request, env, ctx);
-      case "/debug/kv-budget":
-        return json(request, { ...(await kvBudgetReport()), pendingCreatorWrites: pendingCreatorCount() });
       default:
         return json(request, { error: "not_found" }, 404);
     }

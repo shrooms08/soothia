@@ -1,15 +1,23 @@
 # Soothia
 
-Soothia is an AI buddy that lives in your browser as a Chrome extension. A small floating orb sits on every webpage. In later phases it reads what you are reading (tweets, news, sports), spots claims you could bet on, shows the matching [Panta](https://docs.panta.market) prediction market with live odds, and lets you buy YES or NO with your Phantom wallet, or create a new market straight from the page. Panta markets are binary YES/NO markets settled in USDC on Solana mainnet. This repo is at P0: the orb, a status card, a proxy Worker that keeps the Panta API key off users' machines, and a script that takes stock of the Panta catalog.
+See the odds on everything you read. Soothia is a Chrome extension: a small floating orb sits on every page, reads the article, tweet, or match preview you are on, and turns its claims into [Panta](https://docs.panta.market) prediction markets. It shows the matching market with live odds, lets you bet YES or NO from your own Solana wallet, or creates a new market straight from the page. Panta markets are binary YES/NO markets settled in USDC on Solana mainnet.
+
+- Site and install: https://soothia.fun
+- Markets made and found with Soothia: https://soothia.fun/markets
+- API (Cloudflare Worker `soothia-proxy`): https://api.soothia.fun
+
+Soothia never holds funds or keys. The extension asks your wallet to sign a transaction that Panta built; the Worker checks that the signed bytes match what was built (only a compute budget may be added) and relays only transactions that invoke the Panta program. Dry run is on by default: the extension signs but never sends until you turn it off in the card's settings. Bets are 1 to 100 USDC.
 
 ## Repo layout
 
 | Path | What it is |
 | - | - |
 | `extension/` | Chrome MV3 extension (TypeScript, Vite). Build output goes to `extension/dist`. |
-| `worker/` | Cloudflare Worker `soothia-proxy` (TypeScript, Wrangler). Holds the Panta API key. |
-| `scripts/` | Node + TypeScript scripts, run with `tsx`. |
-| `docs/` | Generated reports, such as `catalog-check.md`. |
+| `worker/` | Cloudflare Worker `soothia-proxy` (TypeScript, Wrangler). Holds the Panta, Claude, and RPC keys. |
+| `site/` | The landing site Worker `soothia` (static files plus server-rendered `/m/<marketId>` and `/markets`). |
+| `scripts/` | Node + TypeScript scripts: catalog check, extension packaging, site assets. |
+| `docs/` | Notes and generated reports (`panta-create-rules.md`, `blinks.md`, `wallets.md`, `catalog-check.md`). |
+| `design/` | Screenshots of applied designs and the headless check scripts in `design/tools`. |
 | `CLAUDE.md` | Standing rules for anyone (human or AI) working in this repo. |
 
 ## Build the extension
@@ -17,61 +25,61 @@ Soothia is an AI buddy that lives in your browser as a Chrome extension. A small
 ```bash
 cd extension
 npm install
-npm run build
+npm run build        # writes extension/dist
+npm test             # unit tests
+npm run typecheck
 ```
 
-Then load it in Chrome: open `chrome://extensions`, turn on **Developer mode** (top right), click **Load unpacked**, and pick the `extension/dist` folder. After each rebuild, click the reload arrow on the Soothia card on that page.
+Load it in Chrome: open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked**, and pick `extension/dist`. After each rebuild, click the reload arrow on the Soothia card on that page.
 
-The Worker URL the extension talks to is the single constant `WORKER_URL` in `extension/src/config.ts`. All visual styles are in `extension/src/styles.ts`.
+The Worker URL is the single constant `WORKER_URL` in `extension/src/config.ts`. All visual styles live in `extension/src/styles.ts`. The card's settings (bottom of the card) hold dry run, sound, and a **Show debug info** toggle that reveals the scan and transaction diagnostics; it is off by default.
+
+Package the zip the site serves: `cd scripts && npm install && npm run package-extension` (writes `site/soothia-extension.zip` and checks the version).
 
 ## Run and deploy the Worker
 
-The Worker needs one secret, `PANTA_API_KEY`.
+Secrets (never in git): copy `worker/.dev.vars.example` to `worker/.dev.vars` for local runs; in production each is set once with `npx wrangler secret put <NAME>`.
 
-Run locally:
+| Secret | Used for |
+| - | - |
+| `PANTA_API_KEY` | Panta API (catalog, quotes, building transactions). |
+| `ANTHROPIC_API_KEY` | `/detect` (claims from page text) and `/match` (claim to market). |
+| `HELIUS_RPC_URL` | Solana mainnet RPC for balances, simulation, sending, and confirmation. |
+| `ADMIN_TOKEN` | Gates `GET /debug/*`; sent as the `X-Soothia-Admin` header. Without it those routes return 404. |
 
 ```bash
 cd worker
 npm install
-cp .dev.vars.example .dev.vars   # then paste your key after PANTA_API_KEY=
-npm run dev                      # serves http://localhost:8787
-```
-
-Deploy:
-
-```bash
-cd worker
-npx wrangler login                     # once per machine
-npx wrangler secret put PANTA_API_KEY  # once; paste the key when prompted
+npm run dev          # http://localhost:8787
+npm test
+npm run typecheck
 npm run deploy
 ```
 
-Routes:
+Main routes: `GET /health`, `GET /markets` (normalized catalog), `GET /market?id=`, `GET /stats`, `POST /detect` and `POST /match` (per-IP limited), wallet and transaction routes under `/wallet`, `/create`, `/buy`, `/claim` (require an `X-Soothia-Install` id), and the Solana Actions routes `/actions.json`, `/api/actions/market/:id`, `/api/tx/send`, `/api/tx/status` used by bet links.
 
-| Route | Returns |
-| - | - |
-| `GET /health` | `{"ok":true,"service":"soothia-proxy"}` |
-| `GET /panta/markets` | Panta's market list. Passes through `limit`, `cursor`, `category`, and `status` (`phase` is accepted as an alias for `status`). |
-| `GET /panta/categories` | Panta's category list. |
-
-Panta responses are returned as-is with their status code. If Panta cannot be reached the Worker returns `502 {"error":"upstream_unavailable"}`. CORS allows `chrome-extension://` origins and `http://localhost`.
-
-## Run the catalog check
+## Deploy the site
 
 ```bash
-cp .env.example .env   # in the repo root; then paste your key after PANTA_API_KEY=
-cd scripts
-npm install
-npm run catalog-check
+cd site && npx wrangler deploy
+cd scripts && npm test      # escaping and security-header tests for site/worker.js
 ```
 
-It pages through every Panta market, prints a summary (totals, counts by phase and category, how many are tradable, 15 sample markets with YES prices), and writes it to `docs/catalog-check.md`.
+## Catalog check
+
+```bash
+cp .env.example .env          # repo root; paste the Panta key after PANTA_API_KEY=
+cd scripts && npm install && npm run catalog-check
+```
+
+It pages through every Panta market and writes a summary to `docs/catalog-check.md`.
 
 ## Sounds and music
 
-The extension's sound effects are synthesized with the Web Audio API (`extension/src/sfx.ts`): bell tones from inharmonic partials, pentatonic notes, a generated reverb. Three styles ship (`musicbox`, `celesta`, `chimes`); the chosen one is stored in `chrome.storage.local` under `soothia:sfxStyle`, and mute under `soothia:muted`. Audition them at `chrome-extension://<extension id>/welcome.html?sfx=1`.
+Sound effects are synthesized with the Web Audio API (`extension/src/sfx.ts`). The chosen style is stored in `chrome.storage.local` under `soothia:sfxStyle`, and mute under `soothia:muted`. Audition them at `chrome-extension://<extension id>/welcome.html?sfx=1`.
 
-To use recorded sounds instead, drop CC0 files named `found`, `open`, `marketLive`, `betPlaced` and `softError` (`.mp3` or `.wav`) into `extension/public/sfx/` and rebuild. A fourth style, `files`, then appears on the sound-check page. Missing files fall back to the celesta synth.
+Music plays only on the welcome page, never on websites. Its license is tracked in `extension/public/music/LICENSE-music.txt`.
 
-Music: Medieval Music – Cobblestone Village (source and license to be confirmed; see `extension/public/music/LICENSE-music.txt`). It plays only on the welcome page, never on websites.
+## License
 
+MIT, see `LICENSE`. The onboarding music is licensed separately.

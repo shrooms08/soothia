@@ -7,7 +7,8 @@
     "typecheck": "tsc --noEmit",
     "make-brand-assets": "node make-brand-assets.mjs",
     "package-extension": "node package-extension.mjs",
-    "make-site-assets": "node make-site-assets.mjs"
+    "make-site-assets": "node make-site-assets.mjs",
+    "test": "node --test *.test.mjs"
   },
   "devDependencies": {
     "@types/node": "^24",

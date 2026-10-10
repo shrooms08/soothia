@@ -39,3 +39,5 @@ Soothia is a Chrome MV3 extension (floating orb on every page) backed by a Cloud
 - Extension tests: `cd extension && npm test`
 - Category images: `cd scripts && npm run make-category-images` (writes `worker/public/img`)
 - Catalog check: `cd scripts && npm install && npm run catalog-check`
+- Site Worker tests (escaping, security headers): `cd scripts && npm test`
+- `GET /debug/*` on soothia-proxy needs the `X-Soothia-Admin` header equal to the `ADMIN_TOKEN` secret; otherwise 404. `/detect`, `/match`, and the public bet-link routes are limited per IP (`worker/src/ratelimit.ts`).

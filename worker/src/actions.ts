@@ -41,11 +41,13 @@ import {
   simulationReason,
   txState,
   waitForConfirmation,
+  touchesPanta,
   type PantaError,
 } from "./create";
 import { readJsonObject, type Env } from "./http";
 import { MAX_BUILT_TRANSACTION_BYTES } from "./pantaRules";
 import { displayQuote, quoteDeps, quoteWithRetry } from "./quotes";
+import { LIMITS, rateLimited, type Limit } from "./ratelimit";
 import { PANTA_PROGRAM } from "./reconcile";
 import { rpc, RpcError } from "./rpc";
 
@@ -267,6 +269,8 @@ export async function handleTxSend(request: Request, deps: ActionDeps): Promise<
   if (base64Bytes(signed) > 1232) return fail("The signed transaction is too large.");
   const signature = firstSignature(signed);
   if (!signature) return fail("The transaction is not signed.");
+  // Soothia relays Panta bets, not arbitrary transactions.
+  if (!touchesPanta(signed)) return fail("Only Panta transactions can be sent through Soothia.", 400, "not_panta_transaction");
   try {
     await deps.send(signed);
   } catch (error) {
@@ -426,6 +430,16 @@ async function confirmFromChain(deps: ActionDeps, marketId: string, account: str
 // ---- Router ----
 
 /** Answers action routes (and their preflights); null for every other path. */
+/** Runs `handler` unless this IP has used up `limit` for `route`, in which case a 429 ActionError. */
+async function guarded(request: Request, route: string, limit: Limit, handler: () => Promise<Response>): Promise<Response> {
+  const retryAfter = await rateLimited(request, route, limit);
+  if (retryAfter === null) return handler();
+  return new Response(JSON.stringify({ message: "Too many requests from your network. Try again in a minute.", code: "rate_limited" }), {
+    status: 429,
+    headers: { ...ACTION_HEADERS, "Retry-After": String(retryAfter) },
+  });
+}
+
 export function actionRoute(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> | null {
   const path = new URL(request.url).pathname.replace(/\/+$/, "");
   if (path === "/actions.json") {
@@ -435,7 +449,9 @@ export function actionRoute(request: Request, env: Env, ctx: ExecutionContext): 
   if (path === "/api/tx/send" || path === "/api/tx/status") {
     if (request.method === "OPTIONS") return Promise.resolve(new Response(null, { status: 204, headers: ACTION_HEADERS }));
     const deps = actionDeps(env, ctx);
-    if (path === "/api/tx/send") return request.method === "POST" ? handleTxSend(request, deps) : Promise.resolve(fail("Method not allowed.", 405));
+    if (path === "/api/tx/send") {
+      return request.method === "POST" ? guarded(request, "txSend", LIMITS.txSend, () => handleTxSend(request, deps)) : Promise.resolve(fail("Method not allowed.", 405));
+    }
     return request.method === "GET" ? handleTxStatus(request, deps) : Promise.resolve(fail("Method not allowed.", 405));
   }
   const match = ACTION_PATH.exec(path);
@@ -447,9 +463,9 @@ export function actionRoute(request: Request, env: Env, ctx: ExecutionContext): 
     return request.method === "POST" ? handleActionConfirm(request, deps, marketId) : Promise.resolve(fail("Method not allowed.", 405));
   }
   if (sub === "/quote") {
-    return request.method === "GET" ? handleActionQuote(request, deps, marketId) : Promise.resolve(fail("Method not allowed.", 405));
+    return request.method === "GET" ? guarded(request, "quote", LIMITS.quote, () => handleActionQuote(request, deps, marketId)) : Promise.resolve(fail("Method not allowed.", 405));
   }
   if (request.method === "GET") return handleActionGet(request, deps, marketId);
-  if (request.method === "POST") return handleActionPost(request, deps, marketId);
+  if (request.method === "POST") return guarded(request, "actionBuild", LIMITS.actionBuild, () => handleActionPost(request, deps, marketId));
   return Promise.resolve(fail("Method not allowed.", 405));
 }
