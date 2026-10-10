@@ -210,13 +210,13 @@ export function openSheet(host: SheetHost): Sheet {
     const current = String(buyWindow);
     windowSelect.replaceChildren();
     if (claim.eventLive && marketType === "breaking") {
-      const live = el("option", "", "Event is live now (buying closes at once)");
+      const live = el("option", "", "Live now (closes at once)");
       live.value = LIVE_NOW;
       windowSelect.append(live);
     }
     for (const choice of BUY_WINDOW_CHOICES) {
       if (marketType === "breaking" && choice.hours > BREAKING_MAX_BUY_WINDOW_HOURS) continue;
-      const option = el("option", "", `${choice.label} after creation`);
+      const option = el("option", "", choice.label);
       option.value = String(choice.hours);
       windowSelect.append(option);
     }

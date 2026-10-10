@@ -31,15 +31,15 @@ export const DEFAULT_BUY_WINDOW_HOURS = 48;
 export const BREAKING_MAX_BUY_WINDOW_HOURS = 72;
 // Choices for "Buying window closes", in hours after creation.
 export const BUY_WINDOW_CHOICES: { hours: number; label: string }[] = [
-  { hours: 1, label: "1 hour" },
-  { hours: 6, label: "6 hours" },
-  { hours: 12, label: "12 hours" },
-  { hours: 24, label: "1 day" },
-  { hours: 48, label: "2 days" },
-  { hours: 72, label: "3 days" },
-  { hours: 24 * 7, label: "1 week" },
-  { hours: 24 * 14, label: "2 weeks" },
-  { hours: 24 * 30, label: "30 days" },
+  { hours: 1, label: "In 1 hour" },
+  { hours: 6, label: "In 6 hours" },
+  { hours: 12, label: "In 12 hours" },
+  { hours: 24, label: "In 24 hours" },
+  { hours: 48, label: "In 2 days" },
+  { hours: 72, label: "In 3 days" },
+  { hours: 24 * 7, label: "In 1 week" },
+  { hours: 24 * 14, label: "In 2 weeks" },
+  { hours: 24 * 30, label: "In 30 days" },
 ];
 // A buying window that closes right away, for an event already under way.
 export const LIVE_NOW = "live";

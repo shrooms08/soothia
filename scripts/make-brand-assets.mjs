@@ -37,7 +37,7 @@ function marketSvg([key, word, rot, s1, s2]) {
 ${CHROME(`${key}-chrome`)}
 ${STAR(`${key}-star`, `${key}-chrome`)}
 </defs>
-<rect width="1024" height="1024" fill="#0E0D14"/>
+<rect width="1024" height="1024" fill="#000000"/>
 <rect width="1024" height="1024" fill="url(#${key}-glow)"/>
 <ellipse cx="512" cy="440" rx="330" ry="74" fill="none" stroke="#AFA9EC" stroke-opacity=".22" stroke-width="2" transform="rotate(${rot} 512 440)"/>
 <circle cx="512" cy="440" r="196" fill="#7F77DD" opacity=".18"/>
@@ -57,9 +57,9 @@ const STAR_SVG = (size, style) =>
 
 // From section 02 of the sheet, logo.icon.
 const ICONS = {
-  128: `<div style="width:128px;height:128px;border-radius:28px;background:radial-gradient(circle at 50% 45%,#221F38 0%,#0E0D14 70%);display:flex;align-items:center;justify-content:center;box-shadow:inset 0 0 0 1px rgba(175,169,236,.18)"><div style="position:relative;width:72px;height:72px"><div style="position:absolute;inset:0;border-radius:50%;background:${ORB};box-shadow:0 0 20px 3px rgba(127,119,221,.55)"></div>${STAR_SVG(38, "right:-12px;top:-15px")}</div></div>`,
-  48: `<div style="width:48px;height:48px;border-radius:11px;background:#0E0D14;display:flex;align-items:center;justify-content:center;box-shadow:inset 0 0 0 1px rgba(175,169,236,.22)"><div style="position:relative;width:28px;height:28px"><div style="position:absolute;inset:0;border-radius:50%;background:${ORB};box-shadow:0 0 8px rgba(127,119,221,.6)"></div>${STAR_SVG(16, "right:-5px;top:-6px")}</div></div>`,
-  32: `<div style="width:32px;height:32px;border-radius:8px;background:#0E0D14;display:flex;align-items:center;justify-content:center;box-shadow:inset 0 0 0 1px rgba(175,169,236,.22)"><div style="position:relative;width:20px;height:20px"><div style="position:absolute;inset:0;border-radius:50%;background:radial-gradient(circle at 38% 34%,#FFFFFF 0%,#F4F1FF 26%,#C9C3F2 56%,#7F77DD 100%)"></div>${STAR_SVG(11, "right:-3px;top:-4px")}</div></div>`,
+  128: `<div style="width:128px;height:128px;border-radius:28px;background:radial-gradient(circle at 50% 45%,#1A1826 0%,#000000 70%);display:flex;align-items:center;justify-content:center;box-shadow:inset 0 0 0 1px rgba(175,169,236,.18)"><div style="position:relative;width:72px;height:72px"><div style="position:absolute;inset:0;border-radius:50%;background:${ORB};box-shadow:0 0 20px 3px rgba(127,119,221,.55)"></div>${STAR_SVG(38, "right:-12px;top:-15px")}</div></div>`,
+  48: `<div style="width:48px;height:48px;border-radius:11px;background:#000000;display:flex;align-items:center;justify-content:center;box-shadow:inset 0 0 0 1px rgba(175,169,236,.22)"><div style="position:relative;width:28px;height:28px"><div style="position:absolute;inset:0;border-radius:50%;background:${ORB};box-shadow:0 0 8px rgba(127,119,221,.6)"></div>${STAR_SVG(16, "right:-5px;top:-6px")}</div></div>`,
+  32: `<div style="width:32px;height:32px;border-radius:8px;background:#000000;display:flex;align-items:center;justify-content:center;box-shadow:inset 0 0 0 1px rgba(175,169,236,.22)"><div style="position:relative;width:20px;height:20px"><div style="position:absolute;inset:0;border-radius:50%;background:radial-gradient(circle at 38% 34%,#FFFFFF 0%,#F4F1FF 26%,#C9C3F2 56%,#7F77DD 100%)"></div>${STAR_SVG(11, "right:-3px;top:-4px")}</div></div>`,
   // "no glint" variant.
   16: `<div style="width:16px;height:16px;border-radius:50%;background:radial-gradient(circle at 40% 36%,#FFFFFF 0%,#E6E1FB 40%,#7F77DD 100%);box-shadow:inset 0 0 0 1px #534AB7"></div>`,
 };

@@ -47,13 +47,17 @@ export const STYLES = `
   --sth-orb-edge-light: 0 2px 10px rgba(14,13,20,.35);
   --sth-chrome: linear-gradient(135deg, #FFFFFF 0%, #D3D1DE 34%, #6F6C82 50%, #F3F2F8 64%, #8E8BA0 100%);
 
-  --sth-ink: #0E0D14;
-  --sth-surface: rgba(22,21,29,.96);
-  --sth-surface-2: rgba(255,255,255,.035);
+  --sth-ink: #000000;
+  /* Pure black surfaces; raised elements sit one level up so hierarchy survives. */
+  --sth-surface: #000000;
+  --sth-raised: #0B0B0F;
+  --sth-raised-hover: #121218;
+  --sth-surface-2: var(--sth-raised);
   --sth-surface-3: rgba(175,169,236,.10);
-  --sth-hairline: rgba(175,169,236,.18);
-  --sth-hairline-soft: rgba(175,169,236,.12);
-  --sth-shadow: 0 24px 60px -12px rgba(0,0,0,.65), 0 0 0 1px rgba(0,0,0,.35);
+  --sth-hairline: rgba(175,169,236,.22);
+  --sth-hairline-soft: rgba(175,169,236,.14);
+  /* X dark mode is also pure black: the hairline and violet glow separate the card from the page. */
+  --sth-shadow: 0 0 0 1px rgba(127,119,221,.12), 0 12px 40px rgba(83,74,183,.28), 0 24px 60px -12px rgba(0,0,0,.65);
   --sth-blur: blur(18px) saturate(140%);
 
   --sth-text: #F5F0E6;
@@ -300,7 +304,7 @@ export const STYLES = `
   font: 500 13px/1 var(--sth-font-sans);
   cursor: pointer;
 }
-.tab.selected { background: rgba(175,169,236,.16); color: var(--sth-text); }
+.tab.selected { background: var(--sth-raised-hover); color: var(--sth-text); }
 
 .body {
   flex: 1 1 auto;
@@ -345,7 +349,8 @@ export const STYLES = `
   cursor: pointer;
   white-space: nowrap;
 }
-.button:hover { background: rgba(175,169,236,.16); }
+.button { background: var(--sth-raised); }
+.button:hover { background: var(--sth-raised-hover); }
 .button.primary {
   padding: 0 14px;
   border: 0;
@@ -430,7 +435,7 @@ a.button { display: inline-flex; align-items: center; justify-content: center; t
   padding: 14px;
   border: 1px solid var(--sth-hairline-soft);
   border-radius: var(--sth-r-tile);
-  background: rgba(255,255,255,.025);
+  background: var(--sth-raised);
 }
 .meta {
   display: flex;
@@ -441,7 +446,7 @@ a.button { display: inline-flex; align-items: center; justify-content: center; t
 .chip {
   padding: 5px 8px;
   border-radius: var(--sth-r-pill);
-  background: var(--sth-surface-3);
+  background: var(--sth-raised-hover);
   color: var(--sth-link);
   font: 500 11px/1 var(--sth-font-sans);
   letter-spacing: .06em;
@@ -592,10 +597,11 @@ input[type="number"].input { font-family: var(--sth-font-mono); }
   padding: 12px;
   border: 1px solid rgba(175,169,236,.14);
   border-radius: var(--sth-r-field);
-  background: transparent;
+  background: var(--sth-raised);
   cursor: pointer;
 }
-.type:has(.type-box:checked) { border-color: var(--sth-orb-mid); background: rgba(175,169,236,.08); }
+.type:hover { background: var(--sth-raised-hover); }
+.type:has(.type-box:checked) { border-color: var(--sth-orb-mid); background: var(--sth-raised-hover); }
 .type-box {
   flex: none;
   width: 16px;
@@ -617,7 +623,7 @@ input[type="number"].input { font-family: var(--sth-font-mono); }
 .type:not(:has(.type-box:checked)) .type-blurb { display: none; }
 
 /* How it resolves */
-.rule { border: 1px solid rgba(175,169,236,.14); border-radius: var(--sth-r-field); }
+.rule { border: 1px solid rgba(175,169,236,.14); border-radius: var(--sth-r-field); background: var(--sth-raised); }
 .rule-summary {
   display: flex;
   align-items: center;
@@ -645,6 +651,7 @@ input[type="number"].input { font-family: var(--sth-font-mono); }
   display: inline-block;
   padding: 7px 10px;
   border: 1px solid rgba(175,169,236,.2);
+  background: var(--sth-raised-hover);
   border-radius: var(--sth-r-pill);
   color: var(--sth-text);
   font: 400 12px/1 var(--sth-font-mono);
@@ -698,6 +705,7 @@ input[type="number"].input { font-family: var(--sth-font-mono); }
   padding: 12px;
   border: 1px solid rgba(175,169,236,.14);
   border-radius: var(--sth-r-field);
+  background: var(--sth-raised);
   color: var(--sth-text-2);
   font: 400 13px/1.5 var(--sth-font-sans);
 }
@@ -731,7 +739,7 @@ input[type="number"].input { font-family: var(--sth-font-mono); }
   padding: 16px;
   border: 1px solid var(--sth-hairline);
   border-radius: 16px;
-  background: var(--sth-surface);
+  background: var(--sth-raised);
   list-style: none;
 }
 .step { display: flex; align-items: center; gap: 12px; color: var(--sth-text-3); font: 500 13px/1 var(--sth-font-sans); }
@@ -777,9 +785,10 @@ input[type="number"].input { font-family: var(--sth-font-mono); }
   height: 68px;
   border: 1px solid var(--sth-hairline);
   border-radius: var(--sth-r-tile);
-  background: rgba(255,255,255,.025);
+  background: var(--sth-raised);
   cursor: pointer;
 }
+.side:hover { background: var(--sth-raised-hover); }
 .side-label { color: var(--sth-text-2); font: 600 13px/1 var(--sth-font-sans); letter-spacing: .06em; }
 .side-pct { color: var(--sth-text-2); font: 500 22px/1 var(--sth-font-mono); }
 .side-yes.selected { border: 1.5px solid var(--sth-yes); background: var(--sth-yes-bg); }
@@ -792,12 +801,13 @@ input[type="number"].input { font-family: var(--sth-font-mono); }
   height: 40px;
   border: 1px solid var(--sth-hairline);
   border-radius: var(--sth-r-field);
-  background: transparent;
+  background: var(--sth-raised);
   color: var(--sth-text);
   font: 500 14px/1 var(--sth-font-mono);
   cursor: pointer;
 }
-.chip-button.selected { border-color: var(--sth-orb-mid); background: rgba(175,169,236,.14); }
+.chip-button:hover { background: var(--sth-raised-hover); }
+.chip-button.selected { border-color: var(--sth-orb-mid); background: var(--sth-raised-hover); }
 .custom {
   display: flex;
   align-items: center;
@@ -886,6 +896,7 @@ input[type="number"].input { font-family: var(--sth-font-mono); }
 .side-chip {
   flex: none;
   width: 28px;
+  background: var(--sth-raised-hover);
   padding: 5px 0;
   border-radius: 6px;
   text-align: center;
