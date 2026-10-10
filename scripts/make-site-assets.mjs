@@ -1,5 +1,5 @@
-// Site images: cropped screenshots from design/applied as webp, and the
-// 1200x630 Open Graph image rendered with headless Chromium.
+// Site images: the 1200x630 Open Graph image rendered with headless Chromium.
+// (The "How it works" card images come from design/tools/how-shots.mjs.)
 // Run with `npm run make-site-assets`.
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -10,17 +10,7 @@ const root = fileURLToPath(new URL("..", import.meta.url));
 const applied = `${root}design/applied/`;
 const img = `${root}site/img/`;
 
-// [source, output, crop at 2x, output width]
-const CROPS = [
-  ["dark-card-tiles.png", "how-read-card.webp", { left: 1096, top: 10, width: 700, height: 1500 }, 700],
-  ["dark-orb-found.png", "how-read-orb.webp", { left: 1560, top: 1160, width: 400, height: 360 }, 400],
-  ["dark-review-sheet.png", "how-make.webp", { left: 1096, top: 10, width: 700, height: 1500 }, 700],
-  ["dark-bet-sheet.png", "how-bet.webp", { left: 1096, top: 10, width: 700, height: 1500 }, 700],
-];
-for (const [source, output, crop, width] of CROPS) {
-  await sharp(applied + source).extract(crop).resize({ width }).webp({ quality: 82 }).toFile(img + output);
-  console.log(output);
-}
+// The "How it works" card images are made by design/tools/how-shots.mjs.
 
 const lora = (await readFile(`${root}site/fonts/soothia-lora.woff2`)).toString("base64");
 const inter = (await readFile(`${root}site/fonts/soothia-inter.woff2`)).toString("base64");

@@ -117,10 +117,13 @@ h3 { margin: 18px 0 6px; font: 500 20px/1.3 var(--serif); }
 .line { max-width: 640px; margin-top: 18px; }
 .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
 .card { padding: 16px; border: 1px solid var(--sth-hairline-soft); border-radius: 20px; background: var(--sth-raised); }
-.shot { position: relative; height: 320px; overflow: hidden; border-radius: 14px; border: 1px solid var(--sth-hairline-soft); background: #000; }
-.shot > img:first-child { width: 100%; height: auto; }
-.shot-orb { position: absolute; right: 10px; bottom: 10px; width: 120px; mix-blend-mode: screen; filter: drop-shadow(0 0 18px rgba(83,74,183,.5)); }
-.shot::after { content: ""; position: absolute; inset: 0; background: linear-gradient(180deg, transparent 70%, var(--sth-raised)); }
+/* One frame only: the landing card's border. The screenshot sits directly inside on black and fades out at the bottom. */
+.shot { position: relative; height: 320px; overflow: hidden; border-radius: 14px; background: #000; }
+.shot > img:first-child { display: block; width: 100%; height: auto; }
+.shot::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 60px; background: linear-gradient(180deg, rgba(0,0,0,0), #000); }
+/* Read: the card sits left, the orb with its found stars has the right column to itself. */
+.shot-read > img:first-child { width: 64%; }
+.shot-orb { position: absolute; right: -4px; bottom: 30px; width: 118px; height: auto; }
 
 /* Proof tile, like a claim tile */
 .tile { max-width: 520px; padding: 16px; border: 1px solid var(--sth-hairline-soft); border-radius: 14px; background: var(--sth-raised); display: flex; flex-direction: column; gap: 12px; }

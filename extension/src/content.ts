@@ -1241,6 +1241,11 @@ async function mount(): Promise<void> {
         card.querySelector<HTMLElement>(data.selector)?.click();
         return;
       }
+      if (data.scene === "rect") {
+        const orbRect = orb.getBoundingClientRect();
+        window.postMessage({ type: "soothia:v1:dev-rect", card: card.getBoundingClientRect().toJSON(), orb: orbRect ? orbRect.toJSON() : null }, "*");
+        return;
+      }
       if (data.scene === "dump") {
         const node = data.selector ? card.querySelector<HTMLElement>(data.selector) : null;
         window.postMessage({ type: "soothia:v1:dev-dump", text: card.innerText, node: node ? node.outerHTML.slice(0, 300) : null }, "*");
