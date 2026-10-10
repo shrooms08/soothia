@@ -59,15 +59,12 @@ const LEAGUES: [RegExp, name: string, url: string][] = [
 export function authorityFor(draft: MarketDraft): Authority {
   switch (draft.category) {
     case "crypto": {
+      // Only price questions resolve on CoinGecko. An approval, launch,
+      // listing, or regulation question is news, and falls through to Reuters.
+      if (draft.resolutionType !== "price_threshold") break;
       const coin = COINS.find(([pattern]) => pattern.test(draft.question));
       const url = coin ? `https://www.coingecko.com/en/coins/${coin[1]}` : "https://www.coingecko.com";
-      // Not every crypto question is about a price (a listing, an approval).
-      const cite =
-        draft.resolutionType !== "price_threshold"
-          ? "as shown on CoinGecko"
-          : coin
-            ? `per CoinGecko's ${coin[2]}/USD price`
-            : "per CoinGecko's USD price for the asset";
+      const cite = coin ? `per CoinGecko's ${coin[2]}/USD price` : "per CoinGecko's USD price for the asset";
       return { name: "CoinGecko", url, cite };
     }
     case "sports": {
@@ -77,8 +74,9 @@ export function authorityFor(draft: MarketDraft): Authority {
         : { name: "ESPN", url: "https://www.espn.com", cite: "per the result reported by ESPN" };
     }
     default:
-      return { name: "Reuters", url: "https://www.reuters.com", cite: "as reported by Reuters" };
+      break;
   }
+  return { name: "Reuters", url: "https://www.reuters.com", cite: "as reported by Reuters" };
 }
 
 // One extra sentence when there is room. The rule is written only from

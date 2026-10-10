@@ -47,6 +47,8 @@ export interface Claim {
   resolution: { type: string; details: string; sources: string[] };
   confidence: number;
   sourceQuote: string;
+  /** The page says this event is happening right now. */
+  eventLive?: boolean;
 }
 
 export interface MatchedMarket {
@@ -156,6 +158,10 @@ export interface Quote {
   breakdown: { liquidityUsdc: number; platformFeeUsdc: number };
   expiresAt: string;
   marketId: string;
+  marketType: "breaking" | "standard";
+  eventInProgress: boolean;
+  /** When buying closes (Panta startTime), ISO-8601. */
+  startTime: string;
   /** The question as sent to Panta: trimmed if it had to be. */
   question: string;
   /** The data source the market resolves on; always the first source of truth. */

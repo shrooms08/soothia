@@ -7,12 +7,10 @@ import { json, readJsonObject, type Env } from "./http";
 import { PANTA_BASE } from "./markets";
 import {
   DESCRIPTION_MAX_LENGTH,
-  DRAFT_MARKET_TYPE,
   MARKET_PAGE_BASE,
   MAX_BUILT_TRANSACTION_BYTES,
-  MIN_START_DELAY_SEC,
   RESOLUTION_DELAY_SEC,
-  START_BUFFER_SEC,
+  startTimeFor,
   USDC_DECIMALS,
   validateDraft,
   type MarketDraft,
@@ -120,6 +118,7 @@ function isTxBase64(value: unknown): value is string {
 
 interface PantaQuote {
   createId: string;
+  marketType?: string;
   expectedEventPda: string;
   paymentUsdc: string;
   liquidityInjectionUsdc?: string;
@@ -156,11 +155,13 @@ async function issueQuote(
     resolutionRule: fitted.resolutionRule,
     sourcesOfTruth: fitted.sourcesOfTruth,
     category: draft.category,
-    startTime: nowSec + MIN_START_DELAY_SEC + START_BUFFER_SEC,
+    startTime: startTimeFor(draft, nowSec),
     endTime,
     resolutionTime: endTime + RESOLUTION_DELAY_SEC,
     imageUrl,
-    marketType: DRAFT_MARKET_TYPE,
+    marketType: draft.marketType,
+    // Only allowed on breaking markets; omitted otherwise.
+    ...(draft.marketType === "breaking" && draft.eventInProgress ? { eventInProgress: true } : {}),
     description: `Created with Soothia from ${draft.pageUrl}`.slice(0, DESCRIPTION_MAX_LENGTH),
   };
 
@@ -196,6 +197,8 @@ async function issueQuote(
       },
       expiresAt: quote.expiresAt,
       marketId: quote.expectedEventPda,
+      marketType: quote.marketType ?? draft.marketType,
+      eventInProgress: draft.marketType === "breaking" && draft.eventInProgress,
       // Exactly what Panta was sent, so the review sheet can show it.
       question: fitted.question,
       resolutionRule: fitted.resolutionRule,

@@ -119,6 +119,28 @@ Since any free-form binary question is creatable, Soothia limits drafts to three
 | `sports_result` | The result of a scheduled match or competition, read from the official league or competition result. | `sports` |
 | `official_outcome` | A dated outcome confirmed by an official or authoritative public source (election result, release, announcement, published figure). | any |
 
+## Market types (from the Panta team and panta.market/how-it-works, 2026-10-10)
+
+`marketType` is `standard` or `breaking`. The docs describe it only as a timing mode; the Panta team and the How it works page add:
+
+| | Breaking | Standard |
+| - | - | - |
+| Creation fee (from the live quote) | **LIVE: 20 USDC** (5 liquidity, 15 platform) | **LIVE: 50 USDC** (10 liquidity, 40 platform) |
+| `startTime` | Must be within 72 hours of creation, and at least `minimumStartDelay` (3600s) ahead unless `eventInProgress` is true | At least `minimumStartDelay` ahead; no documented maximum |
+| `eventInProgress` | Allowed. Skips the start-delay check; `startTime` should be at or before now (the playground requires `startTime <= now`); `endTime` must be in the future | Not allowed |
+| `endTime` | Any future time | After `startTime` |
+| Phases | Buying (primary, buy-only) from creation until `startTime`, then peer-to-peer trading until resolution | Same |
+
+Soothia's rules (`worker/src/pantaRules.ts`): new drafts are breaking; "Buying window closes" is 1 to 72 hours after creation for breaking (default 48 hours), up to 365 days for standard; "Event is live now" sets `eventInProgress: true` with `startTime` one minute in the past and is offered only when `/detect` flagged the claim as `eventLive`; `endTime` must come after `startTime`, be at least 10 minutes out (2 hours for standard), and within 365 days. The fee always comes from the live quote.
+
+**LIVE:** a breaking quote with `eventInProgress: true` succeeded (20 USDC), but its build failed with `unexpected create build failure — check server logs`. This was during a period when most quotes were also failing with the matching "unexpected" message, so it is **UNCLEAR** whether live-event builds work.
+
+### Resolution and payouts (from the Panta team, not in the docs)
+
+- Panta's AI Resolution Agent resolves the market from the question and the sources of truth, then there is a 1-hour dispute window. Disputes need a bond and are reviewed by the Panta team.
+- Creator royalties are up to 20% of the pool, reduced if the market is very one-sided, claimable after the primary phase ends (`POST /claim/creator-fees/build/`).
+- Primary trades pay a 2% fee.
+
 ## Creation fee
 
 - Quote returns `paymentUsdc` (total), `liquidityInjectionUsdc`, and `platformRevenueUsdc`, as integer strings in USDC base units (6 decimals).

@@ -15,11 +15,17 @@ import type {
   Tile,
 } from "./messages";
 import {
+  BREAKING_MAX_BUY_WINDOW_HOURS,
+  BUY_WINDOW_CHOICES,
   CATEGORIES,
+  DEFAULT_BUY_WINDOW_HOURS,
+  DEFAULT_MARKET_TYPE,
+  LIVE_NOW,
   MAX_END_HORIZON_MS,
   MIN_END_LEAD_MS,
   MIN_SOL_FOR_CREATE,
   QUESTION_MAX_LENGTH,
+  type MarketType,
 } from "./rules";
 import { checkSignedTransaction } from "./tx-check";
 import { wallet } from "./wallet-client";
@@ -118,6 +124,9 @@ export function openSheet(host: SheetHost): Sheet {
   let question = claim.question;
   let category: string = claim.category;
   let endTime = claim.endTime;
+  let marketType: MarketType = DEFAULT_MARKET_TYPE;
+  // Hours until buying closes, or LIVE_NOW for an event already under way.
+  let buyWindow: number | typeof LIVE_NOW = claim.eventLive ? LIVE_NOW : DEFAULT_BUY_WINDOW_HOURS;
   let address: string | null = null;
   let balances: Balances | null = null;
   let quote: Quote | null = null;
@@ -157,10 +166,70 @@ export function openSheet(host: SheetHost): Sheet {
   dateInput.max = utcDay(Date.now() + MAX_END_HORIZON_MS);
   dateInput.value = endTime.slice(0, 10);
 
+  // Market type: two radio cards. Fees shown here come from the live quote
+  // once there is one; until then the labels carry the known prices.
+  const typeGroup = el("div", "types");
+  const typeInputs = new Map<MarketType, HTMLInputElement>();
+  const typeFees = new Map<MarketType, HTMLElement>();
+  const TYPE_COPY: Record<MarketType, { name: string; fee: string; blurb: string }> = {
+    breaking: {
+      name: "Breaking",
+      fee: "20 USDC",
+      blurb: "People can buy YES/NO until the buying window closes, then shares trade between people until it resolves.",
+    },
+    standard: {
+      name: "Standard",
+      fee: "50 USDC",
+      blurb: "For events more than 3 days away that need a longer buying window.",
+    },
+  };
+  for (const kind of ["breaking", "standard"] as const) {
+    const card = el("label", "type");
+    const input = el("input", "type-box");
+    input.type = "radio";
+    input.name = "soothia-market-type";
+    input.value = kind;
+    input.checked = kind === marketType;
+    const feeLabel = el("span", "type-fee", TYPE_COPY[kind].fee);
+    const head = el("span", "type-name", `${TYPE_COPY[kind].name} \u00b7 `);
+    head.append(feeLabel);
+    const text = el("span", "type-text");
+    text.append(head, el("span", "type-blurb", TYPE_COPY[kind].blurb));
+    card.append(input, text);
+    typeGroup.append(card);
+    typeInputs.set(kind, input);
+    typeFees.set(kind, feeLabel);
+  }
+
+  const windowSelect = el("select", "input");
+  function fillWindowChoices(): void {
+    const current = String(buyWindow);
+    windowSelect.replaceChildren();
+    if (claim.eventLive && marketType === "breaking") {
+      const live = el("option", "", "Event is live now (buying closes at once)");
+      live.value = LIVE_NOW;
+      windowSelect.append(live);
+    }
+    for (const choice of BUY_WINDOW_CHOICES) {
+      if (marketType === "breaking" && choice.hours > BREAKING_MAX_BUY_WINDOW_HOURS) continue;
+      const option = el("option", "", `${choice.label} after creation`);
+      option.value = String(choice.hours);
+      windowSelect.append(option);
+    }
+    windowSelect.value = current;
+    if (windowSelect.value !== current) {
+      // The old choice is not offered for this type (a week on a breaking market).
+      buyWindow = DEFAULT_BUY_WINDOW_HOURS;
+      windowSelect.value = String(buyWindow);
+    }
+  }
+  fillWindowChoices();
+
   const rule = el("details", "rule");
   const ruleText = el("p", "rule-text", "Connect Phantom to see the exact rule Panta will receive.");
   rule.append(el("summary", "rule-summary", "How it resolves"), ruleText);
   rule.addEventListener("toggle", () => host.layout());
+  const resolver = el("p", "muted", "Panta's AI resolver settles it from these sources, with a 1-hour dispute window.");
 
   const sources = el("ul", "sources");
   const image = el("img", "thumb");
@@ -194,9 +263,13 @@ export function openSheet(host: SheetHost): Sheet {
   form.append(
     field("Question", questionInput, counter),
     row,
+    el("span", "field-label", "Market type"),
+    typeGroup,
+    field("Buying window closes", windowSelect),
     rule,
     el("span", "field-label", "Sources of truth"),
     imageRow,
+    resolver,
     walletRow,
     fee,
     fitNote,
@@ -260,6 +333,7 @@ export function openSheet(host: SheetHost): Sheet {
   /** What the wallet lacks for this quote, or "" when it has enough (or is unknown). */
   function shortfall(): string {
     if (!balances || !quote) return "";
+    // The USDC needed is whatever Panta just quoted; the SOL covers rent and fees.
     const usdc = Math.max(0, quote.paymentUsdc - balances.usdc);
     const sol = Math.max(0, MIN_SOL_FOR_CREATE - balances.sol);
     const parts: string[] = [];
@@ -301,6 +375,8 @@ export function openSheet(host: SheetHost): Sheet {
       questionInput.value = next.question;
     }
     const link = /(^|\.)(x|twitter)\.com$/.test(domainName(host.pageUrl)) ? "post" : "page";
+    // The quoted fee for this type is the real one; show it on the card.
+    typeFees.get(next.marketType)?.replaceChildren(`${amount(next.paymentUsdc)} USDC`);
     const changes = [
       next.adjustments.includes("page_link_dropped")
         ? `kept ${next.authority.name} as the source and left out the ${link} link`
@@ -344,6 +420,9 @@ export function openSheet(host: SheetHost): Sheet {
       endTime,
       pageUrl: host.pageUrl,
       resolutionType: claim.resolution.type,
+      marketType,
+      buyWindowHours: buyWindow === LIVE_NOW ? 0 : buyWindow,
+      eventInProgress: buyWindow === LIVE_NOW,
     };
   }
 
@@ -691,6 +770,18 @@ export function openSheet(host: SheetHost): Sheet {
   });
   categorySelect.addEventListener("change", () => {
     category = categorySelect.value;
+    requestQuote(0);
+  });
+  for (const [kind, input] of typeInputs) {
+    input.addEventListener("change", () => {
+      if (!input.checked) return;
+      marketType = kind;
+      fillWindowChoices();
+      requestQuote(0);
+    });
+  }
+  windowSelect.addEventListener("change", () => {
+    buyWindow = windowSelect.value === LIVE_NOW ? LIVE_NOW : Number(windowSelect.value);
     requestQuote(0);
   });
   dateInput.addEventListener("change", () => {

@@ -28,11 +28,26 @@ export const IMAGE_URL_MAX_LENGTH = 2048;
 export const MIN_START_DELAY_SEC = 3600;
 
 export const MARKET_TYPES = ["standard", "breaking"] as const;
+export type MarketType = (typeof MARKET_TYPES)[number];
+
+// Breaking markets (from the Panta team and panta.market/how-it-works):
+// cheaper to create, the event must start within 72 hours of creation, and
+// it may end any time after that. Buying runs from creation until startTime,
+// then shares trade between people until resolution. `eventInProgress`
+// (breaking only) sets startTime to now and skips the minimum start delay.
+export const BREAKING_MAX_START_SEC = 72 * 3600;
+// Standard markets only need startTime >= now + MIN_START_DELAY_SEC.
+export const STANDARD_MAX_START_SEC = 365 * 24 * 3600;
+// A breaking market that is already live only needs its end in the future.
+export const BREAKING_MIN_END_LEAD_SEC = 10 * 60;
+// Fees come from the live quote, never from here.
 
 // ---- Soothia drafting rules (ours, stricter than Panta) ----
 
-// Soothia only drafts standard markets.
-export const DRAFT_MARKET_TYPE = "standard";
+// New drafts start as breaking markets.
+export const DRAFT_MARKET_TYPE: MarketType = "breaking";
+// Default buying window: the market's startTime is this long after creation.
+export const DEFAULT_BUY_WINDOW_HOURS = 48;
 
 // Earliest end time we draft: the start delay plus room for the user to
 // review, sign, and broadcast.
@@ -103,8 +118,8 @@ export const PAGE_SOURCE_MAX_BYTES = 120;
 export const DESCRIPTION_MAX_LENGTH = 500;
 export const PAGE_URL_MAX_LENGTH = 2048;
 
-// A wallet needs at least this much SOL for network fees and account rent.
-export const MIN_SOL_FOR_CREATE = 0.01;
+// A wallet needs at least this much SOL for account rent and network fees.
+export const MIN_SOL_FOR_CREATE = 0.02;
 
 export const MARKET_PAGE_BASE = "https://www.panta.market/market/";
 
@@ -117,6 +132,21 @@ export interface MarketDraft {
   /** The page the claim came from; always the first source of truth. */
   pageUrl: string;
   resolutionType: ResolutionType;
+  marketType: MarketType;
+  /** Hours from creation until buying closes (Panta `startTime`). Ignored when the event is live. */
+  buyWindowHours: number;
+  /** Breaking only: the event is already under way, so buying closes at once. */
+  eventInProgress: boolean;
+}
+
+/** Panta `startTime`, in Unix seconds, for a draft quoted now. */
+export function startTimeFor(draft: MarketDraft, nowSec: number): number {
+  // Panta wants startTime <= now when the event is in progress.
+  if (draft.marketType === "breaking" && draft.eventInProgress) return nowSec - 60;
+  const cap = draft.marketType === "breaking" ? BREAKING_MAX_START_SEC : STANDARD_MAX_START_SEC;
+  // The buffer keeps a 1-hour window valid while the quote is checked; the
+  // cap keeps a 72-hour window inside Panta's limit.
+  return nowSec + Math.min(draft.buyWindowHours * 3600 + START_BUFFER_SEC, cap - 60);
 }
 
 export type DraftValidation =
@@ -140,12 +170,39 @@ export function validateDraft(raw: unknown, nowMs: number): DraftValidation {
   }
   const category = input.category as Category;
 
+  const marketType: MarketType = input.marketType === "standard" ? "standard" : "breaking";
+  const eventInProgress = marketType === "breaking" && input.eventInProgress === true;
+  const maxHours = (marketType === "breaking" ? BREAKING_MAX_START_SEC : STANDARD_MAX_START_SEC) / 3600;
+  let buyWindowHours = DEFAULT_BUY_WINDOW_HOURS;
+  if (!eventInProgress) {
+    if (typeof input.buyWindowHours !== "number" || !Number.isFinite(input.buyWindowHours)) {
+      return bad("buyWindowHours", "Pick when buying closes.");
+    }
+    buyWindowHours = input.buyWindowHours;
+    if (buyWindowHours < MIN_START_DELAY_SEC / 3600) return bad("buyWindowHours", "Buying must stay open at least 1 hour.");
+    if (buyWindowHours > maxHours) {
+      return bad(
+        "buyWindowHours",
+        marketType === "breaking"
+          ? "A breaking market must start within 72 hours. Use a standard market for a longer window."
+          : "Buying can stay open at most 365 days.",
+      );
+    }
+  }
+
   if (!isString(input.endTime)) return bad("endTime", "Pick an end date.");
-  const timeProblem = endTimeProblem(input.endTime, nowMs);
-  if (timeProblem === "end_time_too_soon") return bad("endTime", "The end date must be at least 2 hours from now.");
-  if (timeProblem === "end_time_too_far") return bad("endTime", "The end date can be at most 365 days from now.");
-  if (timeProblem) return bad("endTime", "Pick a valid end date.");
-  const endTime = new Date(Date.parse(input.endTime)).toISOString();
+  const endMs = Date.parse(input.endTime);
+  if (Number.isNaN(endMs)) return bad("endTime", "Pick a valid end date.");
+  const endLeadSec = (endMs - nowMs) / 1000;
+  if (endLeadSec > MAX_END_HORIZON_SEC) return bad("endTime", "The end date can be at most 365 days from now.");
+  if (marketType === "standard" && endLeadSec < MIN_END_LEAD_SEC) {
+    return bad("endTime", "The end date must be at least 2 hours from now.");
+  }
+  if (endLeadSec < BREAKING_MIN_END_LEAD_SEC) return bad("endTime", "The end must be in the future.");
+  const endTime = new Date(endMs).toISOString();
+  const partial = { marketType, buyWindowHours, eventInProgress };
+  const startSec = startTimeFor({ ...partial, endTime } as MarketDraft, Math.floor(nowMs / 1000));
+  if (endMs / 1000 <= startSec + 60) return bad("endTime", "The end must come after buying closes.");
 
   if (!isString(input.pageUrl) || !/^https?:\/\//i.test(input.pageUrl) || input.pageUrl.length > PAGE_URL_MAX_LENGTH) {
     return bad("pageUrl", "Missing the page this market came from.");
@@ -158,7 +215,10 @@ export function validateDraft(raw: unknown, nowMs: number): DraftValidation {
     if ((RESOLUTION_TYPES[wanted].categories as readonly string[]).includes(category)) resolutionType = wanted;
   }
 
-  return { ok: true, draft: { question, category, endTime, pageUrl: input.pageUrl, resolutionType } };
+  return {
+    ok: true,
+    draft: { question, category, endTime, pageUrl: input.pageUrl, resolutionType, ...partial },
+  };
 }
 
 // ---- Claim shape ----
@@ -178,6 +238,8 @@ export interface Claim {
   };
   confidence: number;
   sourceQuote: string;
+  /** The page describes this event as happening right now. */
+  eventLive?: boolean;
 }
 
 export type ClaimDraft = Omit<Claim, "id">;
@@ -289,7 +351,15 @@ export function validateClaim(raw: unknown, pageText: string, nowMs: number): Va
 
   return {
     ok: true,
-    claim: { question, category, endTime, resolution: { type, details, sources }, confidence, sourceQuote },
+    claim: {
+      question,
+      category,
+      endTime,
+      resolution: { type, details, sources },
+      confidence,
+      sourceQuote,
+      ...(input.eventLive === true ? { eventLive: true } : {}),
+    },
   };
 }
 

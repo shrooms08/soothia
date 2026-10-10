@@ -408,6 +408,55 @@ a.button {
   outline-offset: 1px;
 }
 
+.types {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.type {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border: 1px solid rgba(155, 123, 255, 0.25);
+  border-radius: 10px;
+  cursor: pointer;
+}
+
+.type:has(.type-box:checked) {
+  border-color: #9b7bff;
+  background: rgba(155, 123, 255, 0.12);
+}
+
+.type-box {
+  margin: 3px 0 0;
+  accent-color: #7c4dff;
+}
+
+.type-text {
+  display: block;
+  min-width: 0;
+}
+
+.type-name {
+  display: block;
+  color: #ffffff;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.type-fee {
+  color: #4ade80;
+}
+
+.type-blurb {
+  display: block;
+  color: #b9b1cf;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .rule {
   margin-bottom: 10px;
   color: #b9b1cf;

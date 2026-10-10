@@ -4,7 +4,12 @@ import { test } from "node:test";
 import { assembleV0 } from "../src/assemble";
 import { decodeBase58, encodeBase58, isAddress, isSignature } from "../src/base58";
 import { validateDraft, type MarketDraft } from "../src/pantaRules";
-import { MAX_BUILT_TRANSACTION_BYTES, TRANSACTION_FIXED_BYTES, TRIMMED_QUESTION_MAX_LENGTH } from "../src/pantaRules";
+import {
+  MAX_BUILT_TRANSACTION_BYTES,
+  startTimeFor,
+  TRANSACTION_FIXED_BYTES,
+  TRIMMED_QUESTION_MAX_LENGTH,
+} from "../src/pantaRules";
 import { authorityFor, deadlineUtc, fitDraft, onchainTextBytes, pageSource, trimQuestion } from "../src/resolution";
 
 const NOW = Date.parse("2026-10-05T12:00:00Z");
@@ -17,6 +22,9 @@ const draft: MarketDraft = {
   endTime: "2026-12-31T23:59:59.000Z",
   pageUrl: "https://x.com/intangiblecoins/status/2002741524950344005",
   resolutionType: "price_threshold",
+  marketType: "breaking",
+  buyWindowHours: 48,
+  eventInProgress: false,
 };
 
 test("base58 round-trips Solana addresses, including leading zero bytes", () => {
@@ -56,9 +64,57 @@ test("the rule names the authoritative source", () => {
   const sports = { ...draft, category: "sports" as const, resolutionType: "sports_result" as const, question: "Will Arsenal beat Liverpool on October 10, 2026?" };
   assert.ok(fitDraft(sports)!.resolutionRule.includes("per the official result from the Premier League"));
   assert.ok(fitDraft({ ...draft, category: "politics", resolutionType: "official_outcome" })!.resolutionRule.includes("as reported by Reuters"));
-  // A crypto question that is not about a price does not claim a price feed.
-  const listing = { ...draft, resolutionType: "official_outcome" as const, question: "Will a spot Solana ETF be approved by December 31, 2026?" };
-  assert.ok(fitDraft(listing)!.resolutionRule.includes("as shown on CoinGecko"));
+});
+
+test("non-price crypto questions resolve on Reuters, price questions on CoinGecko", () => {
+  for (const question of [
+    "Will a spot Solana ETF be approved by December 31, 2026?",
+    "Will Coinbase list Hyperliquid by November 30, 2026?",
+    "Will the EU's MiCA stablecoin rules take effect by December 31, 2026?",
+  ]) {
+    const news = { ...draft, resolutionType: "official_outcome" as const, question };
+    assert.equal(authorityFor(news).url, "https://www.reuters.com");
+    const fitted = fitDraft(news)!;
+    assert.deepEqual(fitted.sourcesOfTruth, ["https://www.reuters.com", draft.pageUrl]);
+    assert.ok(fitted.resolutionRule.includes("as reported by Reuters"));
+    assert.ok(!fitted.resolutionRule.includes("CoinGecko"));
+  }
+  assert.equal(authorityFor(draft).url, "https://www.coingecko.com/en/coins/bitcoin");
+  assert.ok(fitDraft(draft)!.resolutionRule.includes("per CoinGecko's BTC/USD price"));
+});
+
+test("breaking and standard drafts get the right start time and limits", () => {
+  const nowSec = Math.floor(NOW / 1000);
+  // 48 hours plus the 5-minute buffer.
+  assert.equal(startTimeFor(draft, nowSec), nowSec + 48 * 3600 + 300);
+  // 72 hours is capped just inside Panta's limit.
+  assert.equal(startTimeFor({ ...draft, buyWindowHours: 72 }, nowSec), nowSec + 72 * 3600 - 60);
+  // A live event starts in the past.
+  assert.ok(startTimeFor({ ...draft, eventInProgress: true }, nowSec) < nowSec);
+  // Standard markets keep the 1-hour minimum and can wait weeks.
+  assert.equal(startTimeFor({ ...draft, marketType: "standard", buyWindowHours: 1 }, nowSec), nowSec + 3600 + 300);
+  assert.equal(startTimeFor({ ...draft, marketType: "standard", buyWindowHours: 24 * 14 }, nowSec), nowSec + 14 * 24 * 3600 + 300);
+
+  const field = (change: object): string => {
+    const result = validateDraft({ ...draft, ...change }, NOW);
+    return result.ok ? "" : result.field;
+  };
+  assert.equal(field({}), "");
+  assert.equal(field({ buyWindowHours: 0.5 }), "buyWindowHours");
+  assert.equal(field({ buyWindowHours: 73 }), "buyWindowHours");
+  assert.equal(field({ marketType: "standard", buyWindowHours: 73 }), "");
+  assert.equal(field({ marketType: "standard", buyWindowHours: 24 * 366 }), "buyWindowHours");
+  // The end must come after buying closes.
+  assert.equal(field({ buyWindowHours: 72, endTime: "2026-10-07T12:00:00Z" }), "endTime");
+  // A live breaking market may end soon; a standard one still needs 2 hours.
+  assert.equal(field({ eventInProgress: true, endTime: "2026-10-05T12:30:00Z" }), "");
+  assert.equal(field({ marketType: "standard", buyWindowHours: 1, endTime: "2026-10-05T13:30:00Z" }), "endTime");
+  // eventInProgress is ignored on standard markets.
+  const standard = validateDraft({ ...draft, marketType: "standard", eventInProgress: true }, NOW);
+  assert.ok(standard.ok && standard.draft.eventInProgress === false);
+  // Unknown type defaults to breaking.
+  const defaulted = validateDraft({ ...draft, marketType: "weird" }, NOW);
+  assert.ok(defaulted.ok && defaulted.draft.marketType === "breaking");
 });
 
 test("a long page URL is shortened so it cannot use up the transaction", () => {
@@ -102,6 +158,9 @@ const LONG: MarketDraft = {
   endTime: "2026-12-16T23:59:59.000Z",
   pageUrl: "https://www.example-news.com/markets/2026/10/05/fed-officials-signal-larger-cuts-are-on-the-table-as-labour-market-cools",
   resolutionType: "official_outcome",
+  marketType: "breaking",
+  buyWindowHours: 48,
+  eventInProgress: false,
 };
 
 test("a long draft drops the page link, keeps its authoritative source, and lands under the cap", () => {
