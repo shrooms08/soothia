@@ -6,6 +6,7 @@ import type { CreatedMarket } from "./create";
 import { corsHeaders, type Env } from "./http";
 import { PANTA_BASE } from "./markets";
 import { reconcileDeps, reconcileOrders } from "./reconcile";
+import { cacheGet, cachePut } from "./store";
 
 const CACHE_KEY = "stats:v1";
 const CACHE_TTL_SEC = 60;
@@ -91,7 +92,7 @@ export function publicCors(request: Request): Record<string, string> {
 
 export async function handleStats(request: Request, env: Env, ctx?: ExecutionContext): Promise<Response> {
   const headers = { "Content-Type": "application/json", "Cache-Control": "public, max-age=60", ...publicCors(request) };
-  const cached = (await env.SOOTHIA_CACHE.get(CACHE_KEY, "json")) as Stats | null;
+  const cached = await cacheGet<Stats>(CACHE_KEY);
   if (cached) return new Response(JSON.stringify(cached), { headers });
   // A refresh is a good moment to finish any bet the client never called back about.
   ctx?.waitUntil(reconcileOrders(reconcileDeps(env)).catch(() => {}));
@@ -102,6 +103,6 @@ export async function handleStats(request: Request, env: Env, ctx?: ExecutionCon
     ...trades,
     updatedAt: new Date().toISOString(),
   };
-  await env.SOOTHIA_CACHE.put(CACHE_KEY, JSON.stringify(stats), { expirationTtl: CACHE_TTL_SEC });
+  await cachePut(CACHE_KEY, stats, CACHE_TTL_SEC);
   return new Response(JSON.stringify(stats), { headers });
 }

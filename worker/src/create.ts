@@ -5,6 +5,8 @@ import { assembleV0, type BuiltInstruction } from "./assemble";
 import { encodeBase58, isAddress, isSignature } from "./base58";
 import { json, readJsonObject, type Env } from "./http";
 import { PANTA_BASE } from "./markets";
+import { flushPendingCreator, readCreatorMarkets, rememberMarket } from "./creators";
+import { kvPut } from "./store";
 import {
   DESCRIPTION_MAX_LENGTH,
   MARKET_PAGE_BASE,
@@ -18,6 +20,8 @@ import {
 import { fitDraft, MAX_FIT_LEVEL } from "./resolution";
 import { rpc, RpcError } from "./rpc";
 
+// Quote records this isolate wrote, in case the KV write did not land.
+const quoteMemory = new Map<string, QuoteRecord>();
 const QUOTE_TTL_SEC = 24 * 3600;
 const TOO_LONG = "The question is too long to fit in one Solana transaction. Shorten it.";
 const TRANSIENT_QUOTE_FAILURE = "unexpected create quote failure";
@@ -31,7 +35,6 @@ const RETRY_CONFIRM_WAIT_MS = 20_000;
 // Work after the response is sent may run for about 30 seconds.
 const BACKGROUND_FINISH_WAIT_MS = 22_000;
 const REGISTER_ATTEMPTS = 3;
-const MAX_CREATOR_MARKETS = 100;
 
 /** What we remember about a quote so a paid market can always be finished. */
 export interface QuoteRecord {
@@ -211,7 +214,9 @@ async function issueQuote(
     expectedEventPda: quote.expectedEventPda,
     expiresAt: quote.expiresAt,
   };
-  await env.SOOTHIA_CACHE.put(quoteKey(quote.createId), JSON.stringify(record), { expirationTtl: QUOTE_TTL_SEC });
+  // Durable while the quote lives; a failed write is covered by the in-memory copy.
+  quoteMemory.set(quote.createId, record);
+  await kvPut(env, quoteKey(quote.createId), JSON.stringify(record), { expirationTtl: QUOTE_TTL_SEC });
 
   return {
     ok: true,
@@ -426,13 +431,6 @@ export async function waitForConfirmation(env: Env, signature: string, maxWaitMs
   }
 }
 
-async function rememberMarket(env: Env, wallet: string, market: CreatedMarket): Promise<void> {
-  const key = `creator:${wallet}`;
-  const existing = ((await env.SOOTHIA_CACHE.get(key, "json")) as CreatedMarket[] | null) ?? [];
-  const others = existing.filter((entry) => entry.marketId !== market.marketId);
-  const createdAt = existing.find((entry) => entry.marketId === market.marketId)?.createdAt ?? market.createdAt;
-  await env.SOOTHIA_CACHE.put(key, JSON.stringify([{ ...market, createdAt }, ...others].slice(0, MAX_CREATOR_MARKETS)));
-}
 
 interface FinishResult {
   signature: string;
@@ -507,7 +505,13 @@ async function finish(
 }
 
 async function loadQuote(env: Env, quoteId: string): Promise<QuoteRecord | null> {
-  return (await env.SOOTHIA_CACHE.get(quoteKey(quoteId), "json")) as QuoteRecord | null;
+  try {
+    const stored = (await env.SOOTHIA_CACHE.get(quoteKey(quoteId), "json")) as QuoteRecord | null;
+    if (stored) return stored;
+  } catch {
+    // Fall through to memory.
+  }
+  return quoteMemory.get(quoteId) ?? null;
 }
 
 // ---- POST /create/send ----
@@ -569,9 +573,8 @@ export async function handleSend(request: Request, env: Env, ctx: ExecutionConte
   }
 
   // Keep the signature with the quote so the market can be finished later.
-  await env.SOOTHIA_CACHE.put(quoteKey(body.quoteId), JSON.stringify({ ...record, signature }), {
-    expirationTtl: 30 * 24 * 3600,
-  });
+  quoteMemory.set(body.quoteId, { ...record, signature });
+  await kvPut(env, quoteKey(body.quoteId), JSON.stringify({ ...record, signature }), { expirationTtl: 30 * 24 * 3600 });
 
   // `confirm: false` returns straight after broadcast; the caller then
   // finishes with /create/register-retry. The extension does this because a
@@ -606,6 +609,7 @@ export async function handleRegisterRetry(request: Request, env: Env): Promise<R
 export async function handleCreatorMarkets(request: Request, env: Env): Promise<Response> {
   const wallet = new URL(request.url).searchParams.get("wallet");
   if (!isAddress(wallet)) return json(request, { error: "bad_wallet" }, 400);
-  const markets = ((await env.SOOTHIA_CACHE.get(`creator:${wallet}`, "json")) as CreatedMarket[] | null) ?? [];
+  await flushPendingCreator(env, wallet);
+  const markets = await readCreatorMarkets(env, wallet);
   return json(request, { markets });
 }

@@ -46,6 +46,7 @@ import {
 import { readJsonObject, type Env } from "./http";
 import { MAX_BUILT_TRANSACTION_BYTES } from "./pantaRules";
 import { displayQuote, quoteDeps, quoteWithRetry } from "./quotes";
+import { PANTA_PROGRAM } from "./reconcile";
 import { rpc, RpcError } from "./rpc";
 
 export const ACTION_VERSION = "2.4";
@@ -89,6 +90,10 @@ export interface ActionDeps {
   /** Broadcasts a signed transaction; throws RpcError on rejection. */
   send(signedTxBase64: string): Promise<void>;
   status(signature: string, maxWaitMs: number): Promise<{ state: "confirmed" | "failed" | "pending" }>;
+  /** A confirmed transaction's account keys and error, for validating a bet when the order record is gone. */
+  transaction(signature: string): Promise<{ keys: string[]; failed: boolean } | null>;
+  /** Panta attribution by signature alone (no order session). */
+  report(signature: string, wallet: string, marketId: string): Promise<boolean>;
 }
 
 export function actionDeps(env: Env, ctx: ExecutionContext): ActionDeps {
@@ -112,6 +117,20 @@ export function actionDeps(env: Env, ctx: ExecutionContext): ActionDeps {
     status: async (signature, maxWaitMs) => {
       const landed = maxWaitMs > 0 ? await waitForConfirmation(env, signature, maxWaitMs) : await txState(env, signature);
       return { state: landed.state };
+    },
+    transaction: async (signature) => {
+      const tx = await rpc<{ transaction?: { message?: { accountKeys?: ({ pubkey: string } | string)[] } }; meta?: { err?: unknown } } | null>(
+        env,
+        "getTransaction",
+        [signature, { encoding: "json", commitment: "confirmed", maxSupportedTransactionVersion: 0 }],
+      );
+      if (!tx) return null;
+      const keys = (tx.transaction?.message?.accountKeys ?? []).map((key) => (typeof key === "string" ? key : key.pubkey));
+      return { keys, failed: Boolean(tx.meta?.err) };
+    },
+    report: async (signature, wallet, marketId) => {
+      const reported = await pantaPostWithRetry<{ status?: string }>(env, "/trades/", { signature, wallet, marketId });
+      return reported.ok && reported.data.status === "processed";
     },
   };
 }
@@ -314,7 +333,9 @@ export async function handleActionPost(request: Request, deps: ActionDeps, marke
   if (bytes > MAX_BUILT_TRANSACTION_BYTES) return fail("This bet does not fit in one transaction.");
 
   const withOrder: BuyRecord = { ...record, orderId: build.orderId };
-  await Promise.all([deps.save(build.orderId, withOrder), deps.save(quote.quoteId, withOrder)]);
+  // A refused write (KV limit) must not cost the bettor their transaction: the confirm
+  // callback can still finish from the signature alone.
+  await Promise.all([deps.save(build.orderId, withOrder), deps.save(quote.quoteId, withOrder)]).catch(() => {});
 
   const shares = Number(build.expectedShares ?? quote.shares ?? 0);
   const total = Math.round((Number(amountUsdc) + Number(quote.feeUsdc ?? 0)) * 100) / 100;
@@ -339,12 +360,16 @@ export async function handleActionConfirm(request: Request, deps: ActionDeps, ma
   if (!isSignature(signature)) return fail("Missing transaction signature.");
 
   const record = await deps.load(orderId);
-  if (!record?.orderId || record.marketId !== marketId) return fail("Unknown order.", 404);
+  if (!record?.orderId || record.marketId !== marketId) {
+    // No stored order (the KV write may have been refused). The signature still tells the
+    // truth: a confirmed transaction from this wallet that calls Panta on this market is the bet.
+    return confirmFromChain(deps, marketId, account, signature, url.origin);
+  }
   if (record.wallet !== account) return fail("This order belongs to another wallet.", 403);
   if (record.signature && record.signature !== signature) return fail("This order was already sent with a different transaction.", 409);
 
   const sent: BuyRecord = { ...record, signature };
-  if (!record.signature) await deps.save(record.orderId, sent);
+  if (!record.signature) await deps.save(record.orderId, sent).catch(() => {});
 
   const brief = await deps.brief(marketId);
   const icon = iconFor(url.origin, brief?.category ?? "other");
@@ -374,6 +399,28 @@ export async function handleActionConfirm(request: Request, deps: ActionDeps, ma
   }
   const tail = status.attributed ? "" : " Panta will show it in your positions shortly.";
   return reply({ type: "completed", icon, title: "Bet placed. Good luck.", description: `${stake}: ${question}.${tail}`, label: "Done" });
+}
+
+/** The confirm callback without an order record: validate on-chain, then report the trade to Panta. */
+async function confirmFromChain(deps: ActionDeps, marketId: string, account: string, signature: string, origin: string): Promise<Response> {
+  const brief = await deps.brief(marketId);
+  const icon = iconFor(origin, brief?.category ?? "other");
+  const question = brief?.title ?? "your market";
+  let seen: { keys: string[]; failed: boolean } | null = null;
+  for (let attempt = 0; attempt < 3 && !seen; attempt++) {
+    seen = await deps.transaction(signature).catch(() => null);
+    if (!seen) await new Promise((resolve) => setTimeout(resolve, 2500));
+  }
+  if (!seen) return reply({ type: "completed", icon, title: "Bet sent", description: `${question}. Solana is still confirming it.`, label: "Sent" });
+  if (seen.failed) {
+    return reply({ type: "completed", icon, title: "Bet failed", description: "The transaction failed on Solana. No USDC was taken.", label: "Failed", error: { message: "The transaction failed on Solana. No USDC was taken." } });
+  }
+  if (seen.keys[0] !== account || !seen.keys.includes(PANTA_PROGRAM) || !seen.keys.includes(marketId)) {
+    return fail("This transaction is not a bet on this market by this wallet.", 400);
+  }
+  const attributed = await deps.report(signature, account, marketId).catch(() => false);
+  const tail = attributed ? "" : " Panta will show it in your positions shortly.";
+  return reply({ type: "completed", icon, title: "Bet placed. Good luck.", description: `${question}.${tail}`, label: "Done" });
 }
 
 // ---- Router ----

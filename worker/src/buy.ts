@@ -22,6 +22,8 @@ import { json, readJsonObject, type Env } from "./http";
 import { PANTA_BASE } from "./markets";
 import { MARKET_PAGE_BASE, MAX_BUILT_TRANSACTION_BYTES } from "./pantaRules";
 import { quoteDeps, quoteWithRetry } from "./quotes";
+import { flushPendingCreator, readCreatorMarkets } from "./creators";
+import { cacheGet, cachePut, kvPut } from "./store";
 import { rpc, RpcError } from "./rpc";
 
 // Soothia's floor and Panta's early-market cap per order, in USDC.
@@ -71,13 +73,23 @@ export function parseAmount(value: unknown): string | null {
 }
 
 const recordKey = (orderOrQuoteId: string): string => `buy:${orderOrQuoteId}`;
+// Records this isolate wrote, in case the KV write did not land.
+const recordMemory = new Map<string, BuyRecord>();
 
 export async function loadRecord(env: Env, id: string): Promise<BuyRecord | null> {
-  return (await env.SOOTHIA_CACHE.get(recordKey(id), "json")) as BuyRecord | null;
+  try {
+    const stored = (await env.SOOTHIA_CACHE.get(recordKey(id), "json")) as BuyRecord | null;
+    if (stored) return stored;
+  } catch {
+    // Fall through to memory.
+  }
+  return recordMemory.get(id) ?? null;
 }
 
+/** Durable (KV). Never throws: a failed write is logged and the flow goes on. */
 export async function saveRecord(env: Env, id: string, record: BuyRecord): Promise<void> {
-  await env.SOOTHIA_CACHE.put(recordKey(id), JSON.stringify(record), { expirationTtl: RECORD_TTL_SEC });
+  recordMemory.set(id, record);
+  await kvPut(env, recordKey(id), JSON.stringify(record), { expirationTtl: RECORD_TTL_SEC });
 }
 
 // ---- POST /buy/quote ----
@@ -265,8 +277,8 @@ export async function finishBuy(env: Env, record: BuyRecord, signature: string, 
       status.attributed = reported.data.status === "processed";
       delete status.errors.report;
       // Remember it, so the reconcile sweep leaves this order alone.
-      if (status.attributed && record.orderId) {
-        await saveRecord(env, record.orderId, { ...record, signature, attributed: true }).catch(() => {});
+      if (status.attributed && record.orderId && !record.attributed) {
+        await saveRecord(env, record.orderId, { ...record, signature, attributed: true });
       }
       break;
     }
@@ -441,10 +453,13 @@ async function pantaGet<T>(env: Env, path: string): Promise<T | null> {
 }
 
 /** Title and prices for one market, cached an hour. Titles are blank on some list rows. */
+// The last brief seen per market in this isolate: the fallback for fields Panta leaves out.
+const lastBriefs = new Map<string, MarketBrief>();
+
 export async function marketBrief(env: Env, marketId: string): Promise<MarketBrief | null> {
   const key = `mkt:${marketId}`;
-  const cached = (await env.SOOTHIA_CACHE.get(key, "json")) as MarketBrief | null;
-  if (cached?.title && "phase" in cached) return cached;
+  const cached = (await cacheGet<MarketBrief>(key)) ?? lastBriefs.get(marketId) ?? null;
+  if (cached?.title && "phase" in cached && (await cacheGet<MarketBrief>(key))) return cached;
   const detail = await pantaGet<MarketDetail>(env, `/markets/${encodeURIComponent(marketId)}/`);
   if (!detail) return cached;
   const price = (value: string | null | undefined): number | null => {
@@ -470,13 +485,17 @@ export async function marketBrief(env: Env, marketId: string): Promise<MarketBri
   // Pool figures move with every trade, so this cache is short; a partial row (Panta's RPC
   // hiccup left prices or the closing time out) is kept only for the KV minimum.
   const partial = brief.yesPrice === null || !brief.primaryPhaseEnd;
-  if (brief.title) await env.SOOTHIA_CACHE.put(key, JSON.stringify(brief), { expirationTtl: partial ? 60 : 120 });
+  if (brief.title) {
+    lastBriefs.set(marketId, brief);
+    await cachePut(key, brief, partial ? 60 : 120);
+  }
   return brief;
 }
 
 export async function handlePositions(request: Request, env: Env): Promise<Response> {
   const wallet = new URL(request.url).searchParams.get("wallet");
   if (!isAddress(wallet)) return json(request, { error: "bad_wallet" }, 400);
+  await flushPendingCreator(env, wallet);
   const body = await pantaGet<{ positions?: PantaPosition[] }>(env, `/positions/?wallet=${wallet}`);
   if (!body) return json(request, { error: "upstream_unavailable" }, 502);
   const rows = body.positions ?? [];
@@ -484,7 +503,7 @@ export async function handlePositions(request: Request, env: Env): Promise<Respo
   const ids = [...new Set(rows.map((row) => row.marketId))].slice(0, MAX_POSITION_DETAILS);
   const [briefs, created] = await Promise.all([
     Promise.all(ids.map(async (id) => [id, await marketBrief(env, id)] as const)).then((entries) => new Map(entries)),
-    env.SOOTHIA_CACHE.get(`creator:${wallet}`, "json") as Promise<CreatedMarket[] | null>,
+    readCreatorMarkets(env, wallet),
   ]);
   // Creating a market seeds liquidity, which mints half the seed to each side
   // at 0.50: a 5 USDC seed is 5 YES and 5 NO shares in the creator's wallet.

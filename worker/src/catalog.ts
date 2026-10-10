@@ -10,6 +10,7 @@ import type { Env } from "./http";
 import { PANTA_BASE, pantaGet, price } from "./markets";
 import { MARKET_PAGE_BASE } from "./pantaRules";
 import { publicCors } from "./stats";
+import { cacheGet, cachePut } from "./store";
 
 export type Phase = "primary" | "p2p" | "resolved";
 
@@ -165,8 +166,8 @@ async function listRows(env: Env, status: "primary" | "secondary"): Promise<Cata
 
 const detailKey = (id: string): string => `detail:${id}`;
 
-export async function cachedDetail(env: Env, id: string): Promise<DetailCache | null> {
-  return (await env.SOOTHIA_CACHE.get(detailKey(id), "json")) as DetailCache | null;
+export async function cachedDetail(_env: Env, id: string): Promise<DetailCache | null> {
+  return cacheGet<DetailCache>(detailKey(id));
 }
 
 /** Fetches one market detail into the cache; returns it, or null when Panta did not answer. */
@@ -185,7 +186,7 @@ export async function refreshDetail(env: Env, id: string): Promise<DetailCache |
     volumeUsdc: price(row.totalVolumeUsdc ?? row.volumeUsdc) ?? undefined,
     fetchedAt: Date.now(),
   };
-  await env.SOOTHIA_CACHE.put(detailKey(id), JSON.stringify(detail), { expirationTtl: resolved ? DETAIL_TTL_RESOLVED_SEC : DETAIL_TTL_SEC });
+  await cachePut(detailKey(id), detail, resolved ? DETAIL_TTL_RESOLVED_SEC : DETAIL_TTL_SEC);
   return detail;
 }
 
@@ -246,7 +247,7 @@ async function build(env: Env, imageOrigin: string, detailBudget: number): Promi
 
 async function rebuild(env: Env, imageOrigin: string, budget: number): Promise<CatalogItem[] | null> {
   const built = await build(env, imageOrigin, budget);
-  if (built) await env.SOOTHIA_CACHE.put(CATALOG_KEY, JSON.stringify(built), { expirationTtl: 24 * 3600 });
+  if (built) await cachePut(CATALOG_KEY, built, 24 * 3600);
   return built?.items ?? null;
 }
 
@@ -256,7 +257,7 @@ async function rebuild(env: Env, imageOrigin: string, budget: number): Promise<C
  * an empty cache builds in the request.
  */
 export async function getCatalog(env: Env, imageOrigin: string, ctx?: ExecutionContext): Promise<CatalogItem[]> {
-  const stored = (await env.SOOTHIA_CACHE.get(CATALOG_KEY, "json")) as StoredCatalog | null;
+  const stored = await cacheGet<StoredCatalog>(CATALOG_KEY);
   if (stored && Date.now() - stored.fetchedAt < CATALOG_TTL_MS) return stored.items;
   if (stored && ctx) {
     ctx.waitUntil(rebuild(env, imageOrigin, DETAILS_PER_REQUEST).catch(() => {}));
@@ -268,7 +269,7 @@ export async function getCatalog(env: Env, imageOrigin: string, ctx?: ExecutionC
 /** Cron: refresh the catalog with a larger detail budget, so blank titles fill in over time. */
 export async function warmCatalog(env: Env): Promise<void> {
   const built = await build(env, "https://soothia-proxy.heylana.workers.dev", DETAILS_PER_SWEEP);
-  if (built) await env.SOOTHIA_CACHE.put(CATALOG_KEY, JSON.stringify(built), { expirationTtl: 24 * 3600 });
+  if (built) await cachePut(CATALOG_KEY, built, 24 * 3600);
 }
 
 // ---- GET /markets ----

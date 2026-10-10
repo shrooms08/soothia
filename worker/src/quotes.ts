@@ -6,6 +6,7 @@
 // apart, and transient failures are retried three times with backoff.
 import { pantaPost, sleep as realSleep, type PantaError } from "./create";
 import type { Env } from "./http";
+import { cacheGet, cachePut } from "./store";
 
 export const DISPLAY_WALLET = "11111111111111111111111111111111";
 const CACHE_TTL_MS = 15_000;
@@ -110,12 +111,13 @@ export function resetQuoteState(): void {
   memory.clear();
 }
 
-export function quoteDeps(env: Env): QuoteDeps {
+export function quoteDeps(_env: Env): QuoteDeps {
+  const env = _env;
   return {
     call: (request) => pantaPost<PantaQuote>(env, "/primaryorderquote/", request),
     sleep: realSleep,
     now: () => Date.now(),
-    cacheGet: async (key) => (await env.SOOTHIA_CACHE.get(key, "json")) as { data: PantaQuote; at: number } | null,
-    cachePut: (key, value) => env.SOOTHIA_CACHE.put(key, JSON.stringify(value), { expirationTtl: 60 }),
+    cacheGet: (key) => cacheGet<{ data: PantaQuote; at: number }>(key),
+    cachePut: (key, value) => cachePut(key, value, 60),
   };
 }

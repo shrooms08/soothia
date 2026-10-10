@@ -28,7 +28,9 @@ import { corsHeaders, installId, json, type Env } from "./http";
 import { PANTA_BASE } from "./markets";
 import { handleMatch } from "./match";
 import { handleMarkets, warmCatalog } from "./catalog";
+import { pendingCreatorCount } from "./creators";
 import { reconcileDeps, reconcileOrders } from "./reconcile";
+import { budgetDirty, kvBudgetReport, reportBudgetToEdge } from "./store";
 import { handleStats } from "./stats";
 import { handleBalances } from "./wallet";
 
@@ -104,6 +106,23 @@ function marketsQuery(url: URL): URLSearchParams {
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    const response = await route(request, env, ctx);
+    // Fold this isolate's KV write count into the edge tally after any request that wrote.
+    if (budgetDirty()) ctx.waitUntil(reportBudgetToEdge().catch(() => {}));
+    return response;
+  },
+
+  // Every five minutes (wrangler.toml): finish bets that were sent but never reported.
+  async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil(reconcileOrders(reconcileDeps(env)).catch(() => {}));
+    // Keep the catalog warm and fill blank titles a few at a time.
+    ctx.waitUntil(warmCatalog(env).catch(() => {}));
+    ctx.waitUntil(reportBudgetToEdge().catch(() => {}));
+  },
+} satisfies ExportedHandler<Env>;
+
+async function route(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  {
     // Solana Actions (bet links) have their own open CORS policy.
     const action = actionRoute(request, env, ctx);
     if (action) return action;
@@ -151,15 +170,10 @@ export default {
         return handleStats(request, env, ctx);
       case "/markets":
         return handleMarkets(request, env, ctx);
+      case "/debug/kv-budget":
+        return json(request, { ...(await kvBudgetReport()), pendingCreatorWrites: pendingCreatorCount() });
       default:
         return json(request, { error: "not_found" }, 404);
     }
-  },
-
-  // Every five minutes (wrangler.toml): finish bets that were sent but never reported.
-  async scheduled(_controller: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
-    ctx.waitUntil(reconcileOrders(reconcileDeps(env)).catch(() => {}));
-    // Keep the catalog warm and fill blank titles a few at a time.
-    ctx.waitUntil(warmCatalog(env).catch(() => {}));
-  },
-} satisfies ExportedHandler<Env>;
+  }
+}

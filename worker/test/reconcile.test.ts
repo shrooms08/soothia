@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { BuyRecord } from "../src/buy";
-import { PANTA_PROGRAM, reconcileOrders, type ReconcileDeps } from "../src/reconcile";
+import { PANTA_PROGRAM, reconcileOrders, resetReconcileState, type ReconcileDeps } from "../src/reconcile";
 
 const MARKET = "CLQqZ7r6WYC5xNumWrmC7UAkQ1Z6pdCbjJSy7wQu1DgL";
 const WALLET = "G253T2aiwYAoTT45a4W26HCfwn9EP3FJsanG9bCV6t4M";
@@ -12,13 +12,15 @@ const SIG_OLD = "4".repeat(87);
 const SIG_OTHER = "3".repeat(87);
 
 function fake(records: Record<string, BuyRecord>, createdAtMs = NOW - 10 * 60_000) {
+  resetReconcileState();
   const store = new Map(Object.entries(records));
+  const saves: string[] = [];
   const claimed = new Map<string, string>();
   const finished: string[] = [];
   const deps: ReconcileDeps = {
     listOrders: async () => [...store.keys()].map((orderId) => ({ orderId, createdAtMs })),
     load: async (id) => store.get(id) ?? null,
-    save: async (id, record) => { store.set(id, record); },
+    save: async (id, record) => { store.set(id, record); saves.push(id); },
     taken: async (sig) => claimed.has(sig),
     claim: async (sig, id) => { claimed.set(sig, id); },
     signaturesFor: async () => [
@@ -32,7 +34,7 @@ function fake(records: Record<string, BuyRecord>, createdAtMs = NOW - 10 * 60_00
     finish: async (record, signature) => { finished.push(`${record.orderId}:${signature}`); return { attributed: true, status: "confirmed" }; },
     now: () => NOW,
   };
-  return { deps, store, finished, claimed };
+  return { deps, store, finished, claimed, saves };
 }
 
 const order = (orderId: string, extra: Partial<BuyRecord> = {}): BuyRecord => ({
@@ -48,8 +50,8 @@ test("an order without a signature is matched to the wallet's Panta transaction 
   const saved = f.store.get("ord_1")!;
   assert.equal(saved.signature, SIG_BET);
   assert.equal(saved.attributed, true);
-  assert.equal(saved.reconciledAt, NOW);
   assert.equal(f.claimed.get(SIG_BET), "ord_1");
+  assert.deepEqual(f.saves, ["ord_1"], "one write, because something changed");
 });
 
 test("a signature is claimed by one order only, and attributed or recently looked-at orders are left alone", async () => {
@@ -58,10 +60,12 @@ test("a signature is claimed by one order only, and attributed or recently looke
   assert.equal(report.found.length, 1, "only one order can own the bet signature");
   assert.equal(report.skipped, 1);
   assert.equal(f.finished.length, 1);
-  // Second sweep right away: nothing new, nothing finished twice.
+  // Second sweep right away: nothing new, nothing finished twice, and no KV writes at all.
+  const writesBefore = f.saves.length;
   const again = await reconcileOrders(f.deps);
   assert.deepEqual(again.attributed, []);
   assert.equal(f.finished.length, 1);
+  assert.equal(f.saves.length, writesBefore, "orders that did not change are not rewritten");
 });
 
 test("an order with a stored signature is finished directly; an old unsigned order is given up on", async () => {

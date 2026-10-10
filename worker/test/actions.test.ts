@@ -79,6 +79,8 @@ function fake(overrides: Partial<ActionDeps> = {}, briefValue: MarketBrief | nul
       background: () => {},
       send: async () => {},
       status: async () => ({ state: "confirmed" as const }),
+      transaction: async () => ({ keys: [WALLET, "6gM5afTQBq5VZCfgpGqcsqzfWd5maLSCKWtGjbEobZMp", MARKET], failed: false }),
+      report: async () => { calls.push("report"); return true; },
       ...overrides,
     },
   };
@@ -199,7 +201,8 @@ test("the confirm callback finishes the order idempotently and returns a complet
   assert.equal((await handleActionConfirm(post(`${BASE}/confirm?orderId=ord_1`, { account: OTHER, signature: SIGNATURE }), f.deps, MARKET)).status, 403);
   const other = encodeBase58(new Uint8Array(64).fill(3));
   assert.equal((await handleActionConfirm(post(`${BASE}/confirm?orderId=ord_1`, { account: WALLET, signature: other }), f.deps, MARKET)).status, 409);
-  assert.equal((await handleActionConfirm(post(`${BASE}/confirm?orderId=ord_9`, { account: WALLET, signature: SIGNATURE }), f.deps, MARKET)).status, 404);
+  // An unknown order is no longer fatal: the chain is consulted instead (see the KV-failure test).
+  assert.equal((await handleActionConfirm(post(`${BASE}/confirm?orderId=ord_9`, { account: WALLET, signature: SIGNATURE }), f.deps, MARKET)).status, 200);
   assert.equal((await handleActionConfirm(post(`${BASE}/confirm?orderId=ord_1`, { account: WALLET }), f.deps, MARKET)).status, 400);
 });
 
@@ -254,4 +257,25 @@ test("tx send broadcasts a signed transaction and turns RPC rejections into plai
   const status = await handleTxStatus(get(`https://proxy.test/api/tx/status?signature=${SIGNATURE}`), fake().deps);
   assert.deepEqual(await status.json(), { signature: SIGNATURE, status: "confirmed" });
   assert.equal((await handleTxStatus(get("https://proxy.test/api/tx/status?signature=nope"), fake().deps)).status, 400);
+});
+
+test("a failed order write never blocks the bet, and the confirm callback can finish from the signature alone", async () => {
+  // KV refuses the write (daily limit): the transaction is still returned to the wallet.
+  const f = fake({ save: async () => { throw new Error("KV PUT failed: 429"); } });
+  const built = await handleActionPost(post(`${BASE}?side=yes&amount=1`, { account: WALLET }), f.deps, MARKET);
+  assert.equal(built.status, 200);
+  assert.equal(((await built.json()) as any).type, "transaction");
+  // Later the client calls back with the signature; there is no stored order, so the chain is the witness.
+  const f2 = fake();
+  const done = await handleActionConfirm(post(`${BASE}/confirm?orderId=ord_1`, { account: WALLET, signature: SIGNATURE }), f2.deps, MARKET);
+  assert.equal(done.status, 200);
+  const body = (await done.json()) as any;
+  assert.equal(body.title, "Bet placed. Good luck.");
+  assert.deepEqual(f2.calls, ["report"]);
+  // A transaction by another wallet, or not touching the market, is refused.
+  const wrong = fake({ transaction: async () => ({ keys: [OTHER, "6gM5afTQBq5VZCfgpGqcsqzfWd5maLSCKWtGjbEobZMp", MARKET], failed: false }) });
+  assert.equal((await handleActionConfirm(post(`${BASE}/confirm?orderId=ord_1`, { account: WALLET, signature: SIGNATURE }), wrong.deps, MARKET)).status, 400);
+  const elsewhere = fake({ transaction: async () => ({ keys: [WALLET, "SomeProgram"], failed: false }) });
+  assert.equal((await handleActionConfirm(post(`${BASE}/confirm?orderId=ord_1`, { account: WALLET, signature: SIGNATURE }), elsewhere.deps, MARKET)).status, 400);
+  assert.deepEqual(wrong.calls.filter((c) => c === "report"), []);
 });

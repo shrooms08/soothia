@@ -12,6 +12,7 @@
 import { finishBuy, saveRecord, type BuyRecord } from "./buy";
 import type { Env } from "./http";
 import { rpc } from "./rpc";
+import { kvPut } from "./store";
 
 export const PANTA_PROGRAM = "6gM5afTQBq5VZCfgpGqcsqzfWd5maLSCKWtGjbEobZMp";
 const RECORD_TTL_SEC = 30 * 24 * 3600;
@@ -65,7 +66,7 @@ export function reconcileDeps(env: Env): ReconcileDeps {
     load: (orderId) => env.SOOTHIA_CACHE.get(`buy:${orderId}`, "json") as Promise<BuyRecord | null>,
     save: (orderId, record) => saveRecord(env, orderId, record),
     taken: async (signature) => (await env.SOOTHIA_CACHE.get(`sig:${signature}`)) !== null,
-    claim: (signature, orderId) => env.SOOTHIA_CACHE.put(`sig:${signature}`, orderId, { expirationTtl: RECORD_TTL_SEC }),
+    claim: async (signature, orderId) => { await kvPut(env, `sig:${signature}`, orderId, { expirationTtl: RECORD_TTL_SEC }); },
     signaturesFor: (wallet) => rpc<SignatureRow[]>(env, "getSignaturesForAddress", [wallet, { limit: SIGNATURES_PER_WALLET, commitment: "confirmed" }]),
     transaction: (signature) =>
       rpc<TxRow | null>(env, "getTransaction", [signature, { encoding: "json", commitment: "confirmed", maxSupportedTransactionVersion: 0 }]),
@@ -102,6 +103,9 @@ export interface ReconcileReport {
   skipped: number;
 }
 
+// When each order was last looked at, in memory: no KV write just to say "looked".
+const lastLook = new Map<string, number>();
+
 export async function reconcileOrders(deps: ReconcileDeps): Promise<ReconcileReport> {
   const report: ReconcileReport = { looked: 0, attributed: [], found: [], skipped: 0 };
   const now = deps.now();
@@ -110,9 +114,11 @@ export async function reconcileOrders(deps: ReconcileDeps): Promise<ReconcileRep
     if (report.looked >= MAX_ORDERS_PER_RUN) break;
     const record = await deps.load(orderId);
     if (!record?.orderId || record.attributed) continue;
-    if (record.reconciledAt && now - record.reconciledAt < LOOK_INTERVAL_MS) { report.skipped++; continue; }
+    const looked = lastLook.get(orderId) ?? record.reconciledAt ?? 0;
+    if (now - looked < LOOK_INTERVAL_MS) { report.skipped++; continue; }
     if (!record.signature && now - createdAtMs > GIVE_UP_AFTER_MS) continue;
     report.looked++;
+    lastLook.set(orderId, now);
 
     let signature = record.signature ?? null;
     if (!signature) {
@@ -126,19 +132,27 @@ export async function reconcileOrders(deps: ReconcileDeps): Promise<ReconcileRep
         report.found.push(orderId);
       }
     }
-    const next: BuyRecord = { ...record, reconciledAt: now, ...(signature ? { signature } : {}) };
+    // Write back only when something changed: a signature found or the attribution done.
+    const next: BuyRecord = { ...record, ...(signature ? { signature } : {}) };
+    let changed = Boolean(signature && signature !== record.signature);
     if (signature) {
       try {
         const result = await deps.finish(next, signature);
-        if (result.attributed) {
+        if (result.attributed && !record.attributed) {
           next.attributed = true;
+          changed = true;
           report.attributed.push(orderId);
         }
       } catch {
         // Try again next sweep.
       }
     }
-    await deps.save(orderId, next);
+    if (changed) await deps.save(orderId, next);
   }
   return report;
+}
+
+/** For tests. */
+export function resetReconcileState(): void {
+  lastLook.clear();
 }
