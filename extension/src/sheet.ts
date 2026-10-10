@@ -68,6 +68,8 @@ export interface Sheet {
   /** Re-read settings (the debug toggles changed) or wake after being hidden. */
   refresh(): void;
   dispose(): void;
+  /** Presses the sheet's main button. Used by the localhost screenshot harness. */
+  trigger?: () => void;
 }
 
 const QUOTE_DEBOUNCE_MS = 900;
@@ -847,5 +849,6 @@ export function openSheet(host: SheetHost): Sheet {
       clearTimeout(quoteTimer);
       clearTimeout(expiryTimer);
     },
+    trigger: () => void create(),
   };
 }

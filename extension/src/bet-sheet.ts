@@ -560,5 +560,6 @@ export function openBetSheet(host: BetHost): Sheet {
       clearTimeout(quoteTimer);
       clearTimeout(expiryTimer);
     },
+    trigger: () => void buy(),
   };
 }

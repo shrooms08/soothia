@@ -181,6 +181,11 @@ export const STYLES = `
   opacity: 1;
   animation: sthSpin var(--sth-think) linear infinite;
 }
+/* Ivory vanishes on a white page: the arc goes deep violet there. */
+:host([data-theme="light"]) .orb-arc {
+  border-top-color: var(--sth-orb-deep);
+  border-right-color: rgba(83,74,183,.35);
+}
 
 .orb[data-state="found"] .orb-body {
   background: var(--sth-orb-fill-bright);
@@ -307,6 +312,9 @@ export const STYLES = `
   gap: 8px;
 }
 .body[hidden] { display: none; }
+/* While a sheet is open the body stops scrolling: the sheet's form scrolls
+   under its own fixed footer instead (review-sheet: "button sticks to the bottom"). */
+.body.has-sheet { padding: 0; overflow: hidden; gap: 0; }
 
 /* ---------- Type ---------- */
 
@@ -350,11 +358,15 @@ export const STYLES = `
   box-shadow: 0 6px 20px -4px rgba(175,169,236,.7);
 }
 .button.wide {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
   width: 100%;
   height: 44px;
   font-size: 14px;
 }
+.button.ext::after { content: " \\2197"; margin-left: 4px; }
 .button.wide.primary { box-shadow: 0 0 0 1px rgba(255,255,255,.4) inset, 0 6px 20px -6px rgba(127,119,221,.7); }
 .button.small { height: 32px; padding: 0 16px; }
 .button.dry {
@@ -482,7 +494,7 @@ a.button { display: inline-flex; align-items: center; justify-content: center; t
 
 /* ---------- Sheets (review-sheet, bet-sheet) ---------- */
 
-.sheet { display: flex; flex-direction: column; margin: 0 -12px -12px; min-height: 0; }
+.sheet { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; }
 .sheet-head {
   display: flex;
   align-items: center;
@@ -507,9 +519,15 @@ a.button { display: inline-flex; align-items: center; justify-content: center; t
 .form, .outcome {
   display: flex;
   flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
   gap: 18px;
   padding: 16px;
+  overflow-y: auto;
 }
+.outcome.success ~ .steps { display: none; }
+/* Once an outcome shows, the footer button has done its job. */
+.outcome:not([hidden]) ~ .sheet-foot { display: none; }
 .form[hidden], .outcome[hidden], .steps[hidden] { display: none; }
 .sheet-foot {
   flex: none;
@@ -706,6 +724,7 @@ input[type="number"].input { font-family: var(--sth-font-mono); }
 /* Progress steps (progress-steps) */
 .steps {
   display: flex;
+  flex: none;
   flex-direction: column;
   gap: 14px;
   margin: 0 16px 16px;

@@ -424,6 +424,7 @@ async function mount(): Promise<void> {
   function closeSheet(): void {
     sheet?.dispose();
     sheet = null;
+    body.classList.remove("has-sheet");
   }
 
   function showTiles(): void {
@@ -448,6 +449,7 @@ async function mount(): Promise<void> {
       back: showTiles,
       celebrate: pulseOrb,
     });
+    body.classList.add("has-sheet");
     body.replaceChildren(sheet.node);
     layout();
   }
@@ -625,7 +627,14 @@ async function mount(): Promise<void> {
     note.textContent = "Still waiting for Solana. Refresh in a minute; do not claim again.";
   }
 
+  // Canned Worker answers for the localhost screenshot harness (design/tools).
+  let mockApi: Record<string, unknown> | null = null;
+
   async function api<T>(path: ApiPath, payload: unknown): Promise<ApiResponse<T | ApiError>> {
+    if (mockApi && path in mockApi) {
+      await new Promise((resolve) => setTimeout(resolve, 60));
+      return { ok: true, status: 200, body: mockApi[path] as T };
+    }
     try {
       const message: ApiRequestMessage = { type: API_REQUEST, path, body: payload };
       const response = (await chrome.runtime.sendMessage(message)) as ApiResponse<T | ApiError> | undefined;
@@ -660,6 +669,7 @@ async function mount(): Promise<void> {
       bet: (target) => openBet({ ...target, yesPrice: null, noPrice: null }),
       savePending,
     });
+    body.classList.add("has-sheet");
     body.replaceChildren(sheet.node);
     layout();
   }
@@ -976,6 +986,47 @@ async function mount(): Promise<void> {
 
   renderPhantom();
   proxyRow.set("Proxy: checking…", "idle");
+  // Dev-only: on localhost, a page may post scenes to screenshot. Nothing
+  // here reaches the network: every Worker call is answered from `mockApi`.
+  if (/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) {
+    window.addEventListener("message", (event) => {
+      if (event.source !== window) return;
+      const data = event.data as { type?: string; scene?: string; mocks?: Record<string, unknown>; tiles?: Tile[]; dryRun?: boolean } | null;
+      if (data?.type !== "soothia:v1:dev-scene" || !data.scene) return;
+      if (data.mocks) mockApi = data.mocks;
+      if (typeof data.dryRun === "boolean") dryRunToggle.box.checked = data.dryRun;
+      clearTimeout(detectTimer);
+      const mockTiles = data.tiles ?? [];
+      const show = (): void => {
+        tiles = mockTiles;
+        if (mockTiles[2]) {
+          liveMarkets.set(mockTiles[2].claim.id, {
+            marketId: "CLQqZ7r6WYC5xNumWrmC7UAkQ1Z6pdCbjJSy7wQu1DgL",
+            marketUrl: "https://www.panta.market/market/CLQqZ7r6WYC5xNumWrmC7UAkQ1Z6pdCbjJSy7wQu1DgL",
+            title: mockTiles[2].claim.question,
+          });
+        }
+        showTiles();
+      };
+      switch (data.scene) {
+        case "orb-idle": render({ kind: "watching" }); break;
+        case "orb-thinking": render({ kind: "thinking" }); break;
+        case "orb-found": show(); break;
+        case "orb-success": show(); pulseOrb(); break;
+        case "tiles": show(); setOpen(true); break;
+        case "empty": render({ kind: "empty" }); setOpen(true); break;
+        case "skipped": render({ kind: "skipped" }); setOpen(true); break;
+        case "error": render({ kind: "error", reason: "unavailable" }); setOpen(true); break;
+        case "review": show(); setOpen(true); review(mockTiles[0]); break;
+        case "bet": show(); setOpen(true); openBet({ marketId: "CLQqZ7r6WYC5xNumWrmC7UAkQ1Z6pdCbjJSy7wQu1DgL", title: mockTiles[1].claim.question, yesPrice: 0.5, noPrice: 0.5 }); break;
+        case "success-create": show(); setOpen(true); review(mockTiles[0]); setTimeout(() => sheet?.trigger?.(), 1200); break;
+        case "success-bet": show(); setOpen(true); openBet({ marketId: "CLQqZ7r6WYC5xNumWrmC7UAkQ1Z6pdCbjJSy7wQu1DgL", title: mockTiles[1].claim.question, yesPrice: 0.5, noPrice: 0.5 }); setTimeout(() => sheet?.trigger?.(), 1200); break;
+        case "mybets": show(); setOpen(true); showTab("bets"); break;
+        case "debug": show(); setOpen(true); debug.open = true; break;
+      }
+    });
+  }
+
   loadFonts();
   applyTheme();
   // Sites can set their background after load (themes, dark mode toggles).
