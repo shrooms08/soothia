@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Soothia · See the odds on everything you read</title>
+<meta name="description" content="Soothia is a browser buddy that spots claims you can bet on, on X, news and sports pages, and turns them into live prediction markets on Solana in two clicks.">
+<meta name="theme-color" content="#000000">
+<link rel="icon" type="image/png" sizes="32x32" href="/img/favicon-32.png">
+<link rel="apple-touch-icon" href="/img/icon-128.png">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Soothia · See the odds on everything you read">
+<meta property="og:description" content="Claims on X, news and sports pages become live prediction markets on Solana. No custody: you sign everything in your own wallet.">
+<meta property="og:image" content="/img/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Soothia · See the odds on everything you read">
+<meta name="twitter:description" content="Claims on X, news and sports pages become live prediction markets on Solana.">
+<meta name="twitter:image" content="/img/og-image.png">
+<meta name="twitter:site" content="@shroomsgotsol">
+<link rel="preload" href="/fonts/soothia-lora.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/soothia-inter.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/soothia-jetbrains-mono.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <linearGradient id="chrome" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#FFFFFF"/><stop offset=".34" stop-color="#D3D1DE"/><stop offset=".5" stop-color="#6F6C82"/><stop offset=".64" stop-color="#F3F2F8"/><stop offset="1" stop-color="#8E8BA0"/></linearGradient>
+    <symbol id="star" viewBox="-50 -50 100 100"><path d="M0 -50 C3 -12 8 -4 32 0 C8 4 3 12 0 50 C-3 12 -8 4 -32 0 C-8 -4 -3 -12 0 -50Z" fill="url(#chrome)"/><path d="M0 -50 C3 -12 8 -4 32 0 L0 0Z" fill="#FFFFFF" opacity=".38"/><path d="M0 0 L-32 0 C-8 4 -3 12 0 50Z" fill="#0E0D14" opacity=".28"/></symbol>
+  </defs>
+</svg>
+<div class="sky" id="sky" aria-hidden="true"></div>
+
+<header class="nav">
+  <a class="lockup" href="#top" aria-label="Soothia home">
+    <span class="mark"><span class="mark-body"></span><svg class="star mark-star"><use href="#star"/></svg></span>
+    <span class="wordmark">Soothia</span>
+  </a>
+  <nav class="nav-links" aria-label="Sections">
+    <a href="#how">How it works</a>
+    <a href="#proof">Proof</a>
+    <a href="#install">Install</a>
+    <a data-link="GITHUB_URL" href="#" target="_blank" rel="noopener">GitHub</a>
+  </nav>
+</header>
+
+<main id="top">
+  <section class="hero" id="hero">
+    <div class="hero-orb-wrap" id="hero-orb">
+      <div class="orb">
+        <span class="orb-body"><span class="orb-shimmer"></span><span class="orb-eye"></span></span>
+        <svg class="star orb-glint"><use href="#star"/></svg>
+        <span class="orb-arc"></span>
+        <span class="orb-stars"><svg class="star"><use href="#star"/></svg><svg class="star"><use href="#star"/></svg><svg class="star"><use href="#star"/></svg></span>
+      </div>
+    </div>
+    <h1>See the odds <span class="underline">on everything you read</span>.</h1>
+    <p class="sub">Soothia is a buddy for your browser. It spots claims you can bet on, on X, news and sports pages, and turns them into live prediction markets on Solana in two clicks.</p>
+    <div class="cta">
+      <a class="btn primary" href="#install">Download for Chrome<svg class="star btn-star"><use href="#star"/></svg></a>
+      <a class="btn" href="#demo">Watch demo</a>
+    </div>
+    <p class="fine mono">Live on Solana mainnet · Powered by Panta</p>
+  </section>
+
+  <section class="section reveal" id="how">
+    <h2>How it works</h2>
+    <div class="cards">
+      <article class="card">
+        <div class="shot shot-read"><img src="/img/how-read-card.webp" width="700" height="1500" alt="The Soothia card listing three claims found on a page" loading="lazy"><img class="shot-orb" src="/img/how-read-orb.webp" width="400" height="360" alt="" loading="lazy"></div>
+        <h3>Read</h3>
+        <p>Soothia reads the page with you and spots claims worth calling.</p>
+      </article>
+      <article class="card">
+        <div class="shot"><img src="/img/how-make.webp" width="700" height="1500" alt="The review sheet for turning a claim into a Panta market" loading="lazy"></div>
+        <h3>Make it a market</h3>
+        <p>Turn any claim into a live Panta market. Breaking markets cost 20 USDC.</p>
+      </article>
+      <article class="card">
+        <div class="shot"><img src="/img/how-bet.webp" width="700" height="1500" alt="The bet sheet with YES and NO and a one dollar stake" loading="lazy"></div>
+        <h3>Bet</h3>
+        <p>Pick YES or NO, sign with Phantom, done.</p>
+      </article>
+    </div>
+  </section>
+
+  <section class="section reveal" id="proof">
+    <h2>Already live</h2>
+    <div class="tile">
+      <div class="meta"><span class="chip">Breaking</span><span class="mono dim">Created through Soothia</span></div>
+      <p class="question">Will BTC reach a new all-time high by December 31, 2026?</p>
+      <div class="links">
+        <a data-link="PANTA_MARKET_URL" href="#" target="_blank" rel="noopener">View on Panta ↗</a>
+        <a data-link="CREATE_TX" href="#" target="_blank" rel="noopener">Creation tx ↗</a>
+        <a data-link="BET_TX" href="#" target="_blank" rel="noopener">First bet tx ↗</a>
+      </div>
+    </div>
+    <p class="line">Every market and bet goes through the Panta API on Solana mainnet. No custody: you sign everything in your own wallet.</p>
+  </section>
+
+  <section class="section reveal built" id="panta">
+    <h2>Built on Panta</h2>
+    <ul class="flows mono">
+      <li>market create <span class="dim">quote · build · register</span></li>
+      <li>primary buy <span class="dim">quote · build · submit · verify</span></li>
+      <li>trade attribution</li>
+      <li>positions</li>
+      <li>win claims</li>
+    </ul>
+    <p class="line">Soothia brings Panta markets to every page on the web.</p>
+  </section>
+
+  <section class="section reveal" id="demo">
+    <h2>Demo</h2>
+    <div class="demo" id="demo-frame">
+      <div class="placeholder"><span class="mark big"><span class="mark-body"></span><svg class="star mark-star"><use href="#star"/></svg></span><p>Demo video coming soon</p></div>
+    </div>
+  </section>
+
+  <section class="section reveal" id="install">
+    <h2>Install in a minute</h2>
+    <a class="btn primary" href="/soothia-extension.zip" download>Download Soothia (.zip)<svg class="star btn-star"><use href="#star"/></svg></a>
+    <ol class="steps">
+      <li>Download and unzip the file.</li>
+      <li>Open <span class="mono">chrome://extensions</span> (or <span class="mono">brave://extensions</span>).</li>
+      <li>Turn on Developer mode, top right.</li>
+      <li>Click Load unpacked and choose the unzipped <span class="mono">soothia</span> folder.</li>
+      <li>Pin Soothia, open any post on X, and look for the orb bottom right.</li>
+    </ol>
+    <p class="line">You'll need Phantom with a little USDC and SOL to create markets or bet. Chrome Web Store listing coming soon.</p>
+  </section>
+</main>
+
+<footer class="footer reveal">
+  <div class="lockup"><span class="mark"><span class="mark-body"></span><svg class="star mark-star"><use href="#star"/></svg></span><span class="wordmark">Soothia</span></div>
+  <p class="tagline">See the odds on everything you read.</p>
+  <nav class="footer-links" aria-label="Elsewhere">
+    <a data-link="X_URL" href="#" target="_blank" rel="noopener">X</a>
+    <a data-link="GITHUB_URL" href="#" target="_blank" rel="noopener">GitHub</a>
+    <a data-link="PANTA_URL" href="#" target="_blank" rel="noopener">Panta</a>
+    <a data-link="COLOSSEUM_URL" href="#" target="_blank" rel="noopener">Colosseum</a>
+    <a data-link="SIDETRACK_URL" href="#" target="_blank" rel="noopener">Panta side track</a>
+  </nav>
+  <p class="fine mono">© 2026 Soothia</p>
+</footer>
+
+<script src="/config.js"></script>
+<script src="/app.js"></script>
+</body>
+</html>
