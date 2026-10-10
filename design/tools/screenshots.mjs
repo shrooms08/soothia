@@ -103,7 +103,11 @@ const SHOTS = [
   ["dark-success-bet-placed", "dark", "success-bet", 7000],
   ["dark-my-bets", "dark", "mybets", 2200],
   ["creator-earnings", "dark", "mybets", 2200],
+  ["card-stars-dark", "dark", "tiles", 1500],
 ];
+// `node design/tools/screenshots.mjs <name-substring>` takes only matching shots.
+const only = process.argv[2];
+const WANTED = only ? SHOTS.filter(([name]) => name.includes(only)) : SHOTS;
 
 const userDataDir = `${root}design/tools/.chromium-profile`;
 await rm(userDataDir, { recursive: true, force: true });
@@ -117,7 +121,7 @@ const context = await chromium.launchPersistentContext(userDataDir, {
 // Wait for the service worker, so the fonts and relay are ready.
 await context.waitForEvent("serviceworker", { timeout: 15000 }).catch(() => {});
 
-for (const [name, theme, scene, settle] of SHOTS) {
+for (const [name, theme, scene, settle] of WANTED) {
   const page = await context.newPage();
   await page.goto(`${base}/${theme}.html`);
   await page.waitForTimeout(1800);

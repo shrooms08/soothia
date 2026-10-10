@@ -97,9 +97,19 @@ At the site root, `https://soothia.heylana.workers.dev/actions.json`, with the C
 
 A cross-host `apiPath` is what Jupiter does (`jup.ag/actions.json` → `worker.jup.ag`). The proxy also serves its own `/actions.json` mapping `/api/actions/**` to itself.
 
+### Share page routes (added 2026-10-10 when dial.to went down)
+
+The share page no longer depends on dial.to. It bets through the same Action API plus three public routes with the same headers:
+
+- `GET /api/actions/market/<id>/quote?side&amount&account` → `{side, amountUsdc, shares, avgPrice, feeUsdc, totalUsdc, yesPrice, noPrice, expiresAt}`. `account` is optional; before the viewer connects, the page quotes for the system program address. Panta answers `INVALID_MARKET_PARAMS` to quotes that arrive too fast from one wallet; the page retries once after 1.5 s.
+- `POST /api/tx/send` `{signedTxBase64}` → `{signature}`, or `{message}` with 400 when the RPC's preflight refuses it (an empty wallet reads "This wallet is empty. It needs SOL for network fees and USDC to pay with.").
+- `GET /api/tx/status?signature=` → `{status: "confirmed" | "failed" | "pending"}` after waiting up to 20 s.
+
+The page's flow is build (`POST` action) → Phantom `signTransaction` (never `signAndSendTransaction`) → the extension's signed-transaction check (size ≤ 1,232 bytes, same message, an added compute-budget instruction allowed) → `/api/tx/send` → `/api/tx/status` → the `links.next` callback with `{account, signature}` so Panta submit/verify/report runs and the bet counts in the stats. On a phone without a wallet the buttons deep-link into Phantom's browser: `https://phantom.app/ul/browse/<encoded page URL>?ref=<encoded site>`.
+
 ## Interstitial and fallbacks
 
-A link that works everywhere today: `https://dial.to/?action=solana-action:<url-encoded action URL>`. Dialect says to URL-encode everything after `solana-action:`. The share page's buttons are exactly this, with `?side=yes` or `?side=no` on the action URL. Dialect's public API renders any action: `https://api.dial.to/v1/blink?apiUrl=<action URL>` (full blink JSON) and `https://api.dial.to/v1/blink-preview?apiUrl=<action URL>` (title, description, image, cta). We use these as the validator.
+A link that works everywhere today: `https://dial.to/?action=solana-action:<url-encoded action URL>`. Dialect says to URL-encode everything after `solana-action:`. (The share page used these links until dial.to went down on 2026-10-10; it now bets natively, see above.) Dialect's public API renders any action: `https://api.dial.to/v1/blink?apiUrl=<action URL>` (full blink JSON) and `https://api.dial.to/v1/blink-preview?apiUrl=<action URL>` (title, description, image, cta). We use these as the validator.
 
 ## Registry (X unfurling)
 
