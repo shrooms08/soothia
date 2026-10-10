@@ -133,7 +133,7 @@ Since any free-form binary question is creatable, Soothia limits drafts to three
 
 Soothia's rules (`worker/src/pantaRules.ts`): new drafts are breaking; "Buying window closes" is 1 to 72 hours after creation for breaking (default 48 hours), up to 365 days for standard; "Event is live now" sets `eventInProgress: true` with `startTime` one minute in the past and is offered only when `/detect` flagged the claim as `eventLive`; `endTime` must come after `startTime`, be at least 10 minutes out (2 hours for standard), and within 365 days. The fee always comes from the live quote.
 
-**LIVE:** a breaking quote with `eventInProgress: true` succeeded (20 USDC), but its build failed with `unexpected create build failure — check server logs`. This was during a period when most quotes were also failing with the matching "unexpected" message, so it is **UNCLEAR** whether live-event builds work.
+**LIVE:** a breaking quote with `eventInProgress: true` succeeded (20 USDC) and built to 1046 bytes on the second try. The first build failed with `unexpected create build failure — check server logs`: build has the same transient failure as quote, and the Worker now retries both the same way.
 
 ### Resolution and payouts (from the Panta team, not in the docs)
 

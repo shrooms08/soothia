@@ -21,6 +21,7 @@ import { rpc, RpcError } from "./rpc";
 const QUOTE_TTL_SEC = 24 * 3600;
 const TOO_LONG = "The question is too long to fit in one Solana transaction. Shorten it.";
 const TRANSIENT_QUOTE_FAILURE = "unexpected create quote failure";
+const TRANSIENT_BUILD_FAILURE = "unexpected create build failure";
 const TRANSIENT_QUOTE_RETRY_WAITS_MS = [1500, 4000];
 // A serialized transaction is at most 1232 bytes: 1644 base64 characters.
 const MAX_TX_BASE64 = 1700;
@@ -252,7 +253,13 @@ export async function handleBuild(request: Request, env: Env): Promise<Response>
   let requote: Record<string, unknown> | null = null;
 
   for (;;) {
-    const result = await pantaPost<PantaBuild>(env, "/markets/create/build/", { createId: quoteId, wallet });
+    // Build has the same transient failure as quote; retry the same way.
+    let result = await pantaPost<PantaBuild>(env, "/markets/create/build/", { createId: quoteId, wallet });
+    for (const waitMs of TRANSIENT_QUOTE_RETRY_WAITS_MS) {
+      if (result.ok || !result.error.message?.includes(TRANSIENT_BUILD_FAILURE)) break;
+      await sleep(waitMs);
+      result = await pantaPost<PantaBuild>(env, "/markets/create/build/", { createId: quoteId, wallet });
+    }
     if (!result.ok) return pantaFailure(request, result);
     const build = result.data;
 
