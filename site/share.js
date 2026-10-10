@@ -211,7 +211,7 @@
     outcome.hidden = true;
     setBusy(true);
     showSteps("Signing");
-    var built, signature, nextHref;
+    var built, signature, nextHref, chainState = "pending";
     loadTx().then(function () {
       return post(PROXY + "/api/actions/market/" + MARKET + "?side=" + side + "&amount=" + amount.toFixed(2), { account: account });
     }).then(function (res) {
@@ -237,16 +237,21 @@
       return waitConfirmed(signature, 6);
     }).then(function (state) {
       if (state === "failed") throw { step: "Confirming", message: "The transaction failed on Solana. No USDC was taken." };
+      chainState = state;
       showSteps("Recording");
       status.textContent = state === "confirmed" ? "Recording the bet with Panta…" : "Solana is slow right now; recording anyway…";
-      return nextHref ? post(PROXY + nextHref, { account: account, signature: signature }) : { ok: true, body: {} };
+      // The callback tells Panta about the bet (submit, verify, report). Retry a few
+      // times; if it still fails, the Worker's own sweep records the bet later.
+      return nextHref ? postWithRetry(PROXY + nextHref, { account: account, signature: signature }, 3) : { ok: false, body: {} };
     }).then(function (res) {
       showSteps("done");
       status.textContent = "";
       setBusy(false);
       var done = el("div", "done");
-      var title = (res.ok && res.body && res.body.title) || "Bet placed. Good luck.";
-      done.append(el("h2", "done-title", title), el("p", "done-sub", usd(amount) + " on " + side.toUpperCase() + (res.ok ? "" : ". Panta will show it in your positions shortly.")));
+      var recorded = res.ok && res.body && res.body.type === "completed" && res.body.title;
+      var title = recorded ? res.body.title : chainState === "confirmed" ? "Bet placed on Solana" : "Bet sent";
+      var sub = usd(amount) + " on " + side.toUpperCase() + (recorded ? "" : chainState === "confirmed" ? ". Panta hasn't recorded it yet; Soothia will retry on its own within a few minutes." : ". Solana is still confirming it; check Solscan in a minute.");
+      done.append(el("h2", "done-title", title), el("p", "done-sub", sub));
       var links = el("p", "links");
       links.append(link("Transaction on Solscan ↗", "https://solscan.io/tx/" + signature, ""), link("View on Panta ↗", main.getAttribute("data-panta"), ""));
       done.append(links);
@@ -255,6 +260,15 @@
       requestQuote();
     }).catch(function (e) {
       failWith((e && e.step) || "Signing", (e && e.message) || "Something went wrong. Nothing was sent.");
+    });
+  }
+  function postWithRetry(url, body, tries) {
+    return post(url, body).then(function (res) {
+      if (res.ok || res.status < 500 && res.status !== 429 || tries <= 1) return res;
+      return new Promise(function (r) { setTimeout(r, 2500); }).then(function () { return postWithRetry(url, body, tries - 1); });
+    }).catch(function () {
+      if (tries <= 1) return { ok: false, status: 0, body: {} };
+      return new Promise(function (r) { setTimeout(r, 2500); }).then(function () { return postWithRetry(url, body, tries - 1); });
     });
   }
   function waitConfirmed(sig, tries) {
