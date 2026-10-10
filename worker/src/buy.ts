@@ -9,6 +9,7 @@ import {
   firstSignature,
   isQuoteId,
   isTxBase64,
+  touchesPanta,
   pantaFailure,
   pantaPostWithRetry,
   RELEVANT_LOG,
@@ -298,6 +299,7 @@ export async function handleBuySend(request: Request, env: Env, ctx: ExecutionCo
   }
   const signature = firstSignature(body.signedTxBase64);
   if (!signature) return json(request, { error: "not_signed" }, 400);
+  if (!touchesPanta(body.signedTxBase64)) return json(request, { error: "not_panta_transaction" }, 400);
   const record = await loadRecord(env, body.orderId);
   if (!record?.orderId) return json(request, { error: "unknown_order" }, 404);
 
@@ -593,6 +595,7 @@ export async function handleClaimSend(request: Request, env: Env, ctx: Execution
   }
   const signature = firstSignature(body.signedTxBase64);
   if (!signature) return json(request, { error: "not_signed" }, 400);
+  if (!touchesPanta(body.signedTxBase64)) return json(request, { error: "not_panta_transaction" }, 400);
   const claimRecord = await loadRecord(env, `claim:${body.wallet}:${body.marketId}`);
   if (!claimRecord) return json(request, { error: "unknown_claim" }, 404);
   try {

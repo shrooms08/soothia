@@ -5,6 +5,8 @@ export interface Env {
   ANTHROPIC_API_KEY: string;
   /** Solana mainnet RPC URL. Contains an API key: never log it or return it. */
   HELIUS_RPC_URL: string;
+  /** Gates /debug/* (header X-Soothia-Admin). Unset means those routes do not exist. */
+  ADMIN_TOKEN?: string;
   SOOTHIA_CACHE: KVNamespace;
 }
 
@@ -68,6 +70,17 @@ export async function sha256Hex(input: string): Promise<string> {
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** True when the request carries X-Soothia-Admin equal to the configured ADMIN_TOKEN. */
+export function isAdmin(request: Request, env: Env): boolean {
+  const expected = env.ADMIN_TOKEN?.trim() ?? "";
+  const given = request.headers.get("X-Soothia-Admin") ?? "";
+  if (expected.length < 16 || given.length !== expected.length) return false;
+  // Constant-time compare so timing does not leak how much of the token matched.
+  let diff = 0;
+  for (let i = 0; i < expected.length; i++) diff |= expected.charCodeAt(i) ^ given.charCodeAt(i);
+  return diff === 0;
+}
 
 /** The X-Soothia-Install header, if it is a well-formed install id. */
 export function installId(request: Request): string | null {

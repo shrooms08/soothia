@@ -1,4 +1,6 @@
 // Solana Actions handlers with a fake Panta, fake RPC and fake KV. Run with `npm test`.
+import { decodeBase58 } from "../src/base58";
+import { PANTA_PROGRAM } from "../src/pantaRules";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
@@ -240,7 +242,11 @@ test("the quote route prices a side and amount, with a stand-in wallet before co
 });
 
 test("tx send broadcasts a signed transaction and turns RPC rejections into plain words", async () => {
-  const signed = btoa(String.fromCharCode(1, ...new Uint8Array(64).fill(5), ...new Uint8Array(200).fill(2)));
+  // A signed legacy message naming the wallet, the Panta program, and the system program.
+  const keys = [WALLET, PANTA_PROGRAM, "11111111111111111111111111111111"].map((key) => [...decodeBase58(key)!]);
+  const signed = btoa(String.fromCharCode(1, ...new Uint8Array(64).fill(5), 1, 0, 1, keys.length, ...keys.flat(), ...new Uint8Array(32).fill(2), 0));
+  const notPanta = btoa(String.fromCharCode(1, ...new Uint8Array(64).fill(5), ...new Uint8Array(200).fill(2)));
+  assert.equal((await handleTxSend(post("https://proxy.test/api/tx/send", { signedTxBase64: notPanta }), fake().deps)).status, 400);
   const ok = await handleTxSend(post("https://proxy.test/api/tx/send", { signedTxBase64: signed }), fake().deps);
   assert.equal(ok.status, 200);
   assert.equal(typeof ((await ok.json()) as any).signature, "string");

@@ -1059,6 +1059,8 @@ input[type="number"].input { font-family: var(--sth-font-mono); }
   gap: 2px 10px;
   margin: 0 0 8px;
 }
+.scan[hidden] { display: none; }
+.debug-version { margin-left: auto; color: var(--sth-text-3); }
 .scan-name { color: var(--sth-text-3); }
 .scan-value { margin: 0; color: var(--sth-text-2); overflow-wrap: anywhere; }
 .debug .button.small { margin: 2px 0 8px; font-size: 12px; }

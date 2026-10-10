@@ -7,7 +7,7 @@
 import { resolvedOutcomeOf } from "./buy";
 import type { CreatedMarket } from "./create";
 import type { Env } from "./http";
-import { PANTA_BASE, pantaGet, price } from "./markets";
+import { pantaGet, price } from "./markets";
 import { MARKET_PAGE_BASE } from "./pantaRules";
 import { publicCors } from "./stats";
 import { cacheGet, cachePut } from "./store";
@@ -291,4 +291,3 @@ export async function handleMarkets(request: Request, env: Env, ctx?: ExecutionC
   });
 }
 
-export const PANTA_LIST_BASE = PANTA_BASE;

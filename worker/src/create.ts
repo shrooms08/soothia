@@ -11,6 +11,7 @@ import {
   DESCRIPTION_MAX_LENGTH,
   MARKET_PAGE_BASE,
   MAX_BUILT_TRANSACTION_BYTES,
+  PANTA_PROGRAM,
   RESOLUTION_DELAY_SEC,
   startTimeFor,
   USDC_DECIMALS,
@@ -530,6 +531,43 @@ export function firstSignature(signedTxBase64: string): string | null {
   return encodeBase58(signature);
 }
 
+/** The static account keys of a signed legacy or v0 transaction, as base58. Empty when malformed. */
+export function staticAccountKeys(signedTxBase64: string): string[] {
+  let bytes: Uint8Array;
+  try {
+    bytes = Uint8Array.from(atob(signedTxBase64), (char) => char.charCodeAt(0));
+  } catch {
+    return [];
+  }
+  let offset = 0;
+  const compactU16 = (): number | null => {
+    let value = 0;
+    for (let shift = 0; shift < 21; shift += 7) {
+      if (offset >= bytes.length) return null;
+      const byte = bytes[offset++];
+      value |= (byte & 0x7f) << shift;
+      if ((byte & 0x80) === 0) return value;
+    }
+    return null;
+  };
+  const signatures = compactU16();
+  if (signatures === null) return [];
+  offset += signatures * 64;
+  if (offset >= bytes.length) return [];
+  if ((bytes[offset] & 0x80) !== 0) offset++; // v0 messages start with a version byte.
+  offset += 3; // Header: signer count, read-only signed, read-only unsigned.
+  const count = compactU16();
+  if (count === null || count === 0 || offset + count * 32 > bytes.length) return [];
+  const keys: string[] = [];
+  for (let i = 0; i < count; i++, offset += 32) keys.push(encodeBase58(bytes.slice(offset, offset + 32)));
+  return keys;
+}
+
+/** True when the signed transaction names the Panta program. Programs are always static keys. */
+export function touchesPanta(signedTxBase64: string): boolean {
+  return staticAccountKeys(signedTxBase64).includes(PANTA_PROGRAM);
+}
+
 export async function handleSend(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const body = await readJsonObject(request);
   if (!body || !isTxBase64(body.signedTxBase64) || !isQuoteId(body.quoteId)) {
@@ -537,6 +575,7 @@ export async function handleSend(request: Request, env: Env, ctx: ExecutionConte
   }
   const signature = firstSignature(body.signedTxBase64);
   if (!signature) return json(request, { error: "not_signed" }, 400);
+  if (!touchesPanta(body.signedTxBase64)) return json(request, { error: "not_panta_transaction" }, 400);
 
   // Only transactions for a quote we issued are relayed.
   const record = await loadQuote(env, body.quoteId);

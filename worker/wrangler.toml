@@ -18,6 +18,7 @@ directory = "./public"
 #   PANTA_API_KEY: local in .dev.vars, deployed via `npx wrangler secret put PANTA_API_KEY`
 #   ANTHROPIC_API_KEY: local in .dev.vars, deployed via `npx wrangler secret put ANTHROPIC_API_KEY`
 #   HELIUS_RPC_URL: Solana mainnet RPC URL (it contains an API key), same two places
+#   ADMIN_TOKEN: gates GET /debug/* (header X-Soothia-Admin); `openssl rand -hex 32 | npx wrangler secret put ADMIN_TOKEN`
 
 # Detect results, the open-market list, and per-install daily counters.
 [[kv_namespaces]]

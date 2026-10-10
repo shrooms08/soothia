@@ -382,3 +382,6 @@ export function rulesForPrompt(nowMs: number): string {
     `resolution.type must be one of:\n${types}`,
   ].join("\n");
 }
+
+/** The Panta program on Solana mainnet. Every transaction Soothia relays must invoke it. */
+export const PANTA_PROGRAM = "6gM5afTQBq5VZCfgpGqcsqzfWd5maLSCKWtGjbEobZMp";

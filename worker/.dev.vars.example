@@ -5,3 +5,5 @@ PANTA_API_KEY=
 ANTHROPIC_API_KEY=
 # Helius mainnet RPC URL, used for balances, simulation, and sending. The URL contains a key.
 HELIUS_RPC_URL=
+# Any long random string (32+ characters). Sent as X-Soothia-Admin to read /debug/* routes.
+ADMIN_TOKEN=

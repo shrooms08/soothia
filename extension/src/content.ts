@@ -66,6 +66,8 @@ const POSITION_KEY = "soothia:orbPosition";
 const DRAG_THRESHOLD = 4;
 // Debug toggles. Dry run starts ON: nothing is sent until it is turned off.
 const DRY_RUN_KEY = "soothia:dryRun";
+// Diagnostics (scan rows, create steps, caught issues) are hidden unless this is on.
+const SHOW_DEBUG_KEY = "soothia:showDebug";
 const SKIP_CHECKS_KEY = "soothia:skipChecks";
 // A sent transaction whose market has not been seen registered yet.
 const PENDING_KEY = "soothia:pendingCreate";
@@ -336,17 +338,28 @@ async function mount(): Promise<void> {
     }),
   );
 
+  const showDebugToggle = toggle("Show debug info");
+  const summary = el("summary", "debug-summary", "settings");
+  summary.append(el("span", "debug-version", extensionVersion()));
   debug.append(
-    el("summary", "debug-summary", "debug"),
+    summary,
     scanInfo,
     scanAgain,
     dryRunToggle.row,
     skipChecksToggle.row,
+    showDebugToggle.row,
     createInfo,
     replayRow,
     walletRow.row,
     proxyRow.row,
   );
+  function applyDebugVisibility(): void {
+    const show = showDebugToggle.box.checked;
+    scanInfo.hidden = !show;
+    createInfo.hidden = !show;
+    if (!card.hidden) layout();
+  }
+  applyDebugVisibility();
   const head = el("div", "card-head");
   const brand = el("div", "brand");
   const mark = el("span", "mark");
@@ -1084,8 +1097,9 @@ async function mount(): Promise<void> {
   async function loadSettings(): Promise<void> {
     dryRunToggle.box.checked = true;
     try {
-      const stored = await chrome.storage.local.get([DRY_RUN_KEY, SKIP_CHECKS_KEY, MUTED_KEY, STYLE_KEY, "soothia:devEvents"]);
+      const stored = await chrome.storage.local.get([DRY_RUN_KEY, SKIP_CHECKS_KEY, MUTED_KEY, STYLE_KEY, SHOW_DEBUG_KEY, "soothia:devEvents"]);
       devEvents = stored["soothia:devEvents"] === true;
+      showDebugToggle.box.checked = stored[SHOW_DEBUG_KEY] === true;
       dryRunToggle.box.checked = stored[DRY_RUN_KEY] !== false;
       skipChecksToggle.box.checked = stored[SKIP_CHECKS_KEY] === true;
       // Sound is on unless it was muted; the fresh-install default is on.
@@ -1096,8 +1110,14 @@ async function mount(): Promise<void> {
       // Storage unavailable: stay in dry run.
     }
     skipChecksToggle.box.disabled = !dryRunToggle.box.checked;
+    applyDebugVisibility();
     renderMute();
   }
+
+  showDebugToggle.box.addEventListener("change", () => {
+    chrome.storage.local.set({ [SHOW_DEBUG_KEY]: showDebugToggle.box.checked }).catch(() => {});
+    applyDebugVisibility();
+  });
 
   dryRunToggle.box.addEventListener("change", () => {
     skipChecksToggle.box.disabled = !dryRunToggle.box.checked;

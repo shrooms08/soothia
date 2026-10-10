@@ -7,7 +7,54 @@ const SITE = "https://soothia.fun";
 const MARKET_PATH = /^\/m\/([1-9A-HJ-NP-Za-km-z]{32,44})\/?$/;
 const CACHE_SECONDS = 60;
 // Bumped on every release so the edge never serves a stale script with a new page.
-const ASSET_VERSION = "0.9.0";
+const ASSET_VERSION = "0.9.4";
+
+// Sent on every response, static files included (wrangler.toml runs this Worker first for every path). Scripts and styles come only from
+// this origin (styles also inline, for the share page and a few attributes); images
+// may be any https URL (Panta market images); connections go to the proxy and, for
+// Mobile Wallet Adapter, to its reflector websockets; nothing may frame the site.
+const CSP = [
+  "default-src 'self'",
+  // Cloudflare injects its Web Analytics beacon at the edge; it must be allowed or every page logs a violation.
+  "script-src 'self' https://static.cloudflareinsights.com",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self' data: https://fonts.gstatic.com",
+  "img-src 'self' data: blob: https:",
+  "media-src 'self'",
+  "connect-src 'self' https://api.soothia.fun https://soothia-proxy.heylana.workers.dev https://cloudflareinsights.com wss: ws://localhost:* http://localhost:*",
+  "frame-src https://www.youtube.com https://www.loom.com",
+  "frame-ancestors 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "object-src 'none'",
+].join("; ");
+export const SECURITY_HEADERS = {
+  "Content-Security-Policy": CSP,
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "DENY",
+  "Referrer-Policy": "strict-origin-when-cross-origin",
+  "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=()",
+  "Strict-Transport-Security": "max-age=31536000; includeSubDomains",
+};
+
+export function withSecurityHeaders(response) {
+  const out = new Response(response.body, response);
+  for (const [name, value] of Object.entries(SECURITY_HEADERS)) out.headers.set(name, value);
+  return out;
+}
+
+/** `value` when it is an https URL, otherwise `fallback`. Keeps javascript: and data: out of hrefs and srcs. */
+export function httpsUrl(value, fallback) {
+  try {
+    const url = new URL(String(value));
+    if (url.protocol === "https:") return url.href;
+  } catch {
+    // Not a URL.
+  }
+  return fallback;
+}
+
+const MARKET_ID = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 
 const ACTION_HEADERS = {
   "Access-Control-Allow-Origin": "*",
@@ -21,6 +68,11 @@ const ACTION_HEADERS = {
 
 export default {
   async fetch(request, env, ctx) {
+    return withSecurityHeaders(await handle(request, env, ctx));
+  },
+};
+
+async function handle(request, env, ctx) {
     const url = new URL(request.url);
     // www goes to the bare domain, same path and query.
     if (url.hostname === "www.soothia.fun") {
@@ -35,8 +87,7 @@ export default {
     if (match) return sharePage(request, env, match[1], ctx);
     if (url.pathname === "/markets" || url.pathname === "/markets/") return marketsPage(request, env, ctx);
     return env.ASSETS.fetch(request);
-  },
-};
+}
 
 async function sharePage(request, env, marketId, ctx) {
   const cache = caches.default;
@@ -61,7 +112,7 @@ async function sharePage(request, env, marketId, ctx) {
   return response;
 }
 
-function escape(text) {
+export function escape(text) {
   return String(text).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 }
 
@@ -69,7 +120,7 @@ function pct(price) {
   return typeof price === "number" ? `${(price * 100).toFixed(1)}%` : "—";
 }
 
-function renderPage(marketId, market) {
+export function renderPage(marketId, market) {
   const found = Boolean(market?.title);
   const question = found ? market.title : "Market not found";
   const hasOdds = found && typeof market.yesPrice === "number" && typeof market.noPrice === "number";
@@ -79,7 +130,7 @@ function renderPage(marketId, market) {
   const category = found && market.category ? market.category : "other";
   const image = `${PROXY}/img/${encodeURIComponent(category)}.png`;
   const pageUrl = `${SITE}/m/${marketId}`;
-  const pantaUrl = found && market.marketUrl ? market.marketUrl : `https://www.panta.market/market/${marketId}`;
+  const pantaUrl = httpsUrl(found ? market.marketUrl : null, `https://www.panta.market/market/${marketId}`);
   const open = found && market.phase === "primary" && (!market.primaryPhaseEnd || Date.parse(market.primaryPhaseEnd) > Date.now());
   const resolved = found && (market.resolvedOutcome === "YES" || market.resolvedOutcome === "NO");
   const p2p = found && !open && !resolved && market.phase !== "primary";
@@ -132,7 +183,7 @@ function renderPage(marketId, market) {
 <meta name="twitter:image" content="${image}">
 <link rel="preload" href="/fonts/soothia-lora.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/fonts/soothia-inter.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/styles.css">
+<link rel="stylesheet" href="/styles.css?v=${ASSET_VERSION}">
 <style>
   .share { position: relative; z-index: 1; min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 48px 16px 40px; text-align: center; }
   .share .hero-orb-wrap { margin-bottom: 28px; }
@@ -265,8 +316,13 @@ function utc(date) {
   return escape(date.toUTCString().replace(/ GMT$/, " UTC"));
 }
 
-function marketCard(item) {
+export function marketCard(item) {
   const live = item.phase === "primary";
+  const id = MARKET_ID.test(String(item.id)) ? item.id : "";
+  const betHref = id ? `/m/${id}` : "/markets";
+  const pantaUrl = httpsUrl(item.pantaUrl, id ? `https://www.panta.market/market/${id}` : "https://www.panta.market");
+  const imageUrl = httpsUrl(item.imageUrl, `${PROXY}/img/other.png`);
+  const volume = typeof item.volumeUsdc === "number" ? item.volumeUsdc : 0;
   const closes = item.closesAt ? new Date(item.closesAt) : null;
   const ends = item.endsAt ? new Date(item.endsAt) : null;
   const when = live && closes
@@ -278,16 +334,16 @@ function marketCard(item) {
     ? `<span class="chip-outcome ${item.resolvedOutcome === "YES" ? "yes" : "no"}">${item.resolvedOutcome ? `Resolved: ${item.resolvedOutcome}` : "Resolved"}</span>`
     : `<span class="odds"><b class="yes">YES</b> ${pctOrDash(item.yesPct)} <span class="dim">\u00b7</span> <b class="no">NO</b> ${pctOrDash(item.noPct)}</span>`;
   const action = live
-    ? `<a class="btn primary" href="/m/${item.id}">Bet</a>`
-    : `<a class="btn" href="${escape(item.pantaUrl)}" target="_blank" rel="noopener">${item.phase === "resolved" ? "View on Panta \u2197" : "Trade on Panta \u2197"}</a>`;
-  return `<article class="mcard tilt" data-phase="${item.phase}" data-category="${escape(item.category)}" data-volume="${item.volumeUsdc}" data-closes="${item.closesAt ?? ""}" data-ends="${item.endsAt ?? ""}" data-created="${item.createdAt ?? ""}">
+    ? `<a class="btn primary" href="${betHref}">Bet</a>`
+    : `<a class="btn" href="${escape(pantaUrl)}" target="_blank" rel="noopener">${item.phase === "resolved" ? "View on Panta \u2197" : "Trade on Panta \u2197"}</a>`;
+  return `<article class="mcard tilt" data-phase="${escape(item.phase)}" data-category="${escape(item.category)}" data-volume="${volume}" data-closes="${escape(item.closesAt ?? "")}" data-ends="${escape(item.endsAt ?? "")}" data-created="${escape(item.createdAt ?? "")}">
   <div class="mcard-top">
-    <img class="mcard-img" src="${escape(item.imageUrl)}" alt="" loading="lazy" width="44" height="44">
+    <img class="mcard-img" src="${escape(imageUrl)}" alt="" loading="lazy" width="44" height="44">
     <div class="mcard-meta"><span class="chip">${escape(item.category)}</span>${item.createdBySoothia ? '<span class="chip soothia">Made with Soothia</span>' : ""}</div>
   </div>
-  <p class="question"><a href="${live ? `/m/${item.id}` : escape(item.pantaUrl)}"${live ? "" : ' target="_blank" rel="noopener"'}>${escape(item.question)}</a></p>
+  <p class="question"><a href="${live ? betHref : escape(pantaUrl)}"${live ? "" : ' target="_blank" rel="noopener"'}>${escape(item.question)}</a></p>
   <div class="mcard-odds">${odds}</div>
-  <div class="mcard-foot"><span class="mono dim">$${item.volumeUsdc.toFixed(2)} traded${when ? ` \u00b7 ${when}` : ""}</span>${action}</div>
+  <div class="mcard-foot"><span class="mono dim">$${volume.toFixed(2)} traded${when ? ` \u00b7 ${when}` : ""}</span>${action}</div>
 </article>`;
 }
 

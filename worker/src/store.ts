@@ -65,17 +65,6 @@ export async function cachePut(key: string, value: unknown, ttlSec: number): Pro
   }
 }
 
-export async function cacheDelete(key: string): Promise<void> {
-  memory.delete(key);
-  const cache = edge();
-  if (!cache) return;
-  try {
-    await cache.delete(keyRequest(key));
-  } catch {
-    // Nothing to do.
-  }
-}
-
 /** For tests. */
 export function clearMemoryCache(): void {
   memory.clear();
@@ -86,7 +75,6 @@ export function clearMemoryCache(): void {
 interface Budget {
   day: string;
   puts: number;
-  deletes: number;
   failures: number;
   lastError: string | null;
   lastKey: string | null;
@@ -94,18 +82,17 @@ interface Budget {
 }
 
 const today = (): string => new Date().toISOString().slice(0, 10);
-let budget: Budget = { day: today(), puts: 0, deletes: 0, failures: 0, lastError: null, lastKey: null, byPrefix: {} };
+let budget: Budget = { day: today(), puts: 0, failures: 0, lastError: null, lastKey: null, byPrefix: {} };
 let loggedFailure = false;
 
 function roll(): Budget {
-  if (budget.day !== today()) budget = { day: today(), puts: 0, deletes: 0, failures: 0, lastError: null, lastKey: null, byPrefix: {} };
+  if (budget.day !== today()) budget = { day: today(), puts: 0, failures: 0, lastError: null, lastKey: null, byPrefix: {} };
   return budget;
 }
 
-function note(key: string, kind: "put" | "delete"): void {
+function note(key: string): void {
   const current = roll();
-  if (kind === "put") current.puts++;
-  else current.deletes++;
+  current.puts++;
   const prefix = key.split(":")[0];
   current.byPrefix[prefix] = (current.byPrefix[prefix] ?? 0) + 1;
 }
@@ -115,7 +102,7 @@ function note(key: string, kind: "put" | "delete"): void {
  * daily limit is hit, a network error) so the caller can carry on without it.
  */
 export async function kvPut(env: Env, key: string, value: string, options?: KVNamespacePutOptions): Promise<boolean> {
-  note(key, "put");
+  note(key);
   try {
     await env.SOOTHIA_CACHE.put(key, value, options);
     return true;
@@ -132,19 +119,6 @@ export async function kvPut(env: Env, key: string, value: string, options?: KVNa
   }
 }
 
-export async function kvDelete(env: Env, key: string): Promise<boolean> {
-  note(key, "delete");
-  try {
-    await env.SOOTHIA_CACHE.delete(key);
-    return true;
-  } catch (error) {
-    const current = roll();
-    current.failures++;
-    current.lastError = String((error as Error)?.message ?? error).slice(0, 160);
-    return false;
-  }
-}
-
 /** The budget as seen by this isolate (other isolates keep their own count), merged with the edge cache's running total. */
 export async function kvBudgetReport(): Promise<Record<string, unknown>> {
   const current = roll();
@@ -153,7 +127,7 @@ export async function kvBudgetReport(): Promise<Record<string, unknown>> {
   const stored = (await cacheGet<{ puts: number; failures: number; isolates: number }>(key)) ?? { puts: 0, failures: 0, isolates: 0 };
   return {
     day: current.day,
-    thisIsolate: { puts: current.puts, deletes: current.deletes, failures: current.failures, byPrefix: current.byPrefix },
+    thisIsolate: { puts: current.puts, failures: current.failures, byPrefix: current.byPrefix },
     lastError: current.lastError,
     lastKey: current.lastKey,
     edgeTally: stored,
@@ -165,7 +139,7 @@ export async function kvBudgetReport(): Promise<Record<string, unknown>> {
 /** True when this isolate has counted writes since it last reported. */
 export function budgetDirty(): boolean {
   const current = roll();
-  return current.puts + current.deletes + current.failures > 0;
+  return current.puts + current.failures > 0;
 }
 
 /** Called after a batch of writes to fold this isolate's count into the edge tally. */
@@ -174,5 +148,5 @@ export async function reportBudgetToEdge(): Promise<void> {
   const key = `kvbudget:${current.day}`;
   const stored = (await cacheGet<{ puts: number; failures: number; isolates: number }>(key)) ?? { puts: 0, failures: 0, isolates: 0 };
   await cachePut(key, { puts: stored.puts + current.puts, failures: stored.failures + current.failures, isolates: stored.isolates + 1 }, 36 * 3600);
-  budget = { ...current, puts: 0, deletes: 0, failures: 0 };
+  budget = { ...current, puts: 0, failures: 0 };
 }

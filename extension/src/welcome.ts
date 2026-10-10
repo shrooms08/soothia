@@ -74,17 +74,12 @@ function go(target: number): void {
 // ---- Music: the offscreen player when it works, the in-page path otherwise ----
 
 let offscreenMusic = false;
-let loggedFallback = false;
 
 function musicMessage(action: MusicAction): Promise<MusicStatus | undefined> {
   return chrome.runtime.sendMessage({ type: MUSIC_CONTROL, action }).catch(() => undefined) as Promise<MusicStatus | undefined>;
 }
 
-function showHint(reason: string): void {
-  if (!loggedFallback) {
-    loggedFallback = true;
-    console.info(`Soothia: onboarding music falls back to starting on a tap (${reason}).`);
-  }
+function showHint(_reason: string): void {
   document.getElementById("sound-hint")?.removeAttribute("hidden");
 }
 
