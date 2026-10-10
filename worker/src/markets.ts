@@ -41,7 +41,7 @@ interface StoredList {
   markets: OpenMarket[];
 }
 
-async function pantaGet<T>(env: Env, path: string, query?: URLSearchParams): Promise<T | null> {
+export async function pantaGet<T>(env: Env, path: string, query?: URLSearchParams): Promise<T | null> {
   const apiKey = env.PANTA_API_KEY?.trim();
   if (!apiKey) return null;
   const qs = query?.toString();
@@ -57,7 +57,7 @@ async function pantaGet<T>(env: Env, path: string, query?: URLSearchParams): Pro
   }
 }
 
-function price(value: string | null | undefined): number | null {
+export function price(value: string | null | undefined): number | null {
   if (value == null) return null;
   const parsed = Number.parseFloat(value);
   return Number.isFinite(parsed) ? parsed : null;

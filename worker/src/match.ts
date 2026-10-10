@@ -2,7 +2,29 @@
 // event. A keyword prefilter picks candidates; one Haiku call confirms them.
 import { callTool, type ToolSpec } from "./anthropic";
 import { json, readJsonObject, type Env } from "./http";
-import { getOpenMarkets, type OpenMarket } from "./markets";
+import { getCatalog, type CatalogItem } from "./catalog";
+import type { OpenMarket } from "./markets";
+
+/** A market the matcher can offer: open for buying (primary) or trading between people (p2p). Never resolved. */
+export interface MatchableMarket extends OpenMarket {
+  phase: "primary" | "p2p";
+  pantaUrl: string;
+}
+
+export function matchable(items: CatalogItem[], nowMs: number): MatchableMarket[] {
+  return items
+    .filter((item) => item.phase !== "resolved" && item.question && (!item.endsAt || Date.parse(item.endsAt) > nowMs))
+    .map((item) => ({
+      id: item.id,
+      title: item.question,
+      category: item.category,
+      yesPrice: item.yesPct === null ? null : item.yesPct / 100,
+      noPrice: item.noPct === null ? null : item.noPct / 100,
+      endTime: item.endsAt ?? "",
+      phase: item.phase as "primary" | "p2p",
+      pantaUrl: item.pantaUrl,
+    }));
+}
 
 const MAX_CLAIMS_PER_CALL = 10;
 const MAX_CANDIDATES_PER_CLAIM = 5;
@@ -15,7 +37,7 @@ interface ClaimInput {
 
 interface Match {
   claimId: string;
-  market: OpenMarket | null;
+  market: MatchableMarket | null;
 }
 
 // Words too common in market questions to signal a shared subject.
@@ -54,7 +76,7 @@ function tokens(text: string): Set<string> {
   return out;
 }
 
-function candidatesFor(claim: ClaimInput, markets: { market: OpenMarket; words: Set<string> }[]): OpenMarket[] {
+function candidatesFor(claim: ClaimInput, markets: { market: MatchableMarket; words: Set<string> }[]): MatchableMarket[] {
   const wanted = tokens(claim.question);
   return markets
     .map(({ market, words }) => ({
@@ -119,7 +141,8 @@ export async function handleMatch(request: Request, env: Env): Promise<Response>
   const none = (): Match[] => claims.map((claim) => ({ claimId: claim.id, market: null }));
   if (claims.length === 0) return json(request, { matches: [] });
 
-  const indexed = (await getOpenMarkets(env)).map((market) => ({ market, words: tokens(market.title) }));
+  const origin = new URL(request.url).origin;
+  const indexed = matchable(await getCatalog(env, origin), Date.now()).map((market) => ({ market, words: tokens(market.title) }));
   const candidates = new Map(claims.map((claim) => [claim.id, candidatesFor(claim, indexed)]));
   const withCandidates = claims.filter((claim) => candidates.get(claim.id)!.length > 0);
   if (withCandidates.length === 0) return json(request, { matches: none() });
@@ -128,7 +151,7 @@ export async function handleMatch(request: Request, env: Env): Promise<Response>
     .map((claim) => {
       const options = candidates
         .get(claim.id)!
-        .map((market) => `  - marketId ${market.id}: "${market.title}" (closes ${market.endTime})`)
+        .map((market) => `  - marketId ${market.id}: "${market.title}" (closes ${market.endTime}${market.phase === "p2p" ? ", trading between people" : ""})`)
         .join("\n");
       return `Claim ${claim.id}: "${claim.question}" (closes ${claim.endTime})\nCandidates:\n${options}`;
     })

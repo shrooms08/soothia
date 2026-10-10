@@ -359,6 +359,10 @@ export interface MarketBrief {
   yesPrice: number | null;
   noPrice: number | null;
   endTime: string | null;
+  /** Total USDC traded, seed included. */
+  volumeUsdc: number | null;
+  /** "YES" or "NO" once Panta has resolved the market. */
+  resolvedOutcome: "YES" | "NO" | null;
   /** Buying window end (Panta `primaryPhaseEndTime`), ISO. */
   primaryPhaseEnd: string | null;
   /** Pool and creator-fee figures from the market detail; null when Panta omits them. */
@@ -385,6 +389,10 @@ interface MarketDetail {
   category?: string;
   phase?: string;
   marketType?: string;
+  resolved?: boolean;
+  priceSource?: string;
+  totalVolumeUsdc?: string;
+  volumeUsdc?: string;
   yesPrice?: string | null;
   noPrice?: string | null;
   endTime?: number;
@@ -395,6 +403,13 @@ interface MarketDetail {
   totalCreatorFees?: string;
   isGraduated?: boolean;
   graduationThreshold?: string;
+}
+
+/** YES or NO for a resolved market: Panta pins yesPrice to 1 or 0 and marks the price source. */
+export function resolvedOutcomeOf(row: { resolved?: boolean; phase?: string; priceSource?: string; yesPrice?: string | null }): "YES" | "NO" | null {
+  const resolved = row.resolved === true || row.phase === "resolved" || row.priceSource === "resolved_outcome";
+  if (!resolved || row.yesPrice == null) return null;
+  return Number(row.yesPrice) >= 0.5 ? "YES" : "NO";
 }
 
 /** Pool figures from a market detail row, or null when the fields are absent. */
@@ -446,6 +461,8 @@ export async function marketBrief(env: Env, marketId: string): Promise<MarketBri
     yesPrice: price(detail.yesPrice) ?? cached?.yesPrice ?? null,
     noPrice: price(detail.noPrice) ?? cached?.noPrice ?? null,
     endTime: typeof detail.endTime === "number" ? new Date(detail.endTime * 1000).toISOString() : cached?.endTime ?? null,
+    volumeUsdc: price(detail.totalVolumeUsdc ?? detail.volumeUsdc) ?? cached?.volumeUsdc ?? null,
+    resolvedOutcome: resolvedOutcomeOf(detail) ?? cached?.resolvedOutcome ?? null,
     primaryPhaseEnd:
       typeof detail.primaryPhaseEndTime === "number" ? new Date(detail.primaryPhaseEndTime * 1000).toISOString() : cached?.primaryPhaseEnd ?? null,
     liquidity: liquidityFrom(detail) ?? cached?.liquidity ?? null,

@@ -83,14 +83,14 @@ async function pantaTrades(env: Env, offset: number): Promise<TradesPage | null>
 
 const SITE_ORIGINS = ["https://soothia.heylana.workers.dev"];
 
-function statsCors(request: Request): Record<string, string> {
+export function publicCors(request: Request): Record<string, string> {
   const origin = request.headers.get("Origin") ?? "";
   const allowed = SITE_ORIGINS.includes(origin) || /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin);
   return allowed ? { "Access-Control-Allow-Origin": origin, Vary: "Origin" } : corsHeaders(request);
 }
 
 export async function handleStats(request: Request, env: Env, ctx?: ExecutionContext): Promise<Response> {
-  const headers = { "Content-Type": "application/json", "Cache-Control": "public, max-age=60", ...statsCors(request) };
+  const headers = { "Content-Type": "application/json", "Cache-Control": "public, max-age=60", ...publicCors(request) };
   const cached = (await env.SOOTHIA_CACHE.get(CACHE_KEY, "json")) as Stats | null;
   if (cached) return new Response(JSON.stringify(cached), { headers });
   // A refresh is a good moment to finish any bet the client never called back about.
