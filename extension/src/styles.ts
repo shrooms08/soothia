@@ -253,17 +253,17 @@ export const STYLES = `
 
 /* Card stars: tiny chrome four-point stars in empty corners, under all content. */
 .card-stars { position: absolute; inset: 0; z-index: -1; pointer-events: none; overflow: hidden; }
-.card-star { position: absolute; width: 8px; height: 8px; opacity: .2; animation: sthCardTwinkle 5.5s ease-in-out infinite; }
+.card-star { position: absolute; width: 10px; height: 10px; opacity: var(--rest, .45); animation: sthCardTwinkle 4.5s ease-in-out infinite; }
 .card-star svg { display: block; width: 100%; height: 100%; overflow: visible; }
-.card-star:nth-child(1) { right: 16px; top: 12px; width: 9px; height: 9px; animation-duration: 4.6s; animation-delay: .4s; }
-.card-star:nth-child(2) { right: 34px; top: 30px; width: 6px; height: 6px; animation-duration: 6.4s; animation-delay: 2.1s; }
-.card-star:nth-child(3) { left: 12px; bottom: 14px; width: 8px; height: 8px; animation-duration: 5.2s; animation-delay: 1.3s; }
-.card-star:nth-child(4) { right: 14px; bottom: 12px; width: 10px; height: 10px; animation-duration: 6.8s; animation-delay: 3.2s; }
-.card-star:nth-child(5) { right: 36px; bottom: 28px; width: 6px; height: 6px; animation-duration: 4.2s; animation-delay: .9s; }
-.card-star:nth-child(6) { right: 8px; top: 48%; width: 7px; height: 7px; animation-duration: 7s; animation-delay: 2.7s; }
+.card-star:nth-child(1) { right: 16px; top: 12px; width: 11px; height: 11px; --rest: .5; animation-duration: 3.8s; animation-delay: .4s; }
+.card-star:nth-child(2) { right: 36px; top: 30px; width: 8px; height: 8px; --rest: .35; animation-duration: 5.6s; animation-delay: 2.1s; }
+.card-star:nth-child(3) { left: 12px; bottom: 14px; width: 10px; height: 10px; --rest: .45; animation-duration: 4.4s; animation-delay: 1.3s; }
+.card-star:nth-child(4) { right: 14px; bottom: 12px; width: 12px; height: 12px; --rest: .6; animation-duration: 5.9s; animation-delay: 3.2s; }
+.card-star:nth-child(5) { right: 40px; bottom: 30px; width: 8px; height: 8px; --rest: .3; animation-duration: 3.4s; animation-delay: .9s; }
+.card-star:nth-child(6) { right: 8px; top: 48%; width: 9px; height: 9px; --rest: .4; animation-duration: 6s; animation-delay: 2.7s; }
 /* Sheets are narrow and busy: keep three. */
 .card:has(.has-sheet) .card-star:nth-child(n+4) { display: none; }
-@keyframes sthCardTwinkle { 0%,100% { opacity: .12; transform: scale(.9); } 50% { opacity: .3; transform: scale(1.15) rotate(8deg); } }
+@keyframes sthCardTwinkle { 0%,70%,100% { opacity: var(--rest, .45); transform: scale(1); filter: none; } 85% { opacity: .8; transform: scale(1.25) rotate(8deg); filter: drop-shadow(0 0 4px rgba(244,241,255,.8)); } }
 
 .card-head {
   display: flex;
@@ -1059,7 +1059,7 @@ input[type="number"].input { font-family: var(--sth-font-mono); }
   .orb[data-state="thinking"] .orb-arc { opacity: 1; }
   .orb-stars .star, .flourish .star { opacity: 1; transform: none; }
   .orb.success .orb-body { background: var(--sth-orb-fill-bright); box-shadow: var(--sth-orb-glow-bright); }
-  .card-star { opacity: .16; transform: none; }
+  .card-star { opacity: .4; transform: none; }
 }
 `;
 
@@ -1085,10 +1085,10 @@ a { color: var(--sth-link); }
 @keyframes breathe { 0%,100% { box-shadow: 0 0 40px 6px rgba(127,119,221,.45), 0 0 120px 20px rgba(83,74,183,.3); } 50% { box-shadow: 0 0 60px 12px rgba(127,119,221,.6), 0 0 160px 32px rgba(83,74,183,.4); } }
 @keyframes shimmer { 0% { transform: translate(-14%,-10%) rotate(0); } 50% { transform: translate(10%,8%) rotate(180deg); } 100% { transform: translate(-14%,-10%) rotate(360deg); } }
 @keyframes twinkle { 0% { transform: scale(0) rotate(-45deg); opacity: 0; } 60% { transform: scale(1.25) rotate(8deg); opacity: 1; } 100% { transform: scale(1) rotate(0); opacity: 1; } }
-@keyframes skyTwinkle { 0%,100% { transform: scale(1); } 50% { transform: scale(1.35) rotate(6deg); } }
+@keyframes skyTwinkle { 0%,70%,100% { opacity: var(--rest, .4); transform: scale(1); filter: none; } 85% { opacity: .9; transform: scale(1.25) rotate(6deg); filter: drop-shadow(0 0 5px rgba(244,241,255,.85)); } }
 @keyframes rise { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
 .sky { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
-.sky-star { position: absolute; animation: skyTwinkle 8s ease-in-out infinite; }
+.sky-star { position: absolute; opacity: var(--rest, .4); animation: skyTwinkle 4.5s ease-in-out infinite; }
 .star { display: block; width: 100%; height: 100%; overflow: visible; }
 .welcome { position: relative; z-index: 1; width: min(560px, 100% - 32px); padding: 40px 0 56px; text-align: center; }
 @keyframes floatY { 0%, 100% { transform: translateY(5px); } 50% { transform: translateY(-5px); } }
@@ -1164,6 +1164,7 @@ h2 { margin: 0 0 12px; font: 400 22px/1.2 var(--serif); }
 @media (max-width: 520px) { .visuals { grid-template-columns: 1fr; } }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
-  .orb-stars .star, .sky-star { opacity: 1; transform: none; }
+  .orb-stars .star { opacity: 1; transform: none; }
+  .sky-star { opacity: .4; transform: none; }
 }
 `;
