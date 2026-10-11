@@ -1,85 +1,106 @@
 # Soothia
 
-See the odds on everything you read. Soothia is a Chrome extension: a small floating orb sits on every page, reads the article, tweet, or match preview you are on, and turns its claims into [Panta](https://docs.panta.market) prediction markets. It shows the matching market with live odds, lets you bet YES or NO from your own Solana wallet, or creates a new market straight from the page. Panta markets are binary YES/NO markets settled in USDC on Solana mainnet.
+[![CI](https://github.com/shrooms08/soothia/actions/workflows/ci.yml/badge.svg)](https://github.com/shrooms08/soothia/actions/workflows/ci.yml)
 
-- Site and install: https://soothia.fun
-- Markets made and found with Soothia: https://soothia.fun/markets
-- API (Cloudflare Worker `soothia-proxy`): https://api.soothia.fun
+**Turn any take into a market.**
 
-Soothia never holds funds or keys. The extension asks your wallet to sign a transaction that Panta built; the Worker checks that the signed bytes match what was built (only a compute budget may be added) and relays only transactions that invoke the Panta program. Dry run is on by default: the extension signs but never sends until you turn it off in the card's settings. Bets are 1 to 100 USDC.
+Soothia is a Chrome extension with a small floating orb on every page. It reads the article, tweet or match preview you are on, finds the claims in it, and shows the matching [Panta](https://docs.panta.market) prediction market with live odds. Bet YES or NO from your own wallet, or make the claim a new market in two taps. Panta markets settle in USDC on Solana mainnet.
+
+![Soothia landing page](design/applied/hero-copy-desktop.png)
+
+## Try it
+
+1. Open https://soothia.fun and download the extension zip, or build it (below).
+2. In Chrome, open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked**, pick the unzipped folder.
+3. Open any news article, tweet or sports fixture. The orb appears bottom right; click it to see the claims.
+
+Dry run is **on by default**: Soothia signs with your wallet but never sends, so you can walk the whole flow without spending anything. Turn it off in the card's settings when you mean it. Bets are 1 to 100 USDC.
+
+## How it works
+
+1. **Read.** The orb reads what you are reading and drafts up to three market-ready claims (Claude Haiku), each checked against Panta's rules. Sports fixture pages become match-winner claims with no model call.
+2. **Make it a market.** A claim nobody has made yet opens the review sheet: question, resolution rule, sources, buying window. Panta builds the create transaction; your wallet signs; Soothia checks the signed bytes match and relays it.
+3. **Bet.** A claim that matches an open market shows live odds. Pick YES or NO and an amount, see the fee on top, sign. Every market gets a share page with a bet link that works without the extension.
+
+## Architecture
+
+```mermaid
+flowchart LR
+  subgraph Browser
+    EXT[Chrome extension<br/>orb + card]
+    WALLET[Your wallet]
+    SHARE[Share page /m/:id]
+  end
+  EXT -->|detect, match, build, send| API[soothia-proxy<br/>api.soothia.fun]
+  SHARE -->|Solana Actions| API
+  SITE[Site Worker<br/>soothia.fun] -->|service binding| API
+  API -->|claims and matches| CLAUDE[Claude Haiku]
+  API -->|catalog, quotes, builds, reports| PANTA[Panta API]
+  API -->|simulate, send, confirm| SOL[Solana mainnet]
+  EXT <-->|sign only| WALLET
+  SHARE <-->|sign only| WALLET
+```
+
+The API Worker holds every secret. The extension and the site hold none. Details in [docs/architecture.md](docs/architecture.md).
+
+## Panta API integration
+
+| Flow            | Panta endpoints                                                                         | Soothia route                                                                                  |
+| --------------- | --------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
+| Create a market | `POST /markets/create/quote/`, `POST /markets/create/build/`, `POST /markets/register/` | `/create/quote`, `/create/build`, `/create/simulate`, `/create/send`, `/create/register-retry` |
+| Buy YES or NO   | `POST /primaryorderbuild/`, `POST /primaryordersubmit/`, `POST /primaryorderverify/`    | `/buy/quote`, `/buy/build`, `/buy/send`, `/buy/status`; public `/api/actions/market/:id`       |
+| Report a trade  | `POST /trades/`                                                                         | after confirmation, and by the 5-minute reconcile sweep                                        |
+| Positions       | `GET /positions/?wallet=`                                                               | `/positions`                                                                                   |
+| Claim winnings  | `POST /claim/build/`                                                                    | `/claim/build`, `/claim/send`                                                                  |
+| Creator fees    | `POST /claim/creator-fees/build/`                                                       | `/claim/creator-fees/build`                                                                    |
+| Catalog         | `GET /markets/`, `GET /markets/{id}/`, `GET /categories/`                               | `/markets`, `/market`, `/panta/markets`, `/panta/categories`, `/match`                         |
+
+Every Panta path ends with a slash; the key travels in `X-Api-Key`. Market rules are in [docs/panta-create-rules.md](docs/panta-create-rules.md).
+
+## Security model
+
+- Non-custodial: wallets sign, Soothia relays. `signAndSendTransaction` is never used.
+- The signed transaction must match the built one; only compute-budget instructions may differ.
+- The relay accepts only transactions that invoke the Panta program.
+- Dry run by default; 1 to 100 USDC bets; 1,150-byte cap on create transactions.
+- Per-IP rate limits, an admin header on diagnostics, escaped server rendering and a Content Security Policy on the site.
+
+Full write-up and known limitations: [docs/security.md](docs/security.md).
+
+## Local development
+
+Prerequisites: Node LTS, npm, a Cloudflare account for `wrangler`.
+
+```bash
+npm install && npm install --prefix extension && npm install --prefix worker && npm install --prefix scripts
+
+npm run typecheck      # extension, worker (incl. tests), scripts
+npm run lint           # eslint across the repo
+npm run format:check   # prettier
+npm test               # worker, extension and site unit tests (no network, no money)
+npm run build          # builds the extension into a temp dir
+```
+
+Worker secrets: copy `worker/.dev.vars.example` to `worker/.dev.vars` and fill in `PANTA_API_KEY`, `ANTHROPIC_API_KEY`, `HELIUS_RPC_URL` and `ADMIN_TOKEN`. In production each is set once with `npx wrangler secret put <NAME>`. Then `cd worker && npm run dev` serves the API on http://localhost:8787 and `npm run deploy` ships it. The site deploys with `cd site && npx wrangler deploy`.
+
+Extension: `cd extension && npm run build` writes `extension/dist` for Load unpacked. `cd scripts && npm run package-extension` rebuilds `site/soothia-extension.zip` and checks its version.
 
 ## Repo layout
 
-| Path         | What it is                                                                                            |
-| ------------ | ----------------------------------------------------------------------------------------------------- |
-| `extension/` | Chrome MV3 extension (TypeScript, Vite). Build output goes to `extension/dist`.                       |
-| `worker/`    | Cloudflare Worker `soothia-proxy` (TypeScript, Wrangler). Holds the Panta, Claude, and RPC keys.      |
-| `site/`      | The landing site Worker `soothia` (static files plus server-rendered `/m/<marketId>` and `/markets`). |
-| `scripts/`   | Node + TypeScript scripts: catalog check, extension packaging, site assets.                           |
-| `docs/`      | Notes and generated reports (`panta-create-rules.md`, `blinks.md`, `wallets.md`, `catalog-check.md`). |
-| `design/`    | Screenshots of applied designs and the headless check scripts in `design/tools`.                      |
-| `CLAUDE.md`  | Standing rules for anyone (human or AI) working in this repo.                                         |
-
-## Build the extension
-
-```bash
-cd extension
-npm install
-npm run build        # writes extension/dist
-npm test             # unit tests
-npm run typecheck
+```
+extension/   Chrome MV3 extension (TypeScript, Vite). src/, test/, public/ (manifest, icons, fonts, music)
+worker/      soothia-proxy API Worker (TypeScript, Wrangler). src/, test/, public/img
+site/        Landing site Worker: index.html, worker.js (share and markets pages), src/ (wallet bundles)
+scripts/     Catalog check, extension packaging, site assets, build check, site Worker tests
+docs/        architecture, security, Panta create rules, bet links, wallets, catalog report
+design/      Applied design screenshots and headless check harnesses (design/tools)
 ```
 
-Load it in Chrome: open `chrome://extensions`, turn on **Developer mode**, click **Load unpacked**, and pick `extension/dist`. After each rebuild, click the reload arrow on the Soothia card on that page.
+## Live proof
 
-The Worker URL is the single constant `WORKER_URL` in `extension/src/config.ts`. All visual styles live in `extension/src/styles.ts`. The card's settings (bottom of the card) hold dry run, sound, and a **Show debug info** toggle that reveals the scan and transaction diagnostics; it is off by default.
-
-Package the zip the site serves: `cd scripts && npm install && npm run package-extension` (writes `site/soothia-extension.zip` and checks the version).
-
-## Run and deploy the Worker
-
-Secrets (never in git): copy `worker/.dev.vars.example` to `worker/.dev.vars` for local runs; in production each is set once with `npx wrangler secret put <NAME>`.
-
-| Secret              | Used for                                                                                        |
-| ------------------- | ----------------------------------------------------------------------------------------------- |
-| `PANTA_API_KEY`     | Panta API (catalog, quotes, building transactions).                                             |
-| `ANTHROPIC_API_KEY` | `/detect` (claims from page text) and `/match` (claim to market).                               |
-| `HELIUS_RPC_URL`    | Solana mainnet RPC for balances, simulation, sending, and confirmation.                         |
-| `ADMIN_TOKEN`       | Gates `GET /debug/*`; sent as the `X-Soothia-Admin` header. Without it those routes return 404. |
-
-```bash
-cd worker
-npm install
-npm run dev          # http://localhost:8787
-npm test
-npm run typecheck
-npm run deploy
-```
-
-Main routes: `GET /health`, `GET /markets` (normalized catalog), `GET /market?id=`, `GET /stats`, `POST /detect` and `POST /match` (per-IP limited), wallet and transaction routes under `/wallet`, `/create`, `/buy`, `/claim` (require an `X-Soothia-Install` id), and the Solana Actions routes `/actions.json`, `/api/actions/market/:id`, `/api/tx/send`, `/api/tx/status` used by bet links.
-
-## Deploy the site
-
-```bash
-cd site && npx wrangler deploy
-cd scripts && npm test      # escaping and security-header tests for site/worker.js
-```
-
-## Catalog check
-
-```bash
-cp .env.example .env          # repo root; paste the Panta key after PANTA_API_KEY=
-cd scripts && npm install && npm run catalog-check
-```
-
-It pages through every Panta market and writes a summary to `docs/catalog-check.md`.
-
-## Sounds and music
-
-Sound effects are synthesized with the Web Audio API (`extension/src/sfx.ts`). The chosen style is stored in `chrome.storage.local` under `soothia:sfxStyle`, and mute under `soothia:muted`. Audition them at `chrome-extension://<extension id>/welcome.html?sfx=1`.
-
-Music plays only on the welcome page, never on websites. Its license is tracked in `extension/public/music/LICENSE-music.txt`.
+- Markets made and found with Soothia: https://soothia.fun/markets
+- Public stats (markets created, bets placed, volume, wallets): https://api.soothia.fun/stats
 
 ## License
 
-MIT, see `LICENSE`. The onboarding music is licensed separately.
+MIT, see [LICENSE](LICENSE). The onboarding music is licensed separately (`extension/public/music/LICENSE-music.txt`).
