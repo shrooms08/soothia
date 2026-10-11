@@ -103,4 +103,4 @@ design/      Applied design screenshots and headless check harnesses (design/too
 
 ## License
 
-MIT, see [LICENSE](LICENSE). The onboarding music is licensed separately (`extension/public/music/LICENSE-music.txt`).
+MIT, see [LICENSE](LICENSE). The onboarding music is not MIT licensed, see LICENSE-music.txt.

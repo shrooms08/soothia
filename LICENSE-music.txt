@@ -1,0 +1,8 @@
+Music: extension/public/music/onboarding.mp3
+
+Original music composed for Soothia by an independent composer who has
+asked not to be named. It is used in Soothia with the composer's permission.
+
+All rights to this music remain with the composer. It is NOT covered by
+the MIT license in LICENSE, which applies to the source code only.
+Please do not reuse, redistribute or remix this track outside Soothia.
