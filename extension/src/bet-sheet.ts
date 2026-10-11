@@ -147,7 +147,10 @@ export function openBetSheet(host: BetHost): Sheet {
   quoteBox.append(payout);
   form.append(title, sides, amountField, quoteBox, walletRow, missing);
   const header = el("div", "sheet-head");
-  header.append(button("‹ Back", "back", () => host.back()), el("h3", "sheet-title", "Place a bet"));
+  header.append(
+    button("‹ Back", "back", () => host.back()),
+    el("h3", "sheet-title", "Place a bet"),
+  );
   const foot = el("div", "sheet-foot");
   foot.append(status, buyButton);
   const node = el("div", "sheet");
@@ -211,7 +214,11 @@ export function openBetSheet(host: BetHost): Sheet {
     if (current) line.append(el("span", "wallet-name", `${current.name} · `));
     line.append(who);
     text.append(line, el("span", "wallet-holdings", holdings));
-    walletRow.replaceChildren(current ? walletIcon(current) : el("span", "wallet-dot"), text, button("Disconnect", "ghost", () => void disconnect()));
+    walletRow.replaceChildren(
+      current ? walletIcon(current) : el("span", "wallet-dot"),
+      text,
+      button("Disconnect", "ghost", () => void disconnect()),
+    );
   }
 
   function renderQuote(): void {
@@ -235,7 +242,15 @@ export function openBetSheet(host: BetHost): Sheet {
       payout.textContent = `If ${quote.side.toUpperCase()} wins, each share pays ~${usd(quote.payoutPerShareUsdc)}: about ${usd(win)} back on ${usd(quote.totalUsdc)} spent.`;
       quoteBox.replaceChildren(line, payout);
     } else if (quoting) quoteBox.replaceChildren("Getting the price…");
-    else if (quoteError) quoteBox.replaceChildren(quoteError, " ", button("Retry", "link", () => { quoteFailingSince = 0; requestQuote(0); }));
+    else if (quoteError)
+      quoteBox.replaceChildren(
+        quoteError,
+        " ",
+        button("Retry", "link", () => {
+          quoteFailingSince = 0;
+          requestQuote(0);
+        }),
+      );
     else quoteBox.replaceChildren();
     if (!quote) payout.textContent = "";
   }
@@ -305,9 +320,14 @@ export function openBetSheet(host: BetHost): Sheet {
       host.debug({
         quote: `${quote.side} ${usd(quote.totalUsdc)} -> ${quote.shares.toFixed(4)} shares at ${quote.avgPrice.toFixed(4)}, fee ${usd(quote.feeUsdc)}, expires ${quote.expiresAt.slice(11, 19)} UTC`,
       });
-      expiryTimer = setTimeout(onQuoteExpiring, Math.max(1000, Date.parse(quote.expiresAt) - Date.now() - QUOTE_REFRESH_BEFORE_MS));
+      expiryTimer = setTimeout(
+        onQuoteExpiring,
+        Math.max(1000, Date.parse(quote.expiresAt) - Date.now() - QUOTE_REFRESH_BEFORE_MS),
+      );
     } else {
-      host.debug({ quote: `failed (${response.status}): ${(response.body as ApiError | null)?.error ?? "no response"}` });
+      host.debug({
+        quote: `failed (${response.status}): ${(response.body as ApiError | null)?.error ?? "no response"}`,
+      });
       const code = (response.body as ApiError | null)?.error ?? "";
       const final = /closed|not_found|bad_/.test(code);
       if (!quoteFailingSince) quoteFailingSince = Date.now();
@@ -315,7 +335,9 @@ export function openBetSheet(host: BetHost): Sheet {
         // Keep the last good quote on screen and try again quietly.
         quoteUpdating = true;
         clearTimeout(quoteRetryTimer);
-        quoteRetryTimer = setTimeout(() => { if (!disposed && !busy) void fetchQuote(); }, QUOTE_RETRY_MS);
+        quoteRetryTimer = setTimeout(() => {
+          if (!disposed && !busy) void fetchQuote();
+        }, QUOTE_RETRY_MS);
       } else {
         quote = null;
         quoteUpdating = false;
@@ -358,7 +380,9 @@ export function openBetSheet(host: BetHost): Sheet {
     const response = await host.api<Balances>("/wallet/balances", { wallet: owner });
     if (disposed || owner !== address) return;
     balances = response.ok ? (response.body as Balances) : null;
-    host.debug({ wallet: balances ? `${owner} (${balances.sol} SOL, ${balances.usdc} USDC)` : `${owner} (balances unavailable)` });
+    host.debug({
+      wallet: balances ? `${owner} (${balances.sol} SOL, ${balances.usdc} USDC)` : `${owner} (balances unavailable)`,
+    });
     render();
   }
 
@@ -451,7 +475,9 @@ export function openBetSheet(host: BetHost): Sheet {
       });
       if (!simulation?.ok) {
         host.sound?.("softError");
-        return setStatus(simulation?.reason ?? "I couldn't test this transaction, so nothing was sent. Try again in a moment.");
+        return setStatus(
+          simulation?.reason ?? "I couldn't test this transaction, so nothing was sent. Try again in a moment.",
+        );
       }
 
       showSteps("Signing");
@@ -462,7 +488,9 @@ export function openBetSheet(host: BetHost): Sheet {
         showSteps(null);
         host.sound?.("softError");
         return setStatus(
-          !signed.ok && signed.reason === "rejected" ? "Cancelled in your wallet. Nothing was sent." : "Your wallet couldn't sign this. Nothing was sent.",
+          !signed.ok && signed.reason === "rejected"
+            ? "Cancelled in your wallet. Nothing was sent."
+            : "Your wallet couldn't sign this. Nothing was sent.",
         );
       }
       const checked = checkSignedTransaction(txBase64, signed.signedTxBase64);
@@ -472,7 +500,10 @@ export function openBetSheet(host: BetHost): Sheet {
         return setStatus("The transaction your wallet signed is not the one Soothia built. Nothing was sent.");
       }
       if (dryRun) {
-        host.debug({ signature: `${signed.signature} (dry run, not sent; ${checked.bytes} bytes)`, register: "not attempted (dry run)" });
+        host.debug({
+          signature: `${signed.signature} (dry run, not sent; ${checked.bytes} bytes)`,
+          register: "not attempted (dry run)",
+        });
         showSteps(null);
         host.sound?.("open");
         return setStatus("Dry run complete: your wallet signed it, nothing was sent.");
@@ -487,7 +518,9 @@ export function openBetSheet(host: BetHost): Sheet {
         const error = (sent.body ?? {}) as ApiError;
         if (error.error === "blockhash_expired" && round === 1) {
           quote = null;
-          setStatus("That took a while and the transaction expired before it was sent. Nothing was charged. One more time.");
+          setStatus(
+            "That took a while and the transaction expired before it was sent. Nothing was charged. One more time.",
+          );
           continue;
         }
         showSteps("Sending", true);
@@ -513,7 +546,11 @@ export function openBetSheet(host: BetHost): Sheet {
       else await sleep(3000);
     }
     if (disposed) return;
-    const solscan = externalLink("Transaction on Solscan", `https://solscan.io/tx/${signature}`, "link mono ext centered");
+    const solscan = externalLink(
+      "Transaction on Solscan",
+      `https://solscan.io/tx/${signature}`,
+      "link mono ext centered",
+    );
     outcome.classList.remove("success");
 
     if (!result || result.status === "pending") {
@@ -532,11 +569,21 @@ export function openBetSheet(host: BetHost): Sheet {
       host.sound?.("softError");
       showSteps("Confirming", true);
       setStatus("");
-      outcome.replaceChildren(el("p", "line", "The transaction failed on Solana. No USDC was taken."), solscan, button("Back", "link", () => host.back()));
+      outcome.replaceChildren(
+        el("p", "line", "The transaction failed on Solana. No USDC was taken."),
+        solscan,
+        button("Back", "link", () => host.back()),
+      );
     } else {
       const recorded = result.submitted || result.attributed;
-      const issues = Object.entries(result.errors).map(([step, code]) => `${step}: ${code}`).join(", ");
-      host.debug({ register: recorded ? `recorded (${result.verified ?? "verified"}, attributed ${result.attributed})${issues ? `; ${issues}` : ""}` : `on-chain, not recorded (${issues})` });
+      const issues = Object.entries(result.errors)
+        .map(([step, code]) => `${step}: ${code}`)
+        .join(", ");
+      host.debug({
+        register: recorded
+          ? `recorded (${result.verified ?? "verified"}, attributed ${result.attributed})${issues ? `; ${issues}` : ""}`
+          : `on-chain, not recorded (${issues})`,
+      });
       showSteps(recorded ? "done" : "Recording", !recorded);
       setStatus("");
       host.celebrate?.();
@@ -544,9 +591,17 @@ export function openBetSheet(host: BetHost): Sheet {
       const flourish = el("div", "flourish");
       flourish.append(starSvg(), starSvg(), starSvg());
       const summary = el("div", "summary-box");
-      summary.append(el("span", `mono ${side}`, `${quote ? `~${quote.shares.toFixed(2)} ` : ""}${side.toUpperCase()}`), " shares are yours");
+      summary.append(
+        el("span", `mono ${side}`, `${quote ? `~${quote.shares.toFixed(2)} ` : ""}${side.toUpperCase()}`),
+        " shares are yours",
+      );
       if (quote) {
-        summary.append(" for ", el("span", "mono", usd(quote.totalUsdc)), " ", el("span", "muted-inline", `(${usd(quote.amountUsdc)} stake + ${usd(quote.feeUsdc)} fee)`));
+        summary.append(
+          " for ",
+          el("span", "mono", usd(quote.totalUsdc)),
+          " ",
+          el("span", "muted-inline", `(${usd(quote.amountUsdc)} stake + ${usd(quote.feeUsdc)} fee)`),
+        );
       }
       if (!recorded) summary.append(" Panta's records are catching up; the shares are on-chain.");
       const actions = el("div", "button-grid");
@@ -555,7 +610,14 @@ export function openBetSheet(host: BetHost): Sheet {
         button("Done", "button tall", () => host.back()),
       );
       outcome.classList.add("success");
-      outcome.replaceChildren(flourish, el("h3", "success-title", "Bet placed"), el("p", "success-sub", target.title), summary, actions, solscan);
+      outcome.replaceChildren(
+        flourish,
+        el("h3", "success-title", "Bet placed"),
+        el("p", "success-sub", target.title),
+        summary,
+        actions,
+        solscan,
+      );
     }
     outcome.hidden = false;
     host.layout();

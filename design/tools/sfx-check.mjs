@@ -13,7 +13,11 @@ const context = await chromium.launchPersistentContext(userDataDir, {
   channel: "chromium",
   headless: true,
   viewport: { width: 980, height: 900 },
-  args: [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`, "--autoplay-policy=no-user-gesture-required"],
+  args: [
+    `--disable-extensions-except=${extension}`,
+    `--load-extension=${extension}`,
+    "--autoplay-policy=no-user-gesture-required",
+  ],
 });
 let worker = context.serviceWorkers()[0];
 if (!worker) worker = await context.waitForEvent("serviceworker", { timeout: 15000 });
@@ -23,7 +27,9 @@ for (const page of context.pages()) if (page.url().includes("welcome.html")) awa
 
 const page = await context.newPage();
 const errors = [];
-page.on("console", (message) => { if (message.type() === "error") errors.push(message.text()); });
+page.on("console", (message) => {
+  if (message.type() === "error") errors.push(message.text());
+});
 page.on("pageerror", (error) => errors.push(String(error)));
 await page.goto(`chrome-extension://${id}/welcome.html?sfx=1`);
 await page.waitForTimeout(800);

@@ -71,8 +71,7 @@ export const RESOLUTION_TYPES = {
     categories: ["crypto", "finance"],
   },
   sports_result: {
-    description:
-      "The result of a scheduled match or competition, read from the official league or competition result.",
+    description: "The result of a scheduled match or competition, read from the official league or competition result.",
     categories: ["sports"],
   },
   official_outcome: {
@@ -149,9 +148,7 @@ export function startTimeFor(draft: MarketDraft, nowSec: number): number {
   return nowSec + Math.min(draft.buyWindowHours * 3600 + START_BUFFER_SEC, cap - 60);
 }
 
-export type DraftValidation =
-  | { ok: true; draft: MarketDraft }
-  | { ok: false; field: string; message: string };
+export type DraftValidation = { ok: true; draft: MarketDraft } | { ok: false; field: string; message: string };
 
 export function validateDraft(raw: unknown, nowMs: number): DraftValidation {
   const bad = (field: string, message: string): DraftValidation => ({ ok: false, field, message });
@@ -179,7 +176,8 @@ export function validateDraft(raw: unknown, nowMs: number): DraftValidation {
       return bad("buyWindowHours", "Pick when buying closes.");
     }
     buyWindowHours = input.buyWindowHours;
-    if (buyWindowHours < MIN_START_DELAY_SEC / 3600) return bad("buyWindowHours", "Buying must stay open at least 1 hour.");
+    if (buyWindowHours < MIN_START_DELAY_SEC / 3600)
+      return bad("buyWindowHours", "Buying must stay open at least 1 hour.");
     if (buyWindowHours > maxHours) {
       return bad(
         "buyWindowHours",
@@ -251,7 +249,10 @@ function isString(value: unknown): value is string {
 }
 
 function normalize(text: string): string {
-  return text.toLowerCase().replace(/[^\p{L}\p{N}$%.]+/gu, " ").trim();
+  return text
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}$%.]+/gu, " ")
+    .trim();
 }
 
 // The quote must come from the page. Models sometimes tidy punctuation, so an

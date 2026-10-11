@@ -10,15 +10,15 @@ Soothia never holds funds or keys. The extension asks your wallet to sign a tran
 
 ## Repo layout
 
-| Path | What it is |
-| - | - |
-| `extension/` | Chrome MV3 extension (TypeScript, Vite). Build output goes to `extension/dist`. |
-| `worker/` | Cloudflare Worker `soothia-proxy` (TypeScript, Wrangler). Holds the Panta, Claude, and RPC keys. |
-| `site/` | The landing site Worker `soothia` (static files plus server-rendered `/m/<marketId>` and `/markets`). |
-| `scripts/` | Node + TypeScript scripts: catalog check, extension packaging, site assets. |
-| `docs/` | Notes and generated reports (`panta-create-rules.md`, `blinks.md`, `wallets.md`, `catalog-check.md`). |
-| `design/` | Screenshots of applied designs and the headless check scripts in `design/tools`. |
-| `CLAUDE.md` | Standing rules for anyone (human or AI) working in this repo. |
+| Path         | What it is                                                                                            |
+| ------------ | ----------------------------------------------------------------------------------------------------- |
+| `extension/` | Chrome MV3 extension (TypeScript, Vite). Build output goes to `extension/dist`.                       |
+| `worker/`    | Cloudflare Worker `soothia-proxy` (TypeScript, Wrangler). Holds the Panta, Claude, and RPC keys.      |
+| `site/`      | The landing site Worker `soothia` (static files plus server-rendered `/m/<marketId>` and `/markets`). |
+| `scripts/`   | Node + TypeScript scripts: catalog check, extension packaging, site assets.                           |
+| `docs/`      | Notes and generated reports (`panta-create-rules.md`, `blinks.md`, `wallets.md`, `catalog-check.md`). |
+| `design/`    | Screenshots of applied designs and the headless check scripts in `design/tools`.                      |
+| `CLAUDE.md`  | Standing rules for anyone (human or AI) working in this repo.                                         |
 
 ## Build the extension
 
@@ -40,12 +40,12 @@ Package the zip the site serves: `cd scripts && npm install && npm run package-e
 
 Secrets (never in git): copy `worker/.dev.vars.example` to `worker/.dev.vars` for local runs; in production each is set once with `npx wrangler secret put <NAME>`.
 
-| Secret | Used for |
-| - | - |
-| `PANTA_API_KEY` | Panta API (catalog, quotes, building transactions). |
-| `ANTHROPIC_API_KEY` | `/detect` (claims from page text) and `/match` (claim to market). |
-| `HELIUS_RPC_URL` | Solana mainnet RPC for balances, simulation, sending, and confirmation. |
-| `ADMIN_TOKEN` | Gates `GET /debug/*`; sent as the `X-Soothia-Admin` header. Without it those routes return 404. |
+| Secret              | Used for                                                                                        |
+| ------------------- | ----------------------------------------------------------------------------------------------- |
+| `PANTA_API_KEY`     | Panta API (catalog, quotes, building transactions).                                             |
+| `ANTHROPIC_API_KEY` | `/detect` (claims from page text) and `/match` (claim to market).                               |
+| `HELIUS_RPC_URL`    | Solana mainnet RPC for balances, simulation, sending, and confirmation.                         |
+| `ADMIN_TOKEN`       | Gates `GET /debug/*`; sent as the `X-Soothia-Admin` header. Without it those routes return 404. |
 
 ```bash
 cd worker

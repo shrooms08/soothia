@@ -30,28 +30,28 @@ The create session (`createId`) lasts about 5 minutes. The blockhash lasts about
 
 Required:
 
-| Field | Type | Rule |
-| - | - | - |
-| `wallet` | string | Fee payer and signer, base58. |
-| `question` | string | Max 512 characters. Combined with `wallet` to derive the event address, so the same wallet cannot reuse a question (`DUPLICATE_MARKET`). |
-| `resolutionRule` | string | Resolution criteria, max 2048 characters. |
-| `sourcesOfTruth` | string[] | Non-empty, max 20 entries. |
-| `category` | string | One of the allowed categories below. |
-| `startTime` | integer | Unix seconds. See time rules. |
-| `endTime` | integer | Unix seconds. |
-| `resolutionTime` | integer | Unix seconds. |
-| `imageUrl` | string | Exactly one public `http`/`https` URL, max 2048 characters. |
+| Field            | Type     | Rule                                                                                                                                     |
+| ---------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `wallet`         | string   | Fee payer and signer, base58.                                                                                                            |
+| `question`       | string   | Max 512 characters. Combined with `wallet` to derive the event address, so the same wallet cannot reuse a question (`DUPLICATE_MARKET`). |
+| `resolutionRule` | string   | Resolution criteria, max 2048 characters.                                                                                                |
+| `sourcesOfTruth` | string[] | Non-empty, max 20 entries.                                                                                                               |
+| `category`       | string   | One of the allowed categories below.                                                                                                     |
+| `startTime`      | integer  | Unix seconds. See time rules.                                                                                                            |
+| `endTime`        | integer  | Unix seconds.                                                                                                                            |
+| `resolutionTime` | integer  | Unix seconds.                                                                                                                            |
+| `imageUrl`       | string   | Exactly one public `http`/`https` URL, max 2048 characters.                                                                              |
 
 Optional:
 
-| Field | Type | Rule |
-| - | - | - |
-| `marketType` | string | `standard` (default) or `breaking`. |
+| Field             | Type    | Rule                                                             |
+| ----------------- | ------- | ---------------------------------------------------------------- |
+| `marketType`      | string  | `standard` (default) or `breaking`.                              |
 | `eventInProgress` | boolean | Only with `marketType: "breaking"`. Skips the start-delay check. |
-| `title` | string | Defaults to `question`. Length limit **UNCLEAR**. |
-| `description` | string | Catalog description. Length limit **UNCLEAR**. |
-| `region` | string | Defaults to `Global`. |
-| `oracle` | string | Defaults to `sourcesOfTruth` joined by `,`. |
+| `title`           | string  | Defaults to `question`. Length limit **UNCLEAR**.                |
+| `description`     | string  | Catalog description. Length limit **UNCLEAR**.                   |
+| `region`          | string  | Defaults to `Global`.                                            |
+| `oracle`          | string  | Defaults to `sourcesOfTruth` joined by `,`.                      |
 
 `paymentUsdc` in the request is ignored; the fee comes from on-chain config.
 
@@ -113,23 +113,23 @@ Because of the start delay, the earliest possible `endTime` for a standard marke
 
 Since any free-form binary question is creatable, Soothia limits drafts to three resolution types it can describe precisely. This is a Soothia rule, not a Panta rule:
 
-| Soothia type | Meaning | Categories |
-| - | - | - |
-| `price_threshold` | An asset price or index level compared with a number at a set time, read from a named public price source. | `crypto`, `finance` |
-| `sports_result` | The result of a scheduled match or competition, read from the official league or competition result. | `sports` |
-| `official_outcome` | A dated outcome confirmed by an official or authoritative public source (election result, release, announcement, published figure). | any |
+| Soothia type       | Meaning                                                                                                                             | Categories          |
+| ------------------ | ----------------------------------------------------------------------------------------------------------------------------------- | ------------------- |
+| `price_threshold`  | An asset price or index level compared with a number at a set time, read from a named public price source.                          | `crypto`, `finance` |
+| `sports_result`    | The result of a scheduled match or competition, read from the official league or competition result.                                | `sports`            |
+| `official_outcome` | A dated outcome confirmed by an official or authoritative public source (election result, release, announcement, published figure). | any                 |
 
 ## Market types (from the Panta team and panta.market/how-it-works, 2026-10-10)
 
 `marketType` is `standard` or `breaking`. The docs describe it only as a timing mode; the Panta team and the How it works page add:
 
-| | Breaking | Standard |
-| - | - | - |
-| Creation fee (from the live quote) | **LIVE: 20 USDC** (5 liquidity, 15 platform) | **LIVE: 50 USDC** (10 liquidity, 40 platform) |
-| `startTime` | Must be within 72 hours of creation, and at least `minimumStartDelay` (3600s) ahead unless `eventInProgress` is true | At least `minimumStartDelay` ahead; no documented maximum |
-| `eventInProgress` | Allowed. Skips the start-delay check; `startTime` should be at or before now (the playground requires `startTime <= now`); `endTime` must be in the future | Not allowed |
-| `endTime` | Any future time | After `startTime` |
-| Phases | Buying (primary, buy-only) from creation until `startTime`, then peer-to-peer trading until resolution | Same |
+|                                    | Breaking                                                                                                                                                   | Standard                                                  |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| Creation fee (from the live quote) | **LIVE: 20 USDC** (5 liquidity, 15 platform)                                                                                                               | **LIVE: 50 USDC** (10 liquidity, 40 platform)             |
+| `startTime`                        | Must be within 72 hours of creation, and at least `minimumStartDelay` (3600s) ahead unless `eventInProgress` is true                                       | At least `minimumStartDelay` ahead; no documented maximum |
+| `eventInProgress`                  | Allowed. Skips the start-delay check; `startTime` should be at or before now (the playground requires `startTime <= now`); `endTime` must be in the future | Not allowed                                               |
+| `endTime`                          | Any future time                                                                                                                                            | After `startTime`                                         |
+| Phases                             | Buying (primary, buy-only) from creation until `startTime`, then peer-to-peer trading until resolution                                                     | Same                                                      |
 
 Soothia's rules (`worker/src/pantaRules.ts`): new drafts are breaking; "Buying window closes" is 1 to 72 hours after creation for breaking (default 48 hours), up to 365 days for standard; "Event is live now" sets `eventInProgress: true` with `startTime` one minute in the past and is offered only when `/detect` flagged the claim as `eventLive`; `endTime` must come after `startTime`, be at least 10 minutes out (2 hours for standard), and within 365 days. The fee always comes from the live quote.
 
@@ -164,14 +164,14 @@ This fee is far above the $1 to $2 test-bet limit in `CLAUDE.md`. Creating even 
 
 Errors are JSON: `{ "code", "message", "field" }` or `{ "code", "message", "fields" }`. Switch on `code`.
 
-| Code | When |
-| - | - |
-| `INVALID_MARKET_PARAMS` | Bad fields, illegal times, bad `imageUrl`. |
-| `DUPLICATE_MARKET` | This wallet already has a market with this question. |
-| `CREATE_NOT_PERMITTED` | Create permission disabled. |
-| `CREATE_EXPIRED` | `createId` missing, expired, or consumed. |
-| `TX_NOT_FOUND`, `TX_FAILED`, `TX_MISMATCH`, `TX_FEE_MISMATCH` | Register could not verify the transaction. |
-| `UNAUTHORIZED`, `RATE_LIMITED`, `INTERNAL_ERROR` | General. |
+| Code                                                          | When                                                 |
+| ------------------------------------------------------------- | ---------------------------------------------------- |
+| `INVALID_MARKET_PARAMS`                                       | Bad fields, illegal times, bad `imageUrl`.           |
+| `DUPLICATE_MARKET`                                            | This wallet already has a market with this question. |
+| `CREATE_NOT_PERMITTED`                                        | Create permission disabled.                          |
+| `CREATE_EXPIRED`                                              | `createId` missing, expired, or consumed.            |
+| `TX_NOT_FOUND`, `TX_FAILED`, `TX_MISMATCH`, `TX_FEE_MISMATCH` | Register could not verify the transaction.           |
+| `UNAUTHORIZED`, `RATE_LIMITED`, `INTERNAL_ERROR`              | General.                                             |
 
 Rate limits per account: quote 30 per 60s, build 20 per 60s, register 40 per 60s, upload 10 per 60s, catalog reads 120 per 60s. Honor `Retry-After` on 429.
 
@@ -187,16 +187,16 @@ Request: the fields in "Quote fields" above.
 
 Response:
 
-| Field | Type | Meaning |
-| - | - | - |
-| `createId` | string | Session id (`cr_…`) for build and register. |
-| `expectedEventPda` | string | The market's on-chain address. Becomes `marketId`. |
-| `paymentUsdc` | string | Total fee, USDC base units (6 decimals). |
-| `liquidityInjectionUsdc` | string | Liquidity part of the fee, base units. |
-| `platformRevenueUsdc` | string | Platform part of the fee, base units. |
-| `marketType` | string | `standard` or `breaking`. |
-| `expiresAt` | string | Session expiry, ISO-8601. |
-| `blockhashExpiryHintSec` | integer | `60`. |
+| Field                    | Type    | Meaning                                            |
+| ------------------------ | ------- | -------------------------------------------------- |
+| `createId`               | string  | Session id (`cr_…`) for build and register.        |
+| `expectedEventPda`       | string  | The market's on-chain address. Becomes `marketId`. |
+| `paymentUsdc`            | string  | Total fee, USDC base units (6 decimals).           |
+| `liquidityInjectionUsdc` | string  | Liquidity part of the fee, base units.             |
+| `platformRevenueUsdc`    | string  | Platform part of the fee, base units.              |
+| `marketType`             | string  | `standard` or `breaking`.                          |
+| `expiresAt`              | string  | Session expiry, ISO-8601.                          |
+| `blockhashExpiryHintSec` | integer | `60`.                                              |
 
 **LIVE:** the response also carries `userId` and `apiKeyId`. Soothia does not pass these on.
 
@@ -206,14 +206,14 @@ Request: `createId` (required), `wallet` (optional; if set it must equal the quo
 
 Response:
 
-| Field | Type | Meaning |
-| - | - | - |
-| `transaction` | string | Base64 unsigned `VersionedTransaction`. Create build returns a whole transaction, not an instruction list. (Primary buy and claim builds return `instructions`; create does not.) |
-| `recentBlockhash` | string | Blockhash inside the transaction. |
-| `lastValidBlockHeight` | integer | Last block height at which that blockhash is valid. |
-| `buildFingerprint` | string | Integrity fingerprint, "checked at register". |
-| `derived` | object | Addresses the transaction uses: `event`, `vaultAuthority`, `marketConfig`, … |
-| `createId`, `expectedEventPda`, `paymentUsdc`, `liquidityInjectionUsdc`, `platformRevenueUsdc`, `marketType`, `expiresAt`, `blockhashExpiryHintSec` | | Echoed from the quote. |
+| Field                                                                                                                                               | Type    | Meaning                                                                                                                                                                           |
+| --------------------------------------------------------------------------------------------------------------------------------------------------- | ------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `transaction`                                                                                                                                       | string  | Base64 unsigned `VersionedTransaction`. Create build returns a whole transaction, not an instruction list. (Primary buy and claim builds return `instructions`; create does not.) |
+| `recentBlockhash`                                                                                                                                   | string  | Blockhash inside the transaction.                                                                                                                                                 |
+| `lastValidBlockHeight`                                                                                                                              | integer | Last block height at which that blockhash is valid.                                                                                                                               |
+| `buildFingerprint`                                                                                                                                  | string  | Integrity fingerprint, "checked at register".                                                                                                                                     |
+| `derived`                                                                                                                                           | object  | Addresses the transaction uses: `event`, `vaultAuthority`, `marketConfig`, …                                                                                                      |
+| `createId`, `expectedEventPda`, `paymentUsdc`, `liquidityInjectionUsdc`, `platformRevenueUsdc`, `marketType`, `expiresAt`, `blockhashExpiryHintSec` |         | Echoed from the quote.                                                                                                                                                            |
 
 "Do not change instruction accounts or fee amounts." If the blockhash expires, call build again with the same `createId`; if the session expired, quote again.
 
@@ -231,36 +231,36 @@ Request: `createId` and `signature` (base58), both required. Nothing else.
 
 Response:
 
-| Field | Type | Meaning |
-| - | - | - |
-| `marketId` | string | "Event address used as the market id in later APIs." |
-| `status` | string | `registered` on success. |
-| `images` | string[] | One entry: the quoted `imageUrl`. |
-| `createId`, `signature`, `category`, `title` | | Echoed. |
+| Field                                        | Type     | Meaning                                              |
+| -------------------------------------------- | -------- | ---------------------------------------------------- |
+| `marketId`                                   | string   | "Event address used as the market id in later APIs." |
+| `status`                                     | string   | `registered` on success.                             |
+| `images`                                     | string[] | One entry: the quoted `imageUrl`.                    |
+| `createId`, `signature`, `category`, `title` |          | Echoed.                                              |
 
 Verification is "fail-closed (transaction presence and success, program, accounts, fee match)". Repeating the same `createId` + `signature` is idempotent. After success, a `createId` cannot register a different signature.
 
 ### Session lifetimes
 
-| Thing | Lifetime |
-| - | - |
-| Create session (`createId`) | about 5 minutes (`expiresAt`) |
-| Build blockhash | about 60 seconds (`blockhashExpiryHintSec`) |
-| Image upload signature | about 5 minutes |
+| Thing                       | Lifetime                                    |
+| --------------------------- | ------------------------------------------- |
+| Create session (`createId`) | about 5 minutes (`expiresAt`)               |
+| Build blockhash             | about 60 seconds (`blockhashExpiryHintSec`) |
+| Image upload signature      | about 5 minutes                             |
 
 ### Failure modes
 
-| Where | Code | Meaning | What Soothia does |
-| - | - | - | - |
-| Quote | `INVALID_MARKET_PARAMS` with `field` or `fields` | A field failed validation. | Show the message. |
-| Quote | `INVALID_MARKET_PARAMS`, message `unexpected create quote failure — check server logs` | Transient (seen live). | Retry once. |
-| Quote | `DUPLICATE_MARKET` | This wallet already made a market with this question. | Tell the user; nothing is charged. |
-| Quote, upload | `CREATE_NOT_PERMITTED` | Permission disabled on the account. | Show an error. |
-| Build, register | `CREATE_EXPIRED` | "`createId` missing, expired, or consumed". | Before signing: quote again. After a confirmed transaction: see the risk below. |
-| Register | `TX_NOT_FOUND` | "Signature not observed at required commitment". | Wait and retry register. |
-| Register | `TX_FAILED` | The transaction failed on-chain. | Nothing was created; report it. |
-| Register | `TX_MISMATCH`, `TX_FEE_MISMATCH` | The transaction is not the one that was built. | Report it. |
-| Any | `RATE_LIMITED` | Quote 30 per 60s, build 20 per 60s, register 40 per 60s, per account. | Honor `Retry-After`. |
+| Where           | Code                                                                                   | Meaning                                                               | What Soothia does                                                               |
+| --------------- | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------- | ------------------------------------------------------------------------------- |
+| Quote           | `INVALID_MARKET_PARAMS` with `field` or `fields`                                       | A field failed validation.                                            | Show the message.                                                               |
+| Quote           | `INVALID_MARKET_PARAMS`, message `unexpected create quote failure — check server logs` | Transient (seen live).                                                | Retry once.                                                                     |
+| Quote           | `DUPLICATE_MARKET`                                                                     | This wallet already made a market with this question.                 | Tell the user; nothing is charged.                                              |
+| Quote, upload   | `CREATE_NOT_PERMITTED`                                                                 | Permission disabled on the account.                                   | Show an error.                                                                  |
+| Build, register | `CREATE_EXPIRED`                                                                       | "`createId` missing, expired, or consumed".                           | Before signing: quote again. After a confirmed transaction: see the risk below. |
+| Register        | `TX_NOT_FOUND`                                                                         | "Signature not observed at required commitment".                      | Wait and retry register.                                                        |
+| Register        | `TX_FAILED`                                                                            | The transaction failed on-chain.                                      | Nothing was created; report it.                                                 |
+| Register        | `TX_MISMATCH`, `TX_FEE_MISMATCH`                                                       | The transaction is not the one that was built.                        | Report it.                                                                      |
+| Any             | `RATE_LIMITED`                                                                         | Quote 30 per 60s, build 20 per 60s, register 40 per 60s, per account. | Honor `Retry-After`.                                                            |
 
 **UNCLEAR, and the main risk in this flow:** whether register still succeeds when the transaction confirmed but the 5-minute session ran out before register was called. The docs list `CREATE_EXPIRED` for register. If so, a slow signer could pay 50 USDC for a market that is on-chain but not in the catalog. Soothia refuses to send a signed transaction when the session has under 45 seconds left, and asks for a fresh signature on a new quote instead.
 
@@ -324,11 +324,11 @@ Request: `signature`, `wallet`, `marketId`, optional `quoteId`, `clientOrderId`,
 
 ### Session lifetimes
 
-| Thing | Lifetime |
-| - | - |
-| Primary quote (`quoteId`) | about 90 seconds |
+| Thing                     | Lifetime          |
+| ------------------------- | ----------------- |
+| Primary quote (`quoteId`) | about 90 seconds  |
 | Primary order (`orderId`) | about 120 seconds |
-| Blockhash | about 60 seconds |
+| Blockhash                 | about 60 seconds  |
 
 ### Positions: `GET /positions/?wallet=`
 

@@ -8,7 +8,12 @@ window.phantom = {
       this.publicKey = { toString: () => "BCMmCN6PPN4LaZjoWLvufmCaHYZE5PEaU3hHzYqeorne" };
       return { publicKey: this.publicKey };
     },
-    async disconnect() { this.publicKey = null; },
-    async signTransaction(tx) { tx.signatures[0] = new Uint8Array(64).fill(9); return tx; },
+    async disconnect() {
+      this.publicKey = null;
+    },
+    async signTransaction(tx) {
+      tx.signatures[0] = new Uint8Array(64).fill(9);
+      return tx;
+    },
   },
 };

@@ -5,7 +5,6 @@ import type { Env } from "./http";
 // Trailing slashes are required on every Panta path.
 export const PANTA_BASE = "https://live-api.panta.market/api/v1";
 
-
 export interface OpenMarket {
   id: string;
   title: string;
@@ -15,7 +14,6 @@ export interface OpenMarket {
   /** ISO-8601 UTC. */
   endTime: string;
 }
-
 
 export async function pantaGet<T>(env: Env, path: string, query?: URLSearchParams): Promise<T | null> {
   const apiKey = env.PANTA_API_KEY?.trim();

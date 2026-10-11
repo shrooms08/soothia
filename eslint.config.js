@@ -28,7 +28,10 @@ export default tseslint.config(
   {
     rules: {
       // Underscore-prefixed names mark parameters kept for a signature's shape.
-      "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrors: "none" }],
+      "@typescript-eslint/no-unused-vars": [
+        "error",
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrors: "none" },
+      ],
       "no-empty": ["error", { allowEmptyCatch: true }],
     },
   },

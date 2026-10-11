@@ -209,7 +209,9 @@ const welcomeTabs = new Set<number>();
 
 async function hasOffscreen(): Promise<boolean> {
   try {
-    const contexts = await chrome.runtime.getContexts({ contextTypes: ["OFFSCREEN_DOCUMENT" as chrome.runtime.ContextType] });
+    const contexts = await chrome.runtime.getContexts({
+      contextTypes: ["OFFSCREEN_DOCUMENT" as chrome.runtime.ContextType],
+    });
     return contexts.length > 0;
   } catch {
     return false;
@@ -240,7 +242,8 @@ async function startMusicNow(): Promise<MusicStatus> {
       });
     }
     const muted = (await chrome.storage.local.get(MUTED_KEY))[MUTED_KEY] === true;
-    const status = (await chrome.runtime.sendMessage({ type: MUSIC_CONTROL, action: "start", muted })) as MusicStatus | undefined;
+    const status = (await chrome.runtime.sendMessage({ type: MUSIC_CONTROL, action: "start", muted })) as
+      MusicStatus | undefined;
     return status ?? { playing: false, muted, error: "no answer from the player" };
   } catch (error) {
     return { playing: false, muted: false, error: String((error as Error)?.message ?? error) };
@@ -283,8 +286,20 @@ self.addEventListener("error", (event) => event.preventDefault());
 
 const respondSafely = (work: Promise<unknown>, sendResponse: (value: unknown) => void, fallback: unknown): void => {
   work.then(
-    (value) => { try { sendResponse(value); } catch { /* port closed */ } },
-    () => { try { sendResponse(fallback); } catch { /* port closed */ } },
+    (value) => {
+      try {
+        sendResponse(value);
+      } catch {
+        /* port closed */
+      }
+    },
+    () => {
+      try {
+        sendResponse(fallback);
+      } catch {
+        /* port closed */
+      }
+    },
   );
 };
 
@@ -292,18 +307,34 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   try {
     return handleMessage(message, sender, sendResponse);
   } catch {
-    try { sendResponse(undefined); } catch { /* port closed */ }
+    try {
+      sendResponse(undefined);
+    } catch {
+      /* port closed */
+    }
     return false;
   }
 });
 
-function handleMessage(message: { type?: string; category?: string; action?: string } | undefined, sender: chrome.runtime.MessageSender, sendResponse: (value: unknown) => void): boolean | undefined {
+function handleMessage(
+  message: { type?: string; category?: string; action?: string } | undefined,
+  sender: chrome.runtime.MessageSender,
+  sendResponse: (value: unknown) => void,
+): boolean | undefined {
   switch (message?.type) {
     case HEALTH_REQUEST:
       respondSafely(checkHealth(), sendResponse, { online: false });
       return true; // keep the channel open for the async response
     case DETECT_REQUEST:
-      respondSafely(detectOnce((message as DetectRequestMessage).page, (message as DetectRequestMessage).refresh === true, (message as DetectRequestMessage).fixture), sendResponse, FAILED);
+      respondSafely(
+        detectOnce(
+          (message as DetectRequestMessage).page,
+          (message as DetectRequestMessage).refresh === true,
+          (message as DetectRequestMessage).fixture,
+        ),
+        sendResponse,
+        FAILED,
+      );
       return true;
     case API_REQUEST:
       respondSafely(relay(message as ApiRequestMessage), sendResponse, { ok: false, status: 0, body: null });
@@ -315,7 +346,11 @@ function handleMessage(message: { type?: string; category?: string; action?: str
       respondSafely(injectSigner(sender.tab?.id), sendResponse, false);
       return true;
     case OPEN_WELCOME:
-      respondSafely(openWelcome().then(() => true), sendResponse, false);
+      respondSafely(
+        openWelcome().then(() => true),
+        sendResponse,
+        false,
+      );
       return true;
     case MUSIC_CONTROL:
       // The welcome page asks the background to make sure the player exists.

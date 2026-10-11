@@ -51,15 +51,7 @@ import { describeFixture, findFixture } from "./fixture";
 import { guarded, installGuards, isContextDead, safe } from "./guard";
 import { earningsView, money } from "./earnings";
 import { wallet } from "./wallet-client";
-import {
-  CARD_GAP,
-  CARD_WIDTH,
-  EDGE_PADDING,
-  HOST_STYLES,
-  ORB_MARGIN,
-  ORB_SIZE,
-  STYLES,
-} from "./styles";
+import { CARD_GAP, CARD_WIDTH, EDGE_PADDING, HOST_STYLES, ORB_MARGIN, ORB_SIZE, STYLES } from "./styles";
 
 const HOST_ID = "soothia-host";
 const POSITION_KEY = "soothia:orbPosition";
@@ -134,9 +126,7 @@ function clamp(value: number, min: number, max: number): number {
 async function loadPosition(): Promise<OrbPosition> {
   const fallback = { right: ORB_MARGIN, bottom: ORB_MARGIN };
   try {
-    const stored = (await chrome.storage.local.get(POSITION_KEY))[POSITION_KEY] as
-      | Partial<OrbPosition>
-      | undefined;
+    const stored = (await chrome.storage.local.get(POSITION_KEY))[POSITION_KEY] as Partial<OrbPosition> | undefined;
     if (typeof stored?.right === "number" && typeof stored?.bottom === "number") {
       return { right: stored.right, bottom: stored.bottom };
     }
@@ -168,7 +158,11 @@ interface LiveMarket {
   title: string;
 }
 
-const STOPWORDS = new Set("will the and for with from that this than then have has had are was were been being its their there what when where which who into over under above below after before between against during not yes any all more most less out off per via about around by on at to of in is it as or an a be".split(" "));
+const STOPWORDS = new Set(
+  "will the and for with from that this than then have has had are was were been being its their there what when where which who into over under above below after before between against during not yes any all more most less out off per via about around by on at to of in is it as or an a be".split(
+    " ",
+  ),
+);
 
 function words(text: string): Set<string> {
   return new Set(
@@ -202,19 +196,34 @@ function tileNode(
     const target: BuyTarget = { marketId: live.marketId, title: live.title, yesPrice: null, noPrice: null };
     const link = externalLink("Live on Panta", live.marketUrl, "link ext");
     link.prepend(el("span", "live-dot"));
-    actions.append(link, button("Bet", "button", () => onBet(target)));
+    actions.append(
+      link,
+      button("Bet", "button", () => onBet(target)),
+    );
   } else if (market && market.phase === "p2p") {
     // The buying window has closed; shares trade between people on Panta.
-    const odds = market.yesPrice === null ? "YES \u2013 on Panta" : `YES ${(market.yesPrice * 100).toFixed(1)}% on Panta`;
+    const odds =
+      market.yesPrice === null ? "YES \u2013 on Panta" : `YES ${(market.yesPrice * 100).toFixed(1)}% on Panta`;
     const oddsNode = el("span", "odds p2p", odds);
     oddsNode.title = `${market.title} (trading between people on Panta)`;
-    actions.append(oddsNode, externalLink("Trade on Panta", market.pantaUrl ?? `https://www.panta.market/market/${market.id}`, "button ext"));
+    actions.append(
+      oddsNode,
+      externalLink("Trade on Panta", market.pantaUrl ?? `https://www.panta.market/market/${market.id}`, "button ext"),
+    );
   } else if (market) {
     const odds = market.yesPrice === null ? "YES \u2013" : `YES ${(market.yesPrice * 100).toFixed(1)}%`;
     const oddsNode = el("span", "odds", odds);
     oddsNode.title = market.title;
-    const target: BuyTarget = { marketId: market.id, title: market.title, yesPrice: market.yesPrice, noPrice: market.noPrice };
-    actions.append(oddsNode, button("Bet", "button", () => onBet(target)));
+    const target: BuyTarget = {
+      marketId: market.id,
+      title: market.title,
+      yesPrice: market.yesPrice,
+      noPrice: market.noPrice,
+    };
+    actions.append(
+      oddsNode,
+      button("Bet", "button", () => onBet(target)),
+    );
   } else {
     actions.classList.add("end");
     actions.append(button("Make it a market", "button primary", onMake));
@@ -270,7 +279,9 @@ async function mount(): Promise<void> {
   // Light pages (Wikipedia, BBC) get the orb's edge shadow and star drop shadows.
   function pageIsLight(): boolean {
     for (const node of [document.body, document.documentElement]) {
-      const match = /rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d.]+))?/.exec(getComputedStyle(node).backgroundColor);
+      const match = /rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)(?:\s*,\s*([\d.]+))?/.exec(
+        getComputedStyle(node).backgroundColor,
+      );
       if (!match || (match[4] !== undefined && Number(match[4]) === 0)) continue;
       const [r, g, b] = [Number(match[1]), Number(match[2]), Number(match[3])];
       return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255 > 0.6;
@@ -405,7 +416,10 @@ async function mount(): Promise<void> {
   const bubbleClose = button("", "bubble-close", () => dismissBubble());
   bubbleClose.setAttribute("aria-label", "Dismiss");
   bubbleClose.append(icon("close"));
-  bubble.append(el("p", "bubble-text", "I'll glow when I spot something you can bet on. Click me anytime."), bubbleClose);
+  bubble.append(
+    el("p", "bubble-text", "I'll glow when I spot something you can bet on. Click me anytime."),
+    bubbleClose,
+  );
   let bubbleTimer: ReturnType<typeof setTimeout> | undefined;
 
   function dismissBubble(): void {
@@ -490,21 +504,26 @@ async function mount(): Promise<void> {
 
   function renderWalletRow(): void {
     walletRow.set(
-      detectedWallets.length ? `Wallet: ${detectedWallets.map((info) => info.name).join(", ")} detected` : "Wallet: none found",
+      detectedWallets.length
+        ? `Wallet: ${detectedWallets.map((info) => info.name).join(", ")} detected`
+        : "Wallet: none found",
       detectedWallets.length ? "good" : "bad",
     );
   }
 
-  window.addEventListener("message", guarded("wallet status", (event: MessageEvent) => {
-    // Only accept messages this same window posted to itself, with our type.
-    if (event.source !== window || event.origin !== window.location.origin) return;
-    const data: unknown = event.data;
-    if (typeof data !== "object" || data === null) return;
-    const { type, wallets } = data as { type?: unknown; wallets?: unknown };
-    if (type !== WALLET_STATUS || !Array.isArray(wallets)) return;
-    detectedWallets = wallets as WalletInfo[];
-    renderWalletRow();
-  }));
+  window.addEventListener(
+    "message",
+    guarded("wallet status", (event: MessageEvent) => {
+      // Only accept messages this same window posted to itself, with our type.
+      if (event.source !== window || event.origin !== window.location.origin) return;
+      const data: unknown = event.data;
+      if (typeof data !== "object" || data === null) return;
+      const { type, wallets } = data as { type?: unknown; wallets?: unknown };
+      if (type !== WALLET_STATUS || !Array.isArray(wallets)) return;
+      detectedWallets = wallets as WalletInfo[];
+      renderWalletRow();
+    }),
+  );
 
   // Picker, then connect. Resolves with the outcome, or null when dismissed.
   async function chooseAndConnect(container: HTMLElement): Promise<WalletRpcOutcome | null> {
@@ -520,9 +539,7 @@ async function mount(): Promise<void> {
     proxyRow.set("Proxy: checking…", "idle");
     let online = false;
     try {
-      const response = (await chrome.runtime.sendMessage({ type: HEALTH_REQUEST })) as
-        | HealthResponse
-        | undefined;
+      const response = (await chrome.runtime.sendMessage({ type: HEALTH_REQUEST })) as HealthResponse | undefined;
       online = response?.online === true;
     } catch {
       online = false;
@@ -563,7 +580,11 @@ async function mount(): Promise<void> {
   }
 
   /** The centered empty / skipped / error block from the sheet. */
-  function stateBlock(kind: "empty" | "skipped" | "error" | "watching", text: string, ...extra: HTMLElement[]): HTMLElement {
+  function stateBlock(
+    kind: "empty" | "skipped" | "error" | "watching",
+    text: string,
+    ...extra: HTMLElement[]
+  ): HTMLElement {
     const block = el("div", `state ${kind}`);
     block.append(el("span", "state-orb"), el("p", "state-text", text), ...extra);
     return block;
@@ -637,7 +658,11 @@ async function mount(): Promise<void> {
         .map((tile) => ({ tile, score: overlap(tile.claim.question, market.question) }))
         .sort((a, b) => b.score - a.score)[0];
       if (!best || best.score === 0) continue;
-      liveMarkets.set(best.tile.claim.id, { marketId: market.marketId, marketUrl: market.marketUrl, title: market.question });
+      liveMarkets.set(best.tile.claim.id, {
+        marketId: market.marketId,
+        marketUrl: market.marketUrl,
+        title: market.question,
+      });
       changed = true;
     }
     if (changed && !sheet && tiles.length > 0) showTiles();
@@ -660,7 +685,13 @@ async function mount(): Promise<void> {
     layout();
     const response = await api<{ positions: Position[] }>("/positions", { wallet: owner });
     if (!response.ok || !response.body) {
-      betsPane.replaceChildren(stateBlock("error", "Couldn't load your bets.", button("Try again", "button", () => void renderBets())));
+      betsPane.replaceChildren(
+        stateBlock(
+          "error",
+          "Couldn't load your bets.",
+          button("Try again", "button", () => void renderBets()),
+        ),
+      );
       layout();
       return;
     }
@@ -673,7 +704,8 @@ async function mount(): Promise<void> {
     }
     // One block per market, with a line per side held.
     const byMarket = new Map<string, Position[]>();
-    for (const position of positions) byMarket.set(position.marketId, [...(byMarket.get(position.marketId) ?? []), position]);
+    for (const position of positions)
+      byMarket.set(position.marketId, [...(byMarket.get(position.marketId) ?? []), position]);
     betsPane.replaceChildren(
       refreshRow(),
       ...[...byMarket.values()].map((held) => {
@@ -760,11 +792,16 @@ async function mount(): Promise<void> {
     const note = el("p", "line status-line", "Preparing your claim\u2026");
     row.append(note);
     layout();
-    const built = await api<{ txBase64: string; claimableFeesUsdc: number }>("/claim/creator-fees/build", { wallet: owner, marketId });
+    const built = await api<{ txBase64: string; claimableFeesUsdc: number }>("/claim/creator-fees/build", {
+      wallet: owner,
+      marketId,
+    });
     if (!built.ok || !built.body) {
       const error = (built.body as ApiError | null)?.error ?? "";
       note.textContent =
-        error === "market_not_graduated" || error === "no_creator_fees" ? "Nothing to claim yet." : (built.body as ApiError | null)?.message ?? "I couldn't prepare the claim just now.";
+        error === "market_not_graduated" || error === "no_creator_fees"
+          ? "Nothing to claim yet."
+          : ((built.body as ApiError | null)?.message ?? "I couldn't prepare the claim just now.");
       layout();
       return;
     }
@@ -774,7 +811,10 @@ async function mount(): Promise<void> {
     layout();
     const signed = await wallet.signTransaction(txBase64);
     if (!signed.ok || !signed.signedTxBase64 || !signed.signature) {
-      note.textContent = !signed.ok && signed.reason === "rejected" ? "Cancelled in your wallet. Nothing was sent." : "Your wallet couldn't sign this.";
+      note.textContent =
+        !signed.ok && signed.reason === "rejected"
+          ? "Cancelled in your wallet. Nothing was sent."
+          : "Your wallet couldn't sign this.";
       return;
     }
     if (!checkSignedTransaction(txBase64, signed.signedTxBase64).ok) {
@@ -787,7 +827,11 @@ async function mount(): Promise<void> {
       return;
     }
     note.textContent = "Sending your claim\u2026";
-    const sent = await api<{ signature: string }>("/claim/send", { signedTxBase64: signed.signedTxBase64, wallet: owner, marketId });
+    const sent = await api<{ signature: string }>("/claim/send", {
+      signedTxBase64: signed.signedTxBase64,
+      wallet: owner,
+      marketId,
+    });
     if (!sent.ok) {
       note.textContent = (sent.body as ApiError | null)?.reason ?? "Solana didn't accept the claim. Nothing was taken.";
       return;
@@ -841,7 +885,10 @@ async function mount(): Promise<void> {
     layout();
     const signed = await wallet.signTransaction(txBase64);
     if (!signed.ok || !signed.signedTxBase64 || !signed.signature) {
-      note.textContent = !signed.ok && signed.reason === "rejected" ? "Cancelled in your wallet. Nothing was sent." : "Your wallet couldn't sign this.";
+      note.textContent =
+        !signed.ok && signed.reason === "rejected"
+          ? "Cancelled in your wallet. Nothing was sent."
+          : "Your wallet couldn't sign this.";
       return;
     }
     const checked = checkSignedTransaction(txBase64, signed.signedTxBase64);
@@ -918,7 +965,11 @@ async function mount(): Promise<void> {
       isVisible: () => !card.hidden && document.visibilityState === "visible",
       back: showTiles,
       created: (market) => {
-        liveMarkets.set(tile.claim.id, { marketId: market.marketId, marketUrl: market.marketUrl, title: tile.claim.question });
+        liveMarkets.set(tile.claim.id, {
+          marketId: market.marketId,
+          marketUrl: market.marketUrl,
+          title: tile.claim.question,
+        });
         pulseOrb();
       },
       sound,
@@ -1035,7 +1086,15 @@ async function mount(): Promise<void> {
     if (!devEvents) return;
     try {
       window.postMessage(
-        { type: "soothia:v1:scan", state: scan.state, chars: scan.read?.chars ?? 0, site: scan.read?.site ?? "", elapsedMs: Date.now() - scanStarted, issues: [...issues], ...extra },
+        {
+          type: "soothia:v1:scan",
+          state: scan.state,
+          chars: scan.read?.chars ?? 0,
+          site: scan.read?.site ?? "",
+          elapsedMs: Date.now() - scanStarted,
+          issues: [...issues],
+          ...extra,
+        },
         "*",
       );
     } catch {
@@ -1044,7 +1103,13 @@ async function mount(): Promise<void> {
   }
   onAudioState(() => renderDebug());
 
-  let createDebug: CreateDebug = { wallet: "\u2013", quote: "\u2013", simulate: "\u2013", signature: "\u2013", register: "\u2013" };
+  let createDebug: CreateDebug = {
+    wallet: "\u2013",
+    quote: "\u2013",
+    simulate: "\u2013",
+    signature: "\u2013",
+    register: "\u2013",
+  };
 
   function setCreateDebug(update: Partial<CreateDebug>): void {
     createDebug = { ...createDebug, ...update };
@@ -1097,7 +1162,14 @@ async function mount(): Promise<void> {
   async function loadSettings(): Promise<void> {
     dryRunToggle.box.checked = true;
     try {
-      const stored = await chrome.storage.local.get([DRY_RUN_KEY, SKIP_CHECKS_KEY, MUTED_KEY, STYLE_KEY, SHOW_DEBUG_KEY, "soothia:devEvents"]);
+      const stored = await chrome.storage.local.get([
+        DRY_RUN_KEY,
+        SKIP_CHECKS_KEY,
+        MUTED_KEY,
+        STYLE_KEY,
+        SHOW_DEBUG_KEY,
+        "soothia:devEvents",
+      ]);
       devEvents = stored["soothia:devEvents"] === true;
       showDebugToggle.box.checked = stored[SHOW_DEBUG_KEY] === true;
       dryRunToggle.box.checked = stored[DRY_RUN_KEY] !== false;
@@ -1206,7 +1278,7 @@ async function mount(): Promise<void> {
       return;
     }
     // Event mode: a sports fixture page has match info instead of prose.
-    const fixture = read.kind === "skip" ? null : safe("fixture", () => findFixture(document, Date.now())) ?? null;
+    const fixture = read.kind === "skip" ? null : (safe("fixture", () => findFixture(document, Date.now())) ?? null);
     if (read.kind !== "page" && !fixture) {
       setScan({ read: read.info, state: `skipped (${read.reason})`, detect: null, path: "none" });
       render({ kind: "skipped" });
@@ -1216,10 +1288,18 @@ async function mount(): Promise<void> {
     const page: PageContext =
       read.kind === "page"
         ? read.page
-        : { url: watchedUrl.split("#")[0], site: location.hostname.replace(/^www\./, ""), title: document.title.slice(0, 300), text: fixture ? fixture.evidence.join("\n") : "" };
+        : {
+            url: watchedUrl.split("#")[0],
+            site: location.hostname.replace(/^www\./, ""),
+            title: document.title.slice(0, 300),
+            text: fixture ? fixture.evidence.join("\n") : "",
+          };
     const fixtureNote = fixture ? describeFixture(fixture) : "";
     setScan({
-      read: read.kind === "page" ? read.info : { site: page.site, chars: page.text.length, preview: fixtureNote.slice(0, 80) },
+      read:
+        read.kind === "page"
+          ? read.info
+          : { site: page.site, chars: page.text.length, preview: fixtureNote.slice(0, 80) },
       state: refresh ? "running (scan again)" : "running",
       detect: null,
       path: fixture && read.kind !== "page" ? "fixture" : "prose",
@@ -1233,7 +1313,9 @@ async function mount(): Promise<void> {
       result = (await chrome.runtime.sendMessage(message)) as DetectResult | undefined;
       if (!result) relayError = "background gave no answer";
     } catch (error) {
-      relayError = /context invalidated/i.test(String((error as Error)?.message)) ? "extension updated; reload this tab" : "background unreachable; reload this tab";
+      relayError = /context invalidated/i.test(String((error as Error)?.message))
+        ? "extension updated; reload this tab"
+        : "background unreachable; reload this tab";
     }
     const remaining = MIN_THINKING_MS - (Date.now() - started);
     if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining));
@@ -1252,7 +1334,12 @@ async function mount(): Promise<void> {
       setScan({ state: "done", detect: result.debug, path: result.tiles.length === 0 ? "none" : path });
       if (result.tiles.length === 0) render({ kind: "empty" });
       else render({ kind: "tiles", tiles: result.tiles.slice(0, 3) });
-      emitScanEvent({ done: "ok", path, tiles: result.tiles.slice(0, 3).map((tile) => tile.claim.question), cached: result.debug.fromClientCache });
+      emitScanEvent({
+        done: "ok",
+        path,
+        tiles: result.tiles.slice(0, 3).map((tile) => tile.claim.question),
+        cached: result.debug.fromClientCache,
+      });
     }
   }
 
@@ -1325,8 +1412,7 @@ async function mount(): Promise<void> {
 
   // ---- Drag ----
 
-  let drag: { pointerId: number; startX: number; startY: number; origin: OrbPosition; moved: boolean } | null =
-    null;
+  let drag: { pointerId: number; startX: number; startY: number; origin: OrbPosition; moved: boolean } | null = null;
   let suppressClick = false;
 
   orb.addEventListener("pointerdown", (event) => {
@@ -1384,7 +1470,14 @@ async function mount(): Promise<void> {
   if (/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) {
     window.addEventListener("message", (event) => {
       if (event.source !== window) return;
-      const data = event.data as { type?: string; scene?: string; mocks?: Record<string, unknown>; tiles?: Tile[]; dryRun?: boolean; selector?: string } | null;
+      const data = event.data as {
+        type?: string;
+        scene?: string;
+        mocks?: Record<string, unknown>;
+        tiles?: Tile[];
+        dryRun?: boolean;
+        selector?: string;
+      } | null;
       if (data?.type !== "soothia:v1:dev-scene" || !data.scene) return;
       // Harness probes: press something inside the closed shadow root, or read its text.
       if (data.scene === "press" && data.selector) {
@@ -1393,12 +1486,22 @@ async function mount(): Promise<void> {
       }
       if (data.scene === "rect") {
         const orbRect = orb.getBoundingClientRect();
-        window.postMessage({ type: "soothia:v1:dev-rect", card: card.getBoundingClientRect().toJSON(), orb: orbRect ? orbRect.toJSON() : null }, "*");
+        window.postMessage(
+          {
+            type: "soothia:v1:dev-rect",
+            card: card.getBoundingClientRect().toJSON(),
+            orb: orbRect ? orbRect.toJSON() : null,
+          },
+          "*",
+        );
         return;
       }
       if (data.scene === "dump") {
         const node = data.selector ? card.querySelector<HTMLElement>(data.selector) : null;
-        window.postMessage({ type: "soothia:v1:dev-dump", text: card.innerText, node: node ? node.outerHTML.slice(0, 300) : null }, "*");
+        window.postMessage(
+          { type: "soothia:v1:dev-dump", text: card.innerText, node: node ? node.outerHTML.slice(0, 300) : null },
+          "*",
+        );
         return;
       }
       if (data.mocks) mockApi = data.mocks;
@@ -1417,20 +1520,77 @@ async function mount(): Promise<void> {
         showTiles();
       };
       switch (data.scene) {
-        case "orb-idle": render({ kind: "watching" }); break;
-        case "orb-thinking": render({ kind: "thinking" }); break;
-        case "orb-found": show(); break;
-        case "orb-success": show(); pulseOrb(); break;
-        case "tiles": show(); setOpen(true); break;
-        case "empty": render({ kind: "empty" }); setOpen(true); break;
-        case "skipped": render({ kind: "skipped" }); setOpen(true); break;
-        case "error": render({ kind: "error", reason: "unavailable" }); setOpen(true); break;
-        case "review": show(); setOpen(true); review(mockTiles[0]); break;
-        case "bet": show(); setOpen(true); openBet({ marketId: "CLQqZ7r6WYC5xNumWrmC7UAkQ1Z6pdCbjJSy7wQu1DgL", title: mockTiles[1].claim.question, yesPrice: 0.5, noPrice: 0.5 }); break;
-        case "success-create": show(); setOpen(true); review(mockTiles[0]); setTimeout(() => sheet?.trigger?.(), 1200); break;
-        case "success-bet": show(); setOpen(true); openBet({ marketId: "CLQqZ7r6WYC5xNumWrmC7UAkQ1Z6pdCbjJSy7wQu1DgL", title: mockTiles[1].claim.question, yesPrice: 0.5, noPrice: 0.5 }); setTimeout(() => sheet?.trigger?.(), 1200); break;
-        case "mybets": show(); setOpen(true); showTab("bets"); break;
-        case "debug": show(); setOpen(true); debug.open = true; break;
+        case "orb-idle":
+          render({ kind: "watching" });
+          break;
+        case "orb-thinking":
+          render({ kind: "thinking" });
+          break;
+        case "orb-found":
+          show();
+          break;
+        case "orb-success":
+          show();
+          pulseOrb();
+          break;
+        case "tiles":
+          show();
+          setOpen(true);
+          break;
+        case "empty":
+          render({ kind: "empty" });
+          setOpen(true);
+          break;
+        case "skipped":
+          render({ kind: "skipped" });
+          setOpen(true);
+          break;
+        case "error":
+          render({ kind: "error", reason: "unavailable" });
+          setOpen(true);
+          break;
+        case "review":
+          show();
+          setOpen(true);
+          review(mockTiles[0]);
+          break;
+        case "bet":
+          show();
+          setOpen(true);
+          openBet({
+            marketId: "CLQqZ7r6WYC5xNumWrmC7UAkQ1Z6pdCbjJSy7wQu1DgL",
+            title: mockTiles[1].claim.question,
+            yesPrice: 0.5,
+            noPrice: 0.5,
+          });
+          break;
+        case "success-create":
+          show();
+          setOpen(true);
+          review(mockTiles[0]);
+          setTimeout(() => sheet?.trigger?.(), 1200);
+          break;
+        case "success-bet":
+          show();
+          setOpen(true);
+          openBet({
+            marketId: "CLQqZ7r6WYC5xNumWrmC7UAkQ1Z6pdCbjJSy7wQu1DgL",
+            title: mockTiles[1].claim.question,
+            yesPrice: 0.5,
+            noPrice: 0.5,
+          });
+          setTimeout(() => sheet?.trigger?.(), 1200);
+          break;
+        case "mybets":
+          show();
+          setOpen(true);
+          showTab("bets");
+          break;
+        case "debug":
+          show();
+          setOpen(true);
+          debug.open = true;
+          break;
       }
     });
   }

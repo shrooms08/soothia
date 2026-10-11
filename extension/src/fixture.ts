@@ -18,21 +18,68 @@ export interface FixtureSignal {
   evidence: string[];
 }
 
-const MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
-const MONTH_RE = "jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?";
+const MONTHS = [
+  "january",
+  "february",
+  "march",
+  "april",
+  "may",
+  "june",
+  "july",
+  "august",
+  "september",
+  "october",
+  "november",
+  "december",
+];
+const MONTH_RE =
+  "jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?";
 const TEAM = "[\\p{L}\\p{N}][\\p{L}\\p{N} .'&-]{0,38}?[\\p{L}\\p{N}.]";
 // Title forms: "A vs B", "A v B", "A - B"; the away side ends at a site suffix (" | ", ":", " - ")
 // or at a page word such as "live", "preview" or "H2H".
-const STOP = "live|h2h|preview|prediction|predictions|team news|match|score|scores|odds|table|line-?ups?|stats|highlights|tickets";
-const TITLE_RE = new RegExp(`^(${TEAM})\\s+(?:vs?\\.?|versus|[-–—])\\s+(${TEAM})(?=\\s*(?:$|[|:–—,(]|\\s-\\s|\\s(?:${STOP})\\b))`, "iu");
-const STARTED_RE = /\b(FT|HT|AET|Pens?|Full[- ]Time|Half[- ]Time|Postponed|Abandoned|Cancelled|Live now|LIVE)\b|\b\d{1,3}'\s*(?:\+\d+)?\b/;
+const STOP =
+  "live|h2h|preview|prediction|predictions|team news|match|score|scores|odds|table|line-?ups?|stats|highlights|tickets";
+const TITLE_RE = new RegExp(
+  `^(${TEAM})\\s+(?:vs?\\.?|versus|[-–—])\\s+(${TEAM})(?=\\s*(?:$|[|:–—,(]|\\s-\\s|\\s(?:${STOP})\\b))`,
+  "iu",
+);
+const STARTED_RE =
+  /\b(FT|HT|AET|Pens?|Full[- ]Time|Half[- ]Time|Postponed|Abandoned|Cancelled|Live now|LIVE)\b|\b\d{1,3}'\s*(?:\+\d+)?\b/;
 // A score between the sides ("1 - 0", "2–1", "1:0"); a clock like 20:00 is not a score.
 const SCORE_RE = /(?:^|\s)\d{1,2}\s*[-–]\s*\d{1,2}(?=\s|$)|(?:^|\s)\d{1,2}:\d(?!\d)/;
 
 const KNOWN_COMPETITIONS = [
-  "Premier League", "LaLiga", "La Liga", "Bundesliga", "Serie A", "Ligue 1", "Champions League", "Europa League", "Conference League",
-  "Eredivisie", "Primeira Liga", "Scottish Premiership", "Championship", "FA Cup", "Copa del Rey", "DFB-Pokal", "Coppa Italia", "MLS",
-  "World Cup", "Euro 2028", "Nations League", "Copa America", "NBA", "NFL", "NHL", "MLB", "ATP", "WTA", "Wimbledon", "US Open", "UFC",
+  "Premier League",
+  "LaLiga",
+  "La Liga",
+  "Bundesliga",
+  "Serie A",
+  "Ligue 1",
+  "Champions League",
+  "Europa League",
+  "Conference League",
+  "Eredivisie",
+  "Primeira Liga",
+  "Scottish Premiership",
+  "Championship",
+  "FA Cup",
+  "Copa del Rey",
+  "DFB-Pokal",
+  "Coppa Italia",
+  "MLS",
+  "World Cup",
+  "Euro 2028",
+  "Nations League",
+  "Copa America",
+  "NBA",
+  "NFL",
+  "NHL",
+  "MLB",
+  "ATP",
+  "WTA",
+  "Wimbledon",
+  "US Open",
+  "UFC",
 ];
 
 export function monthFromName(name: string): number {
@@ -46,7 +93,10 @@ export function dateLabelFor(date: Date): string {
 }
 
 function cleanTeam(text: string): string {
-  return text.replace(/\s+/g, " ").replace(/^[\s\-–—|:]+|[\s\-–—|:]+$/g, "").trim();
+  return text
+    .replace(/\s+/g, " ")
+    .replace(/^[\s\-–—|:]+|[\s\-–—|:]+$/g, "")
+    .trim();
 }
 
 /** Two sides from a title such as "Levante vs Sevilla Live Scores | LiveScore". */
@@ -83,24 +133,45 @@ export function resolveKickoff(text: string, nowMs: number): { date: Date; evide
   let month: number | null = null;
   let year: number | null = null;
   let dateText = "";
-  const dayFirst = new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(${MONTH_RE})\\.?(?:\\s+(\\d{4}))?\\b`, "i").exec(source);
-  const monthFirst = new RegExp(`\\b(${MONTH_RE})\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:,?\\s+(\\d{4}))?\\b`, "i").exec(source);
+  const dayFirst = new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(${MONTH_RE})\\.?(?:\\s+(\\d{4}))?\\b`, "i").exec(
+    source,
+  );
+  const monthFirst = new RegExp(`\\b(${MONTH_RE})\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:,?\\s+(\\d{4}))?\\b`, "i").exec(
+    source,
+  );
   const iso = /\b(\d{4})-(\d{2})-(\d{2})\b/.exec(source);
   if (iso) {
-    year = Number(iso[1]); month = Number(iso[2]) - 1; day = Number(iso[3]); dateText = iso[0];
+    year = Number(iso[1]);
+    month = Number(iso[2]) - 1;
+    day = Number(iso[3]);
+    dateText = iso[0];
   } else if (dayFirst) {
-    day = Number(dayFirst[1]); month = monthFromName(dayFirst[2]); year = dayFirst[3] ? Number(dayFirst[3]) : null; dateText = dayFirst[0];
+    day = Number(dayFirst[1]);
+    month = monthFromName(dayFirst[2]);
+    year = dayFirst[3] ? Number(dayFirst[3]) : null;
+    dateText = dayFirst[0];
   } else if (monthFirst) {
-    month = monthFromName(monthFirst[1]); day = Number(monthFirst[2]); year = monthFirst[3] ? Number(monthFirst[3]) : null; dateText = monthFirst[0];
+    month = monthFromName(monthFirst[1]);
+    day = Number(monthFirst[2]);
+    year = monthFirst[3] ? Number(monthFirst[3]) : null;
+    dateText = monthFirst[0];
   } else if (/\btomorrow\b/i.test(source)) {
-    const t = new Date(nowMs + 86_400_000); day = t.getDate(); month = t.getMonth(); year = t.getFullYear(); dateText = "Tomorrow";
+    const t = new Date(nowMs + 86_400_000);
+    day = t.getDate();
+    month = t.getMonth();
+    year = t.getFullYear();
+    dateText = "Tomorrow";
   } else if (/\btoday\b/i.test(source)) {
-    day = now.getDate(); month = now.getMonth(); year = now.getFullYear(); dateText = "Today";
+    day = now.getDate();
+    month = now.getMonth();
+    year = now.getFullYear();
+    dateText = "Today";
   }
   if (day === null || month === null || month < 0) return null;
   let date = new Date(year ?? now.getFullYear(), month, day, hours, minutes, 0, 0);
   // No year given and the date already passed by more than a day: it means next year.
-  if (year === null && date.getTime() < nowMs - 86_400_000) date = new Date(now.getFullYear() + 1, month, day, hours, minutes, 0, 0);
+  if (year === null && date.getTime() < nowMs - 86_400_000)
+    date = new Date(now.getFullYear() + 1, month, day, hours, minutes, 0, 0);
   if (Number.isNaN(date.getTime())) return null;
   return { date, evidence: `${dateText} ${time[0]}`.trim() };
 }
@@ -131,7 +202,8 @@ interface LdEvent {
   superEvent?: { name?: string } | string;
 }
 
-const nameOf = (value: { name?: string } | string | undefined): string => (typeof value === "string" ? value : value?.name ?? "").trim();
+const nameOf = (value: { name?: string } | string | undefined): string =>
+  (typeof value === "string" ? value : (value?.name ?? "")).trim();
 
 /** A fixture from JSON-LD SportsEvent/Event blocks, when one is scheduled in the future. */
 export function fixtureFromJsonLd(blocks: string[], nowMs: number, url: string): FixtureSignal | null {
@@ -140,7 +212,7 @@ export function fixtureFromJsonLd(blocks: string[], nowMs: number, url: string):
     if (!node || typeof node !== "object") return;
     if (Array.isArray(node)) return node.forEach(collect);
     const item = node as LdEvent & { "@graph"?: unknown };
-    const type = Array.isArray(item["@type"]) ? item["@type"].join(" ") : item["@type"] ?? "";
+    const type = Array.isArray(item["@type"]) ? item["@type"].join(" ") : (item["@type"] ?? "");
     if (/SportsEvent|\bEvent\b/.test(type)) events.push(item);
     if (item["@graph"]) collect(item["@graph"]);
   };
@@ -169,7 +241,15 @@ export function fixtureFromJsonLd(blocks: string[], nowMs: number, url: string):
     const evidence = [event.name ?? `${home} vs ${away}`, `startDate ${event.startDate}`];
     const competition = nameOf(event.superEvent) || competitionIn(`${event.name ?? ""}`, url);
     if (competition) evidence.push(competition);
-    return { home, away, competition, startISO: start.toISOString(), dateLabel: dateLabelFor(start), sourceUrl: url, evidence };
+    return {
+      home,
+      away,
+      competition,
+      startISO: start.toISOString(),
+      dateLabel: dateLabelFor(start),
+      sourceUrl: url,
+      evidence,
+    };
   }
   return null;
 }
@@ -196,7 +276,15 @@ export function fixtureFromSignals(signals: PageSignals, nowMs: number): Fixture
     const competition = competitionIn(`${title} ${header}`, signals.url);
     const evidence = [sides.evidence, kickoff.evidence];
     if (competition) evidence.push(competition);
-    return { home: sides.home, away: sides.away, competition, startISO: kickoff.date.toISOString(), dateLabel: dateLabelFor(kickoff.date), sourceUrl: signals.url, evidence };
+    return {
+      home: sides.home,
+      away: sides.away,
+      competition,
+      startISO: kickoff.date.toISOString(),
+      dateLabel: dateLabelFor(kickoff.date),
+      sourceUrl: signals.url,
+      evidence,
+    };
   }
   return null;
 }
@@ -217,7 +305,8 @@ export function findFixture(doc: Document, nowMs: number): FixtureSignal | null 
     const lower = body.toLowerCase();
     const at = lower.indexOf(sides.home.toLowerCase());
     const other = lower.indexOf(sides.away.toLowerCase(), at >= 0 ? at : 0);
-    if (at >= 0 && other >= 0 && other - at < 400) headerText = body.slice(Math.max(0, at - 60), other + sides.away.length + 120);
+    if (at >= 0 && other >= 0 && other - at < 400)
+      headerText = body.slice(Math.max(0, at - 60), other + sides.away.length + 120);
     else if (at >= 0) headerText = body.slice(Math.max(0, at - 60), at + 260);
   }
   // Explicit <time datetime> near the top of the page beats parsed text.
@@ -228,5 +317,7 @@ export function findFixture(doc: Document, nowMs: number): FixtureSignal | null 
 
 /** "Levante vs Sevilla · 12 Oct 20:00 · LaLiga", for the tile and the debug footer. */
 export function describeFixture(fixture: FixtureSignal): string {
-  return [`${fixture.home} vs ${fixture.away}`, fixture.evidence[1] ?? fixture.dateLabel, fixture.competition].filter(Boolean).join(" · ");
+  return [`${fixture.home} vs ${fixture.away}`, fixture.evidence[1] ?? fixture.dateLabel, fixture.competition]
+    .filter(Boolean)
+    .join(" · ");
 }

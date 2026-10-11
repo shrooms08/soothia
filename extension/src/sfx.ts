@@ -166,11 +166,35 @@ export interface Timbre {
 
 const TIMBRES: Record<Exclude<SfxStyle, "files">, Timbre> = {
   // Plucked, delicate, short, a touch of tine brightness.
-  musicbox: { ratios: [1, 2.76, 5.4, 8.93], gains: [1, 0.42, 0.18, 0.06], partialDecay: [1, 0.55, 0.3, 0.18], attack: 0.004, decay: 0.42, reverb: 0.25, dust: false },
+  musicbox: {
+    ratios: [1, 2.76, 5.4, 8.93],
+    gains: [1, 0.42, 0.18, 0.06],
+    partialDecay: [1, 0.55, 0.3, 0.18],
+    attack: 0.004,
+    decay: 0.42,
+    reverb: 0.25,
+    dust: false,
+  },
   // Brighter, clear bells.
-  celesta: { ratios: [1, 2.76, 5.4, 8.93], gains: [1, 0.55, 0.3, 0.12], partialDecay: [1, 0.6, 0.35, 0.2], attack: 0.008, decay: 0.7, reverb: 0.32, dust: true },
+  celesta: {
+    ratios: [1, 2.76, 5.4, 8.93],
+    gains: [1, 0.55, 0.3, 0.12],
+    partialDecay: [1, 0.6, 0.35, 0.2],
+    attack: 0.008,
+    decay: 0.7,
+    reverb: 0.32,
+    dust: true,
+  },
   // Airy, dreamy, lots of shimmer.
-  chimes: { ratios: [1, 2.76, 5.4, 8.93], gains: [1, 0.5, 0.35, 0.16], partialDecay: [1, 0.7, 0.5, 0.35], attack: 0.012, decay: 1.4, reverb: 0.45, dust: true },
+  chimes: {
+    ratios: [1, 2.76, 5.4, 8.93],
+    gains: [1, 0.5, 0.35, 0.16],
+    partialDecay: [1, 0.7, 0.5, 0.35],
+    attack: 0.012,
+    decay: 1.4,
+    reverb: 0.45,
+    dust: true,
+  },
 };
 
 export interface Note {
@@ -185,7 +209,16 @@ export interface Note {
 }
 
 /** One bell: a few inharmonic sine partials, each with its own envelope. */
-function bell(ctx: BaseAudioContext, out: AudioNode, timbre: Timbre, freq: number, at: number, gain: number, length: number, bright: number): void {
+function bell(
+  ctx: BaseAudioContext,
+  out: AudioNode,
+  timbre: Timbre,
+  freq: number,
+  at: number,
+  gain: number,
+  length: number,
+  bright: number,
+): void {
   const detune = cents();
   const start = Math.max(ctx.currentTime, at + humanSeconds());
   for (const [index, ratio] of timbre.ratios.entries()) {
@@ -218,18 +251,34 @@ function dust(ctx: BaseAudioContext, out: AudioNode, timbre: Timbre, at: number)
 
 const PHRASES: Record<SoundName, Note[]> = {
   // Three notes rising, like a star appearing: G6 C7 E7.
-  found: [{ degree: 3, at: 0 }, { degree: 5, at: 0.09 }, { degree: 7, at: 0.18, gain: 0.8 }],
+  found: [
+    { degree: 3, at: 0 },
+    { degree: 5, at: 0.09 },
+    { degree: 7, at: 0.18, gain: 0.8 },
+  ],
   // One tiny bell: A6.
   open: [{ degree: 4, at: 0, gain: 0.7, length: 0.7 }],
   // C6 D6 E6 G6 A6 C7, then a bright E7 with sparkle.
   marketLive: [
-    { degree: 0, at: 0 }, { degree: 1, at: 0.11 }, { degree: 2, at: 0.22 }, { degree: 3, at: 0.33 },
-    { degree: 4, at: 0.44 }, { degree: 5, at: 0.55, gain: 0.9 }, { degree: 7, at: 0.7, gain: 0.8, length: 1.3 },
+    { degree: 0, at: 0 },
+    { degree: 1, at: 0.11 },
+    { degree: 2, at: 0.22 },
+    { degree: 3, at: 0.33 },
+    { degree: 4, at: 0.44 },
+    { degree: 5, at: 0.55, gain: 0.9 },
+    { degree: 7, at: 0.7, gain: 0.8, length: 1.3 },
   ],
   // Root, major third, fifth: C6 E6 G6, warm.
-  betPlaced: [{ degree: 0, at: 0, bright: 0.5, length: 1.2 }, { degree: 2, at: 0.18, bright: 0.5, length: 1.2 }, { degree: 3, at: 0.36, bright: 0.55, length: 1.5 }],
+  betPlaced: [
+    { degree: 0, at: 0, bright: 0.5, length: 1.2 },
+    { degree: 2, at: 0.18, bright: 0.5, length: 1.2 },
+    { degree: 3, at: 0.36, bright: 0.55, length: 1.5 },
+  ],
   // Two soft bells stepping down, an octave below the main register.
-  softError: [{ degree: 1, at: 0, gain: 0.55, bright: 0.35, length: 1.1 }, { degree: 0, at: 0.28, gain: 0.5, bright: 0.3, length: 1.4 }],
+  softError: [
+    { degree: 1, at: 0, gain: 0.55, bright: 0.35, length: 1.1 },
+    { degree: 0, at: 0.28, gain: 0.5, bright: 0.3, length: 1.4 },
+  ],
 };
 
 const OCTAVE: Partial<Record<SoundName, number>> = { softError: 0.5 };
@@ -249,7 +298,16 @@ function synth(ctx: BaseAudioContext, name: SoundName, timbre: Timbre, into: Aud
   const octave = OCTAVE[name] ?? 1;
   let end = 0;
   for (const note of PHRASES[name]) {
-    bell(ctx, out, timbre, pitch(note.degree) * octave, now + note.at, (note.gain ?? 0.6) * 0.5, note.length ?? 1, note.bright ?? 1);
+    bell(
+      ctx,
+      out,
+      timbre,
+      pitch(note.degree) * octave,
+      now + note.at,
+      (note.gain ?? 0.6) * 0.5,
+      note.length ?? 1,
+      note.bright ?? 1,
+    );
     end = Math.max(end, note.at);
   }
   if (timbre.dust && (name === "found" || name === "marketLive")) dust(ctx, out, timbre, now + end);
@@ -261,7 +319,9 @@ const fileBuffers = new Map<SoundName, AudioBuffer | null>();
 let filesAvailable: boolean | null = null;
 
 function fileUrl(name: SoundName, ext: string): string {
-  return typeof chrome !== "undefined" && chrome.runtime?.getURL ? chrome.runtime.getURL(`sfx/${name}.${ext}`) : `sfx/${name}.${ext}`;
+  return typeof chrome !== "undefined" && chrome.runtime?.getURL
+    ? chrome.runtime.getURL(`sfx/${name}.${ext}`)
+    : `sfx/${name}.${ext}`;
 }
 
 /**
@@ -272,8 +332,7 @@ export async function filesStyleAvailable(): Promise<boolean> {
   if (filesAvailable !== null) return filesAvailable;
   filesAvailable = false;
   const runtime = (typeof chrome !== "undefined" ? chrome.runtime : undefined) as
-    | { getPackageDirectoryEntry?: (callback: (root: FileSystemDirectoryEntry) => void) => void }
-    | undefined;
+    { getPackageDirectoryEntry?: (callback: (root: FileSystemDirectoryEntry) => void) => void } | undefined;
   if (!runtime?.getPackageDirectoryEntry) return false;
   const root = await new Promise<FileSystemDirectoryEntry | null>((resolve) => {
     try {
@@ -284,7 +343,14 @@ export async function filesStyleAvailable(): Promise<boolean> {
   });
   if (!root) return false;
   for (const ext of ["mp3", "wav"]) {
-    const found = await new Promise<boolean>((resolve) => root.getFile(`sfx/open.${ext}`, {}, () => resolve(true), () => resolve(false)));
+    const found = await new Promise<boolean>((resolve) =>
+      root.getFile(
+        `sfx/open.${ext}`,
+        {},
+        () => resolve(true),
+        () => resolve(false),
+      ),
+    );
     if (found) {
       filesAvailable = true;
       break;

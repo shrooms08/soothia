@@ -15,9 +15,8 @@ export async function assembleV0(
   feePayer: string,
   recentBlockhash: string,
 ): Promise<string> {
-  const { PublicKey, TransactionInstruction, TransactionMessage, VersionedTransaction } = await import(
-    "@solana/web3.js"
-  );
+  const { PublicKey, TransactionInstruction, TransactionMessage, VersionedTransaction } =
+    await import("@solana/web3.js");
   const message = new TransactionMessage({
     payerKey: new PublicKey(feePayer),
     recentBlockhash,

@@ -19,12 +19,12 @@ Read on 2026-10-10 from the Wallet Standard packages (`@wallet-standard/base` 1.
 
 ## In-app browser deep links (verified from official docs)
 
-| Wallet | Open a page in the wallet's browser | Source |
-| --- | --- | --- |
-| Phantom | `https://phantom.com/ul/browse/<url-encoded page>?ref=<url-encoded app>` | docs.phantom.com › Deeplinks › Other methods › Browse |
-| Solflare | `https://solflare.com/ul/v1/browse/<url-encoded page>?ref=<url-encoded app>` | docs.solflare.com › Deeplinks › Other methods › Browse |
-| Backpack | `https://backpack.app/ul/v1/browse/<url-encoded page>?ref=<url-encoded app>` | docs.backpack.app › Deeplinks › Other methods › Browse |
-| Jupiter Mobile | **none documented.** Jupiter's FAQ describes the in-app browser (globe icon, search for the dapp) but publishes no link scheme. We do not guess: the share page offers "Copy link" with the hint to paste it into the wallet's browser. | docs.jup.ag › Mobile › FAQ |
+| Wallet         | Open a page in the wallet's browser                                                                                                                                                                                                     | Source                                                 |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| Phantom        | `https://phantom.com/ul/browse/<url-encoded page>?ref=<url-encoded app>`                                                                                                                                                                | docs.phantom.com › Deeplinks › Other methods › Browse  |
+| Solflare       | `https://solflare.com/ul/v1/browse/<url-encoded page>?ref=<url-encoded app>`                                                                                                                                                            | docs.solflare.com › Deeplinks › Other methods › Browse |
+| Backpack       | `https://backpack.app/ul/v1/browse/<url-encoded page>?ref=<url-encoded app>`                                                                                                                                                            | docs.backpack.app › Deeplinks › Other methods › Browse |
+| Jupiter Mobile | **none documented.** Jupiter's FAQ describes the in-app browser (globe icon, search for the dapp) but publishes no link scheme. We do not guess: the share page offers "Copy link" with the hint to paste it into the wallet's browser. | docs.jup.ag › Mobile › FAQ                             |
 
 All three documented links take the target page and the referrer URL-encoded, work before any connect session, and "must either be handled by an app or clicked on by an end user" (not pasted into a mobile browser's address bar). The share page carries the chosen side in the page URL (`?side=yes|no`) so the wallet's browser opens with it preselected.
 

@@ -114,13 +114,21 @@ export async function handleBuyQuote(request: Request, env: Env): Promise<Respon
   if (!amountUsdc) {
     return json(
       request,
-      { error: "bad_amount", message: `Bets are between ${MIN_BUY_USDC.toFixed(2)} and ${MAX_BUY_USDC.toFixed(2)} USDC.` },
+      {
+        error: "bad_amount",
+        message: `Bets are between ${MIN_BUY_USDC.toFixed(2)} and ${MAX_BUY_USDC.toFixed(2)} USDC.`,
+      },
       400,
     );
   }
 
   // Spaced and retried on Panta's transient errors (quotes.ts).
-  const result = await quoteWithRetry(quoteDeps(env), { wallet: body.wallet, marketId: body.marketId, side, amountUsdc });
+  const result = await quoteWithRetry(quoteDeps(env), {
+    wallet: body.wallet,
+    marketId: body.marketId,
+    side,
+    amountUsdc,
+  });
   if (!result.ok) return pantaFailure(request, result);
   const quote = result.data;
 
@@ -195,7 +203,11 @@ export async function handleBuyBuild(request: Request, env: Env): Promise<Respon
   }
   const bytes = base64Bytes(assembled.txBase64);
   if (bytes > MAX_BUILT_TRANSACTION_BYTES) {
-    return json(request, { error: "transaction_too_large", message: "This order does not fit in one transaction.", bytes }, 400);
+    return json(
+      request,
+      { error: "transaction_too_large", message: "This order does not fit in one transaction.", bytes },
+      400,
+    );
   }
 
   const withOrder: BuyRecord = { ...record, orderId: build.orderId };
@@ -341,7 +353,8 @@ export async function handleBuySend(request: Request, env: Env, ctx: ExecutionCo
 
 export async function handleBuyStatus(request: Request, env: Env): Promise<Response> {
   const body = await readJsonObject(request);
-  if (!body || !isSignature(body.signature) || !isQuoteId(body.orderId)) return json(request, { error: "bad_request" }, 400);
+  if (!body || !isSignature(body.signature) || !isQuoteId(body.orderId))
+    return json(request, { error: "bad_request" }, 400);
   const record = await loadRecord(env, body.orderId);
   if (!record?.orderId) return json(request, { error: "unknown_order" }, 404);
   try {
@@ -420,7 +433,12 @@ interface MarketDetail {
 }
 
 /** YES or NO for a resolved market: Panta pins yesPrice to 1 or 0 and marks the price source. */
-export function resolvedOutcomeOf(row: { resolved?: boolean; phase?: string; priceSource?: string; yesPrice?: string | null }): "YES" | "NO" | null {
+export function resolvedOutcomeOf(row: {
+  resolved?: boolean;
+  phase?: string;
+  priceSource?: string;
+  yesPrice?: string | null;
+}): "YES" | "NO" | null {
   const resolved = row.resolved === true || row.phase === "resolved" || row.priceSource === "resolved_outcome";
   if (!resolved || row.yesPrice == null) return null;
   return Number(row.yesPrice) >= 0.5 ? "YES" : "NO";
@@ -477,11 +495,14 @@ export async function marketBrief(env: Env, marketId: string): Promise<MarketBri
     // Panta returns null prices when its RPC is unavailable; keep the last ones seen.
     yesPrice: price(detail.yesPrice) ?? cached?.yesPrice ?? null,
     noPrice: price(detail.noPrice) ?? cached?.noPrice ?? null,
-    endTime: typeof detail.endTime === "number" ? new Date(detail.endTime * 1000).toISOString() : cached?.endTime ?? null,
+    endTime:
+      typeof detail.endTime === "number" ? new Date(detail.endTime * 1000).toISOString() : (cached?.endTime ?? null),
     volumeUsdc: price(detail.totalVolumeUsdc ?? detail.volumeUsdc) ?? cached?.volumeUsdc ?? null,
     resolvedOutcome: resolvedOutcomeOf(detail) ?? cached?.resolvedOutcome ?? null,
     primaryPhaseEnd:
-      typeof detail.primaryPhaseEndTime === "number" ? new Date(detail.primaryPhaseEndTime * 1000).toISOString() : cached?.primaryPhaseEnd ?? null,
+      typeof detail.primaryPhaseEndTime === "number"
+        ? new Date(detail.primaryPhaseEndTime * 1000).toISOString()
+        : (cached?.primaryPhaseEnd ?? null),
     liquidity: liquidityFrom(detail) ?? cached?.liquidity ?? null,
   };
   // Pool figures move with every trade, so this cache is short; a partial row (Panta's RPC
@@ -552,7 +573,8 @@ interface PantaClaimBuild {
 
 export async function handleClaimBuild(request: Request, env: Env): Promise<Response> {
   const body = await readJsonObject(request);
-  if (!body || !isAddress(body.wallet) || !isAddress(body.marketId)) return json(request, { error: "bad_request" }, 400);
+  if (!body || !isAddress(body.wallet) || !isAddress(body.marketId))
+    return json(request, { error: "bad_request" }, 400);
   const result = await pantaPostWithRetry<PantaClaimBuild>(env, "/claim/build/", {
     wallet: body.wallet,
     marketId: body.marketId,
@@ -641,7 +663,8 @@ interface PantaCreatorFeesBuild {
  */
 export async function handleCreatorFeesBuild(request: Request, env: Env): Promise<Response> {
   const body = await readJsonObject(request);
-  if (!body || !isAddress(body.wallet) || !isAddress(body.marketId)) return json(request, { error: "bad_request" }, 400);
+  if (!body || !isAddress(body.wallet) || !isAddress(body.marketId))
+    return json(request, { error: "bad_request" }, 400);
   const result = await pantaPostWithRetry<PantaCreatorFeesBuild>(env, "/claim/creator-fees/build/", {
     wallet: body.wallet,
     marketId: body.marketId,

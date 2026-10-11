@@ -31,6 +31,10 @@ export async function handleBalances(request: Request, env: Env): Promise<Respon
     return json(request, { sol: balance.value / LAMPORTS_PER_SOL, usdc });
   } catch (error) {
     const misconfigured = error instanceof RpcError && error.message === "rpc_not_configured";
-    return json(request, { error: misconfigured ? "proxy_misconfigured" : "rpc_unavailable" }, misconfigured ? 500 : 502);
+    return json(
+      request,
+      { error: misconfigured ? "proxy_misconfigured" : "rpc_unavailable" },
+      misconfigured ? 500 : 502,
+    );
   }
 }

@@ -36,13 +36,23 @@ const SEARCH_HOSTS =
   /(^|\.)(google\.[a-z.]{2,8}|bing\.com|duckduckgo\.com|search\.yahoo\.com|yahoo\.com\/search|yandex\.(com|ru)|baidu\.com|ecosia\.org|search\.brave\.com|startpage\.com|qwant\.com|kagi\.com|ask\.com|perplexity\.ai)$/i;
 
 /** Why a URL is never read, or null when it may be an article. Pure, so it is unit-tested. */
-export function skipReason(url: { protocol: string; hostname: string; pathname: string }, contentType = "text/html"): string | null {
+export function skipReason(
+  url: { protocol: string; hostname: string; pathname: string },
+  contentType = "text/html",
+): string | null {
   if (url.protocol !== "http:" && url.protocol !== "https:") return "local or non-web page";
   const host = url.hostname.toLowerCase();
-  if (host === "localhost" || host.endsWith(".localhost") || host === "0.0.0.0" || host === "[::1]" || /^127\./.test(host)) {
+  if (
+    host === "localhost" ||
+    host.endsWith(".localhost") ||
+    host === "0.0.0.0" ||
+    host === "[::1]" ||
+    /^127\./.test(host)
+  ) {
     return "local or non-web page";
   }
-  if (SEARCH_HOSTS.test(host) || (host.endsWith("yahoo.com") && /^\/search/.test(url.pathname))) return "search results";
+  if (SEARCH_HOSTS.test(host) || (host.endsWith("yahoo.com") && /^\/search/.test(url.pathname)))
+    return "search results";
   if (/\.pdf($|[?#])/i.test(url.pathname) || /pdf/i.test(contentType)) return "PDF";
   if (!/html|xhtml/i.test(contentType)) return `not a web page (${contentType})`;
   return null;
@@ -171,9 +181,21 @@ function articleParagraphs(): string[] {
 }
 
 const CONSENT_SELECTOR = [
-  "#onetrust-banner-sdk", "#onetrust-consent-sdk", ".sp_message_container", '[id^="sp_message"]', "#CybotCookiebotDialog",
-  "#didomi-host", ".fc-consent-root", ".qc-cmp2-container", "#usercentrics-root", '[id*="consent" i]', '[class*="consent" i]',
-  '[id*="cookie-banner" i]', '[class*="cookie-banner" i]', '[class*="cookie-wall" i]', '[aria-label*="consent" i]',
+  "#onetrust-banner-sdk",
+  "#onetrust-consent-sdk",
+  ".sp_message_container",
+  '[id^="sp_message"]',
+  "#CybotCookiebotDialog",
+  "#didomi-host",
+  ".fc-consent-root",
+  ".qc-cmp2-container",
+  "#usercentrics-root",
+  '[id*="consent" i]',
+  '[class*="consent" i]',
+  '[id*="cookie-banner" i]',
+  '[class*="cookie-banner" i]',
+  '[class*="cookie-wall" i]',
+  '[aria-label*="consent" i]',
 ].join(",");
 
 /** A consent or cookie wall covering much of the viewport, which usually means the article is not on screen yet. */
@@ -190,13 +212,32 @@ export function consentWallVisible(): boolean {
 
 // Where major news and sports sites keep the story. Tried in order; the first with enough text wins.
 const BODY_SELECTORS = [
-  '[itemprop="articleBody"]', ".sdc-article-body", ".article__body", ".article-body", ".story-body", "#article-body",
-  ".article__content", ".ArticleBody", ".entry-content", ".post-content", '[data-testid="article-body"]', "article", 'main, [role="main"]',
+  '[itemprop="articleBody"]',
+  ".sdc-article-body",
+  ".article__body",
+  ".article-body",
+  ".story-body",
+  "#article-body",
+  ".article__content",
+  ".ArticleBody",
+  ".entry-content",
+  ".post-content",
+  '[data-testid="article-body"]',
+  "article",
+  'main, [role="main"]',
 ];
 
 const STANDFIRST_SELECTORS = [
-  '[data-component="standfirst"]', ".standfirst", ".article__intro", ".sdc-article-header__sub-title", ".article-subtitle",
-  ".subheadline", ".dek", ".summary", 'meta[name="description"]', 'meta[property="og:description"]',
+  '[data-component="standfirst"]',
+  ".standfirst",
+  ".article__intro",
+  ".sdc-article-header__sub-title",
+  ".article-subtitle",
+  ".subheadline",
+  ".dek",
+  ".summary",
+  'meta[name="description"]',
+  'meta[property="og:description"]',
 ];
 
 function standfirst(): string {

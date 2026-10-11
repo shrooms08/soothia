@@ -3,7 +3,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { skipReason } from "../src/reader";
 
-const at = (href: string) => { const u = new URL(href); return { protocol: u.protocol, hostname: u.hostname, pathname: u.pathname }; };
+const at = (href: string) => {
+  const u = new URL(href);
+  return { protocol: u.protocol, hostname: u.hostname, pathname: u.pathname };
+};
 
 test("search engines, local, extension and PDF pages are skipped with a reason", () => {
   assert.equal(skipReason(at("https://www.google.com/search?q=futbol24")), "search results");
@@ -28,5 +31,6 @@ test("articles on news, sport and X pages are read", () => {
     "https://www.espn.com/soccer/story/_/id/50126359/x",
     "https://x.com/intangiblecoins/status/2002741524950344005",
     "https://www.google.com.au.example.org/news",
-  ]) assert.equal(skipReason(at(href)), null, href);
+  ])
+    assert.equal(skipReason(at(href)), null, href);
 });

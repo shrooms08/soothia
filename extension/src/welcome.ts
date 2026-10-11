@@ -76,7 +76,9 @@ function go(target: number): void {
 let offscreenMusic = false;
 
 function musicMessage(action: MusicAction): Promise<MusicStatus | undefined> {
-  return chrome.runtime.sendMessage({ type: MUSIC_CONTROL, action }).catch(() => undefined) as Promise<MusicStatus | undefined>;
+  return chrome.runtime.sendMessage({ type: MUSIC_CONTROL, action }).catch(() => undefined) as Promise<
+    MusicStatus | undefined
+  >;
 }
 
 function showHint(_reason: string): void {

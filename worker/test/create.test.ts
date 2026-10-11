@@ -48,12 +48,26 @@ test("the built-transaction cap is 1,150 bytes", () => {
 
 test("every category has an authoritative source, listed first, with the page second", () => {
   assert.deepEqual(fitDraft(draft)!.sourcesOfTruth, ["https://www.coingecko.com/en/coins/bitcoin", draft.pageUrl]);
-  assert.equal(authorityFor({ ...draft, question: "Will FARTCOIN trade above $2 by December 31, 2026?" }).url, "https://www.coingecko.com");
-  const sports = { ...draft, category: "sports" as const, resolutionType: "sports_result" as const, question: "Will Arsenal beat Liverpool on October 10, 2026?" };
+  assert.equal(
+    authorityFor({ ...draft, question: "Will FARTCOIN trade above $2 by December 31, 2026?" }).url,
+    "https://www.coingecko.com",
+  );
+  const sports = {
+    ...draft,
+    category: "sports" as const,
+    resolutionType: "sports_result" as const,
+    question: "Will Arsenal beat Liverpool on October 10, 2026?",
+  };
   assert.equal(authorityFor(sports).url, "https://www.premierleague.com");
-  assert.equal(authorityFor({ ...sports, question: "Will Wrexham win promotion by May 2, 2027?" }).url, "https://www.espn.com");
+  assert.equal(
+    authorityFor({ ...sports, question: "Will Wrexham win promotion by May 2, 2027?" }).url,
+    "https://www.espn.com",
+  );
   for (const category of ["politics", "entertainment", "finance", "science", "world", "other"] as const) {
-    assert.equal(authorityFor({ ...draft, category, resolutionType: "official_outcome" }).url, "https://www.reuters.com");
+    assert.equal(
+      authorityFor({ ...draft, category, resolutionType: "official_outcome" }).url,
+      "https://www.reuters.com",
+    );
   }
 });
 
@@ -61,9 +75,18 @@ test("the rule names the authoritative source", () => {
   assert.equal(deadlineUtc(draft.endTime), "2026-12-31 23:59 UTC");
   const rule = fitDraft(draft, 2)!.resolutionRule;
   assert.equal(rule, "YES if this happens by 2026-12-31 23:59 UTC, per CoinGecko's BTC/USD price. Otherwise NO.");
-  const sports = { ...draft, category: "sports" as const, resolutionType: "sports_result" as const, question: "Will Arsenal beat Liverpool on October 10, 2026?" };
+  const sports = {
+    ...draft,
+    category: "sports" as const,
+    resolutionType: "sports_result" as const,
+    question: "Will Arsenal beat Liverpool on October 10, 2026?",
+  };
   assert.ok(fitDraft(sports)!.resolutionRule.includes("per the official result from the Premier League"));
-  assert.ok(fitDraft({ ...draft, category: "politics", resolutionType: "official_outcome" })!.resolutionRule.includes("as reported by Reuters"));
+  assert.ok(
+    fitDraft({ ...draft, category: "politics", resolutionType: "official_outcome" })!.resolutionRule.includes(
+      "as reported by Reuters",
+    ),
+  );
 });
 
 test("non-price crypto questions resolve on Reuters, price questions on CoinGecko", () => {
@@ -93,7 +116,10 @@ test("breaking and standard drafts get the right start time and limits", () => {
   assert.ok(startTimeFor({ ...draft, eventInProgress: true }, nowSec) < nowSec);
   // Standard markets keep the 1-hour minimum and can wait weeks.
   assert.equal(startTimeFor({ ...draft, marketType: "standard", buyWindowHours: 1 }, nowSec), nowSec + 3600 + 300);
-  assert.equal(startTimeFor({ ...draft, marketType: "standard", buyWindowHours: 24 * 14 }, nowSec), nowSec + 14 * 24 * 3600 + 300);
+  assert.equal(
+    startTimeFor({ ...draft, marketType: "standard", buyWindowHours: 24 * 14 }, nowSec),
+    nowSec + 14 * 24 * 3600 + 300,
+  );
 
   const field = (change: object): string => {
     const result = validateDraft({ ...draft, ...change }, NOW);
@@ -156,7 +182,8 @@ const LONG: MarketDraft = {
     "Will the United States Federal Reserve announce a cut of at least fifty basis points to the federal funds target range at or before its scheduled December 2026 meeting, according to its statement?",
   category: "finance",
   endTime: "2026-12-16T23:59:59.000Z",
-  pageUrl: "https://www.example-news.com/markets/2026/10/05/fed-officials-signal-larger-cuts-are-on-the-table-as-labour-market-cools",
+  pageUrl:
+    "https://www.example-news.com/markets/2026/10/05/fed-officials-signal-larger-cuts-are-on-the-table-as-labour-market-cools",
   resolutionType: "official_outcome",
   marketType: "breaking",
   buyWindowHours: 48,
@@ -177,7 +204,11 @@ test("a long draft drops the page link, keeps its authoritative source, and land
   assert.deepEqual(fitted.adjustments, ["page_link_dropped"]);
   assert.deepEqual(fitted.sourcesOfTruth, ["https://www.reuters.com"]);
   assert.equal(fitted.question, LONG.question);
-  assert.ok(fitted.resolutionRule.startsWith("YES if this happens by 2026-12-16 23:59 UTC, as reported by Reuters. Otherwise NO."));
+  assert.ok(
+    fitted.resolutionRule.startsWith(
+      "YES if this happens by 2026-12-16 23:59 UTC, as reported by Reuters. Otherwise NO.",
+    ),
+  );
   assert.ok(fitted.predictedBytes <= CAP, `predicted ${fitted.predictedBytes}`);
   assert.equal(
     fitted.predictedBytes,
@@ -208,7 +239,8 @@ test("a crypto draft keeps a coingecko.com source through every shrink step, und
     // The longest plain question with a long page URL.
     {
       ...draft,
-      question: `Will Bitcoin ${"trade above its previous record high on every major exchange ".repeat(3)}`.slice(0, 199) + "?",
+      question:
+        `Will Bitcoin ${"trade above its previous record high on every major exchange ".repeat(3)}`.slice(0, 199) + "?",
       pageUrl: `https://www.example-news.com/${"p".repeat(90)}`,
     },
     // Worst case: a question that needs every step.
@@ -250,7 +282,10 @@ test("shrinking stops at the first step that fits, and can be forced further", (
 
 test("trimming a question never cuts a word", () => {
   assert.equal(trimQuestion("Will it rain?", 150), "Will it rain?");
-  assert.equal(trimQuestion("Will Bitcoin trade above one hundred thousand dollars?", 30), "Will Bitcoin trade above one?");
+  assert.equal(
+    trimQuestion("Will Bitcoin trade above one hundred thousand dollars?", 30),
+    "Will Bitcoin trade above one?",
+  );
   assert.equal(trimQuestion("Will prices rise, fall, or stay flat this year?", 24), "Will prices rise, fall?");
 });
 
@@ -309,7 +344,12 @@ test("bet amounts are two-decimal strings between 1.00 and 100.00 USDC", async (
 
 test("/stats counts only processed buys, sums base units, and dedupes wallets across pages", async () => {
   const { aggregateTrades } = await import("../src/stats");
-  const page1 = Array.from({ length: 200 }, (_, i) => ({ wallet: `w${i % 150}`, kind: "buy", status: "processed", amountUsdcBase: "1000000" }));
+  const page1 = Array.from({ length: 200 }, (_, i) => ({
+    wallet: `w${i % 150}`,
+    kind: "buy",
+    status: "processed",
+    amountUsdcBase: "1000000",
+  }));
   const page2 = [
     { wallet: "w1", kind: "buy", status: "processed", amountUsdcBase: "2500000" },
     { wallet: "w2", kind: "claim", status: "processed", amountUsdcBase: "9000000" },
@@ -326,7 +366,11 @@ test("/stats counts only processed buys, sums base units, and dedupes wallets ac
   assert.equal(stats.uniqueWallets, 150);
   assert.equal(stats.complete, true);
   const empty = await aggregateTrades(async () => null);
-  assert.deepEqual(empty, { betsPlaced: 0, volumeUsdc: 0, uniqueWallets: 0, complete: false }, "a failed fetch is marked incomplete, never served as zeros");
+  assert.deepEqual(
+    empty,
+    { betsPlaced: 0, volumeUsdc: 0, uniqueWallets: 0, complete: false },
+    "a failed fetch is marked incomplete, never served as zeros",
+  );
 });
 
 test("market liquidity fields come from the detail row, or null when Panta omits them", async () => {
@@ -340,5 +384,12 @@ test("market liquidity fields come from the detail row, or null when Panta omits
     isGraduated: false,
     graduationThreshold: "1000000000",
   })!;
-  assert.deepEqual(live, { totalVolumeUsdc: 6, royaltyBps: 2000, skewBps: 5832, creatorFeesUsdc: 0, isGraduated: false, graduationThresholdUsdc: 1000 });
+  assert.deepEqual(live, {
+    totalVolumeUsdc: 6,
+    royaltyBps: 2000,
+    skewBps: 5832,
+    creatorFeesUsdc: 0,
+    isGraduated: false,
+    graduationThresholdUsdc: 1000,
+  });
 });

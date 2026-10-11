@@ -4,7 +4,13 @@
 // Standard wallets sign raw bytes in wallet-bridge.ts and never need this.
 // It never sends anything: signAndSendTransaction is deliberately not used.
 import { VersionedTransaction } from "@solana/web3.js";
-import { SIGNER_READY, WALLET_RPC_REQUEST, WALLET_RPC_RESPONSE, type WalletRpcRequest, type WalletRpcResponse } from "./messages";
+import {
+  SIGNER_READY,
+  WALLET_RPC_REQUEST,
+  WALLET_RPC_RESPONSE,
+  type WalletRpcRequest,
+  type WalletRpcResponse,
+} from "./messages";
 
 const LOADED_FLAG = "__soothiaSignerLoaded";
 const LEGACY_SIGNER_KEY = "__soothiaLegacySigner";
@@ -19,7 +25,8 @@ if (window.top === window && !flags[LOADED_FLAG]) {
   window.addEventListener("message", (event) => {
     if (event.source !== window || event.origin !== window.location.origin) return;
     const request = event.data as WalletRpcRequest | null;
-    if (request?.type !== WALLET_RPC_REQUEST || typeof request.id !== "string" || request.method !== "signerPing") return;
+    if (request?.type !== WALLET_RPC_REQUEST || typeof request.id !== "string" || request.method !== "signerPing")
+      return;
     const response: WalletRpcResponse = { type: WALLET_RPC_RESPONSE, id: request.id, ok: true };
     window.postMessage(response, window.location.origin);
   });

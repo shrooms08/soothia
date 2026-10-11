@@ -76,7 +76,10 @@ function tokens(text: string): Set<string> {
   return out;
 }
 
-function candidatesFor(claim: ClaimInput, markets: { market: MatchableMarket; words: Set<string> }[]): MatchableMarket[] {
+function candidatesFor(
+  claim: ClaimInput,
+  markets: { market: MatchableMarket; words: Set<string> }[],
+): MatchableMarket[] {
   const wanted = tokens(claim.question);
   return markets
     .map(({ market, words }) => ({
@@ -142,7 +145,10 @@ export async function handleMatch(request: Request, env: Env): Promise<Response>
   if (claims.length === 0) return json(request, { matches: [] });
 
   const origin = new URL(request.url).origin;
-  const indexed = matchable(await getCatalog(env, origin), Date.now()).map((market) => ({ market, words: tokens(market.title) }));
+  const indexed = matchable(await getCatalog(env, origin), Date.now()).map((market) => ({
+    market,
+    words: tokens(market.title),
+  }));
   const candidates = new Map(claims.map((claim) => [claim.id, candidatesFor(claim, indexed)]));
   const withCandidates = claims.filter((claim) => candidates.get(claim.id)!.length > 0);
   if (withCandidates.length === 0) return json(request, { matches: none() });
@@ -151,7 +157,10 @@ export async function handleMatch(request: Request, env: Env): Promise<Response>
     .map((claim) => {
       const options = candidates
         .get(claim.id)!
-        .map((market) => `  - marketId ${market.id}: "${market.title}" (closes ${market.endTime}${market.phase === "p2p" ? ", trading between people" : ""})`)
+        .map(
+          (market) =>
+            `  - marketId ${market.id}: "${market.title}" (closes ${market.endTime}${market.phase === "p2p" ? ", trading between people" : ""})`,
+        )
         .join("\n");
       return `Claim ${claim.id}: "${claim.question}" (closes ${claim.endTime})\nCandidates:\n${options}`;
     })

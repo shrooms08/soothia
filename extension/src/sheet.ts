@@ -138,10 +138,16 @@ export function openSheet(host: SheetHost): Sheet {
   // the longest window that fits, else the usual default.
   const kickoffWindow = (): number => {
     const kickoffMs = Date.parse(claim.endTime) - 3 * 3600_000;
-    const fitting = BUY_WINDOW_CHOICES.filter((choice) => choice.hours <= 72 && Date.now() + choice.hours * 3600_000 < kickoffMs);
+    const fitting = BUY_WINDOW_CHOICES.filter(
+      (choice) => choice.hours <= 72 && Date.now() + choice.hours * 3600_000 < kickoffMs,
+    );
     return fitting.length ? fitting[fitting.length - 1].hours : DEFAULT_BUY_WINDOW_HOURS;
   };
-  let buyWindow: number | typeof LIVE_NOW = claim.eventLive ? LIVE_NOW : claim.fromFixture ? kickoffWindow() : DEFAULT_BUY_WINDOW_HOURS;
+  let buyWindow: number | typeof LIVE_NOW = claim.eventLive
+    ? LIVE_NOW
+    : claim.fromFixture
+      ? kickoffWindow()
+      : DEFAULT_BUY_WINDOW_HOURS;
   let address: string | null = null;
   let balances: Balances | null = null;
   let quote: Quote | null = null;
@@ -190,7 +196,8 @@ export function openSheet(host: SheetHost): Sheet {
     breaking: {
       name: "Breaking",
       fee: "20 USDC",
-      blurb: "People can buy YES/NO until the buying window closes, then shares trade between people until it resolves.",
+      blurb:
+        "People can buy YES/NO until the buying window closes, then shares trade between people until it resolves.",
     },
     standard: {
       name: "Standard",
@@ -291,7 +298,10 @@ export function openSheet(host: SheetHost): Sheet {
   );
 
   const header = el("div", "sheet-head");
-  header.append(button("‹ Back", "back", () => host.back()), el("h3", "sheet-title", "Make it a market"));
+  header.append(
+    button("‹ Back", "back", () => host.back()),
+    el("h3", "sheet-title", "Make it a market"),
+  );
 
   // The create button sits in a footer that stays put while the form scrolls.
   const foot = el("div", "sheet-foot");
@@ -339,7 +349,11 @@ export function openSheet(host: SheetHost): Sheet {
     if (current) line.append(el("span", "wallet-name", `${current.name} · `));
     line.append(who);
     text.append(line, el("span", "wallet-holdings", holdings));
-    walletRow.replaceChildren(current ? walletIcon(current) : el("span", "wallet-dot"), text, button("Disconnect", "ghost", () => void disconnect()));
+    walletRow.replaceChildren(
+      current ? walletIcon(current) : el("span", "wallet-dot"),
+      text,
+      button("Disconnect", "ghost", () => void disconnect()),
+    );
   }
 
   function renderFee(): void {
@@ -357,7 +371,12 @@ export function openSheet(host: SheetHost): Sheet {
         row("Panta's fee", amount(breakdown.platformFeeUsdc)),
       );
     } else if (quoting) fee.replaceChildren("Getting the live fee…");
-    else if (quoteError) fee.replaceChildren(quoteError, " ", button("Try again", "link", () => requestQuote(0)));
+    else if (quoteError)
+      fee.replaceChildren(
+        quoteError,
+        " ",
+        button("Try again", "link", () => requestQuote(0)),
+      );
     else fee.replaceChildren("");
   }
 
@@ -427,7 +446,8 @@ export function openSheet(host: SheetHost): Sheet {
       next.adjustments.includes("minimal_rule") ? "shortened the rule" : "",
       next.adjustments.includes("question_trimmed") ? "trimmed the question" : "",
     ].filter(Boolean);
-    const listed = changes.length > 1 ? `${changes.slice(0, -1).join(", ")} and ${changes[changes.length - 1]}` : changes[0];
+    const listed =
+      changes.length > 1 ? `${changes.slice(0, -1).join(", ")} and ${changes[changes.length - 1]}` : changes[0];
     fitNote.textContent = changes.length ? `To fit in one Solana transaction, I ${listed}.` : "";
     ruleText.textContent = next.resolutionRule;
     sources.replaceChildren(
@@ -492,7 +512,9 @@ export function openSheet(host: SheetHost): Sheet {
     } else {
       quote = null;
       quoteError = quoteProblem(response);
-      host.debug({ quote: `failed (${response.status}): ${(response.body as ApiError | null)?.error ?? "no response"}` });
+      host.debug({
+        quote: `failed (${response.status}): ${(response.body as ApiError | null)?.error ?? "no response"}`,
+      });
     }
     render();
     return quote;
@@ -644,7 +666,9 @@ export function openSheet(host: SheetHost): Sheet {
       });
       if (!simulation?.ok && !lax) {
         host.sound?.("softError");
-        setStatus(simulation?.reason ?? "I couldn't test this transaction, so nothing was sent. Try again in a moment.");
+        setStatus(
+          simulation?.reason ?? "I couldn't test this transaction, so nothing was sent. Try again in a moment.",
+        );
         return;
       }
 

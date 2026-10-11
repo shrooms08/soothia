@@ -19,7 +19,12 @@ export interface EarningsView {
   estimateUsdc: number | null;
 }
 
-const LOCAL_DATE = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+const LOCAL_DATE = new Intl.DateTimeFormat(undefined, {
+  month: "short",
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+});
 
 export function money(value: number): string {
   return `$${value.toFixed(2)}`;
@@ -40,7 +45,10 @@ export function earningsView(primaryPhaseEnd: string | null, liquidity: Liquidit
     return {
       phase: "claimable",
       estimateUsdc: estimate,
-      text: estimate === null ? "The buying window has closed." : `Estimated ~${money(estimate)}. The buying window has closed.`,
+      text:
+        estimate === null
+          ? "The buying window has closed."
+          : `Estimated ~${money(estimate)}. The buying window has closed.`,
     };
   }
   if (estimate === null) {

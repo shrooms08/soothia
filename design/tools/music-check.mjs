@@ -27,10 +27,16 @@ await new Promise((resolve) => setTimeout(resolve, 2500));
 const installed = context.pages().find((page) => page.url().includes("welcome.html"));
 const contexts = await worker.evaluate(() => chrome.runtime.getContexts({ contextTypes: ["OFFSCREEN_DOCUMENT"] }));
 console.log(`offscreen documents after install: ${contexts.length}`);
-const status = await worker.evaluate(() => chrome.runtime.sendMessage({ type: "soothia:v1:music", action: "status" }).catch((e) => ({ error: String(e) })));
+const status = await worker.evaluate(() =>
+  chrome.runtime.sendMessage({ type: "soothia:v1:music", action: "status" }).catch((e) => ({ error: String(e) })),
+);
 console.log(`player status (no gesture): ${JSON.stringify(status)}`);
 if (installed) {
-  const mode = await installed.evaluate(() => ({ offscreen: window.soothiaAudio?.isOffscreenMusic(), playing: window.soothiaAudio?.isMusicPlaying(), hint: !document.getElementById("sound-hint")?.hidden }));
+  const mode = await installed.evaluate(() => ({
+    offscreen: window.soothiaAudio?.isOffscreenMusic(),
+    playing: window.soothiaAudio?.isMusicPlaying(),
+    hint: !document.getElementById("sound-hint")?.hidden,
+  }));
   console.log(`welcome page view: ${JSON.stringify(mode)}`);
   await installed.waitForTimeout(600);
   await installed.screenshot({ path: `${out}welcome-float.png` });

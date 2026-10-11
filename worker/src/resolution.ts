@@ -42,7 +42,11 @@ const COINS: [RegExp, slug: string, ticker: string][] = [
 
 // Official site per league or competition.
 const LEAGUES: [RegExp, name: string, url: string][] = [
-  [/\bpremier league\b|\b(arsenal|liverpool|chelsea|tottenham|spurs|manchester (united|city)|man (utd|city)|newcastle|aston villa|everton|west ham)\b/i, "the Premier League", "https://www.premierleague.com"],
+  [
+    /\bpremier league\b|\b(arsenal|liverpool|chelsea|tottenham|spurs|manchester (united|city)|man (utd|city)|newcastle|aston villa|everton|west ham)\b/i,
+    "the Premier League",
+    "https://www.premierleague.com",
+  ],
   [/\b(champions league|europa league|uefa|euro 20\d\d)\b/i, "UEFA", "https://www.uefa.com"],
   [/\b(world cup|fifa)\b/i, "FIFA", "https://www.fifa.com"],
   [/\b(la ?liga|real madrid|barcelona|atl[eé]tico)\b/i, "LaLiga", "https://www.laliga.com"],
@@ -163,9 +167,7 @@ export function fitDraft(draft: MarketDraft, minLevel = 0): FittedDraft | null {
     const sources = level >= 1 || page === authority.url ? [authority.url] : [authority.url, page];
     const question = level >= 3 ? trimQuestion(draft.question, TRIMMED_QUESTION_MAX_LENGTH) : draft.question;
     const rule =
-      level >= 2
-        ? minimal
-        : `${minimal} ${HOW_DECIDED[draft.resolutionType]}`.slice(0, RESOLUTION_RULE_MAX_LENGTH);
+      level >= 2 ? minimal : `${minimal} ${HOW_DECIDED[draft.resolutionType]}`.slice(0, RESOLUTION_RULE_MAX_LENGTH);
     // A question with one enormous "word" would trim down to nothing useful.
     if (question !== draft.question && question.length < TRIMMED_QUESTION_MAX_LENGTH / 2) continue;
     const textBytes = onchainTextBytes(question, rule, sources);

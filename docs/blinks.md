@@ -14,15 +14,15 @@ Base: `https://api.soothia.fun/api/actions/market/<marketId>`.
 
 From `ACTIONS_CORS_HEADERS` in `@solana/actions`, plus the two version headers Dialect's clients read:
 
-| Header | Value |
-| --- | --- |
-| `Access-Control-Allow-Origin` | `*` |
-| `Access-Control-Allow-Methods` | `GET,POST,PUT,OPTIONS` |
-| `Access-Control-Allow-Headers` | `Content-Type, Authorization, Content-Encoding, Accept-Encoding, X-Accept-Action-Version, X-Accept-Blockchain-Ids` |
-| `Access-Control-Expose-Headers` | `X-Action-Version, X-Blockchain-Ids` |
-| `Content-Type` | `application/json` |
-| `X-Action-Version` | `2.4` (Dialect's guide; Jupiter serves `2.4.2`) |
-| `X-Blockchain-Ids` | `solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp` (CAIP-2, Solana mainnet) |
+| Header                          | Value                                                                                                              |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `Access-Control-Allow-Origin`   | `*`                                                                                                                |
+| `Access-Control-Allow-Methods`  | `GET,POST,PUT,OPTIONS`                                                                                             |
+| `Access-Control-Allow-Headers`  | `Content-Type, Authorization, Content-Encoding, Accept-Encoding, X-Accept-Action-Version, X-Accept-Blockchain-Ids` |
+| `Access-Control-Expose-Headers` | `X-Action-Version, X-Blockchain-Ids`                                                                               |
+| `Content-Type`                  | `application/json`                                                                                                 |
+| `X-Action-Version`              | `2.4` (Dialect's guide; Jupiter serves `2.4.2`)                                                                    |
+| `X-Blockchain-Ids`              | `solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp` (CAIP-2, Solana mainnet)                                                 |
 
 `OPTIONS` answers 204 with the same headers.
 
@@ -52,8 +52,15 @@ Rules we follow: `icon` is an absolute HTTPS URL to a PNG, `label` starts with a
 When the market is not in its primary (buying) phase, or `primaryPhaseEndTime` has passed:
 
 ```json
-{ "type": "action", "icon": "...", "title": "...", "description": "...", "label": "Bet",
-  "disabled": true, "error": { "message": "Betting is closed for this market." } }
+{
+  "type": "action",
+  "icon": "...",
+  "title": "...",
+  "description": "...",
+  "label": "Bet",
+  "disabled": true,
+  "error": { "message": "Betting is closed for this market." }
+}
 ```
 
 (`error` on a GET is non-fatal: the client shows the card, greyed out, with the message.)
@@ -65,9 +72,12 @@ Unknown market: HTTP 404 `{"message":"Market not found."}`.
 The body's `account` is validated as a base58 32-byte key. `side` and `amount` (1.00 to 100.00 USDC, two decimals) come from the query. Flow: Panta primary buy quote → build → assemble a v0 transaction with a fresh blockhash and `account` as fee payer (the extension's buy code) → refuse over 1,150 bytes. Response:
 
 ```json
-{ "type": "transaction", "transaction": "<base64>",
+{
+  "type": "transaction",
+  "transaction": "<base64>",
   "message": "Buying ~1.99 YES shares for $1.02 (incl. 2% fee)",
-  "links": { "next": { "type": "post", "href": "/api/actions/market/<id>/confirm?orderId=<orderId>" } } }
+  "links": { "next": { "type": "post", "href": "/api/actions/market/<id>/confirm?orderId=<orderId>" } }
+}
 ```
 
 The order record `{wallet, marketId, side, amountUsdc, quoteId, orderId, source: "blink"}` is stored in KV under `buy:<orderId>` and `buy:<quoteId>`, the same records the extension uses, so `/buy/status` could also finish it.
@@ -79,8 +89,13 @@ Errors are spec `ActionError` bodies, `{"message": "..."}`, with 400 for validat
 `links.next` of type `post` is the spec's action chaining: after the wallet signs and the client sends the transaction, the client POSTs `NextActionPostRequest` (`account`, `signature`, optional `state`) to that same-origin `href` and renders the `NextAction` it gets back. We check the order belongs to `account`, store the signature, and run the idempotent finish from the extension's buy flow: wait for confirmation (up to 20 s) → Panta `/primaryordersubmit/` → `/primaryorderverify/` → `/trades/` (attribution). Response is a `CompletedAction` (no `links`):
 
 ```json
-{ "type": "completed", "icon": "...", "title": "Bet placed. Good luck.",
-  "description": "$1.00 on YES: <question>.", "label": "Done" }
+{
+  "type": "completed",
+  "icon": "...",
+  "title": "Bet placed. Good luck.",
+  "description": "$1.00 on YES: <question>.",
+  "label": "Done"
+}
 ```
 
 Still pending after 20 s → "Bet sent" and the finish continues in the background. Failed on chain → "Bet failed" with an `error`. Calling the callback again with the same signature repeats the finish (every Panta step is idempotent) and answers the same. A different wallet is 403, a different signature for the same order 409, an unknown order 404.
@@ -92,7 +107,7 @@ If a client does not support chaining it stops after sending: the bet is on-chai
 At the site root, `https://soothia.fun/actions.json`, with the CORS headers above:
 
 ```json
-{ "rules": [ { "pathPattern": "/m/*", "apiPath": "https://api.soothia.fun/api/actions/market/*" } ] }
+{ "rules": [{ "pathPattern": "/m/*", "apiPath": "https://api.soothia.fun/api/actions/market/*" }] }
 ```
 
 A cross-host `apiPath` is what Jupiter does (`jup.ag/actions.json` → `worker.jup.ag`). The proxy also serves its own `/actions.json` mapping `/api/actions/**` to itself.

@@ -86,7 +86,8 @@ let budget: Budget = { day: today(), puts: 0, failures: 0, lastError: null, last
 let loggedFailure = false;
 
 function roll(): Budget {
-  if (budget.day !== today()) budget = { day: today(), puts: 0, failures: 0, lastError: null, lastKey: null, byPrefix: {} };
+  if (budget.day !== today())
+    budget = { day: today(), puts: 0, failures: 0, lastError: null, lastKey: null, byPrefix: {} };
   return budget;
 }
 
@@ -124,7 +125,11 @@ export async function kvBudgetReport(): Promise<Record<string, unknown>> {
   const current = roll();
   // Fold this isolate's count into a per-day edge-cache tally so the number survives isolate churn.
   const key = `kvbudget:${current.day}`;
-  const stored = (await cacheGet<{ puts: number; failures: number; isolates: number }>(key)) ?? { puts: 0, failures: 0, isolates: 0 };
+  const stored = (await cacheGet<{ puts: number; failures: number; isolates: number }>(key)) ?? {
+    puts: 0,
+    failures: 0,
+    isolates: 0,
+  };
   return {
     day: current.day,
     thisIsolate: { puts: current.puts, failures: current.failures, byPrefix: current.byPrefix },
@@ -146,7 +151,15 @@ export function budgetDirty(): boolean {
 export async function reportBudgetToEdge(): Promise<void> {
   const current = roll();
   const key = `kvbudget:${current.day}`;
-  const stored = (await cacheGet<{ puts: number; failures: number; isolates: number }>(key)) ?? { puts: 0, failures: 0, isolates: 0 };
-  await cachePut(key, { puts: stored.puts + current.puts, failures: stored.failures + current.failures, isolates: stored.isolates + 1 }, 36 * 3600);
+  const stored = (await cacheGet<{ puts: number; failures: number; isolates: number }>(key)) ?? {
+    puts: 0,
+    failures: 0,
+    isolates: 0,
+  };
+  await cachePut(
+    key,
+    { puts: stored.puts + current.puts, failures: stored.failures + current.failures, isolates: stored.isolates + 1 },
+    36 * 3600,
+  );
   budget = { ...current, puts: 0, failures: 0 };
 }

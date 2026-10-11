@@ -108,7 +108,10 @@ test("altered instruction data, a removed instruction, or a new blockhash is ref
   assert.equal(!altered.ok && altered.problem, "changed");
   assert.match(!altered.ok ? altered.detail : "", /was altered/);
 
-  const removed = checkSignedTransaction(unsigned, variant((instructions) => instructions.slice(0, -1)));
+  const removed = checkSignedTransaction(
+    unsigned,
+    variant((instructions) => instructions.slice(0, -1)),
+  );
   assert.equal(!removed.ok && removed.problem, "changed");
 
   const reblocked = checkSignedTransaction(
