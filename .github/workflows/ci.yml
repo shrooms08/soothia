@@ -1,0 +1,48 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: typecheck, lint, format, test, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            extension/package-lock.json
+            worker/package-lock.json
+            scripts/package-lock.json
+
+      - name: Install (root, extension, worker, scripts)
+        run: |
+          npm ci
+          npm ci --prefix extension
+          npm ci --prefix worker
+          npm ci --prefix scripts
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Format check
+        run: npm run format:check
+
+      # Unit tests only: nothing here reaches the network, Panta, or a wallet.
+      - name: Test
+        run: npm test
+
+      - name: Build extension (temp dir)
+        run: npm run build

@@ -1,0 +1,21 @@
+# Dependencies and build output
+node_modules/
+dist/
+.wrangler/
+package-lock.json
+
+# Built bundles and binary assets on the site
+site/mwa.js
+site/share.js
+site/share-tx.js
+site/wallets.js
+site/fonts/
+site/img/
+site/screenshots/
+site/soothia-extension.zip
+
+# Shipped as-is
+extension/public/
+worker/public/
+design/applied/
+docs/catalog-check.md
