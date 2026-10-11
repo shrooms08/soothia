@@ -17,7 +17,6 @@ import {
   sleep,
   txState,
   waitForConfirmation,
-  type CreatedMarket,
 } from "./create";
 import { json, readJsonObject, type Env } from "./http";
 import { PANTA_BASE } from "./markets";

@@ -4,10 +4,8 @@
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
-import sharp from "sharp";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
-const applied = `${root}design/applied/`;
 const img = `${root}site/img/`;
 
 // The "How it works" card images are made by design/tools/how-shots.mjs.

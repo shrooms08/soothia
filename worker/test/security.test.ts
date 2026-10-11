@@ -51,7 +51,12 @@ const WALLET = "BCMmCN6PPN4LaZjoWLvufmCaHYZE5PEaU3hHzYqeorne";
 const SYSTEM = "11111111111111111111111111111111";
 
 test("/debug/* does not exist without the admin header, and needs the exact token", async () => {
-  for (const headers of [{}, { "X-Soothia-Admin": "x".repeat(40) }, { "X-Soothia-Admin": TOKEN.slice(0, 39) }]) {
+  const attempts: Record<string, string>[] = [
+    {},
+    { "X-Soothia-Admin": "x".repeat(40) },
+    { "X-Soothia-Admin": TOKEN.slice(0, 39) },
+  ];
+  for (const headers of attempts) {
     const response = await call("/debug/kv-budget", { headers });
     assert.equal(response.status, 404);
     assert.deepEqual(await response.json(), { error: "not_found" });

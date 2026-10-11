@@ -7,6 +7,7 @@ import {
   quoteWithRetry,
   resetQuoteState,
   RETRY_WAITS_MS,
+  type PantaQuote,
   type QuoteDeps,
   type QuoteResult,
 } from "../src/quotes";
@@ -25,7 +26,7 @@ function fake(answers: QuoteResult[]) {
   let clock = 1_000_000;
   const calls: { at: number; wallet: string }[] = [];
   const sleeps: number[] = [];
-  const cache = new Map<string, { data: QuoteResult extends { ok: true; data: infer D } ? D : never; at: number }>();
+  const cache = new Map<string, { data: PantaQuote; at: number }>();
   const deps: QuoteDeps = {
     call: async (request) => {
       calls.push({ at: clock, wallet: request.wallet });

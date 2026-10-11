@@ -21,6 +21,10 @@ import type { BuyRecord, BuyStatus, MarketBrief } from "../src/buy";
 import { encodeBase58 } from "../src/base58";
 
 const MARKET = "CLQqZ7r6WYC5xNumWrmC7UAkQ1Z6pdCbjJSy7wQu1DgL";
+// Response bodies are asserted field by field below; a loose shape keeps those lines readable.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Json = any;
+
 const WALLET = "BCMmCN6PPN4LaZjoWLvufmCaHYZE5PEaU3hHzYqeorne";
 const OTHER = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 const SIGNATURE = encodeBase58(new Uint8Array(64).fill(9));
@@ -36,6 +40,8 @@ const brief: MarketBrief = {
   noPrice: 0.498336103,
   endTime: "2027-01-01T00:00:00.000Z",
   primaryPhaseEnd: new Date(Date.now() + 86_400_000).toISOString(),
+  volumeUsdc: null,
+  resolvedOutcome: null,
   liquidity: null,
 };
 
@@ -124,14 +130,14 @@ test("GET returns the spec shape with four fixed buttons, two custom ones, and t
   const response = await handleActionGet(get(), fake().deps, MARKET);
   assert.equal(response.status, 200);
   for (const [name, value] of Object.entries(ACTION_HEADERS)) assert.equal(response.headers.get(name), value, name);
-  const body = (await response.json()) as any;
+  const body = (await response.json()) as Json;
   assert.equal(body.type, "action");
   assert.equal(body.icon, "https://proxy.test/img/crypto.png");
   assert.equal(body.title, brief.title);
   assert.equal(body.description, "YES 50.2% · NO 49.8% · Breaking market on Panta. Made with Soothia.");
   assert.equal(body.label, "Bet");
   assert.equal(body.disabled, undefined);
-  const labels = body.links.actions.map((a: any) => a.label);
+  const labels = body.links.actions.map((a: { label: string }) => a.label);
   assert.deepEqual(labels, ["YES $1", "YES $5", "NO $1", "NO $5", "Bet YES", "Bet NO"]);
   assert.equal(body.links.actions[0].href, `${BASE}?side=yes&amount=1`);
   assert.equal(body.links.actions[0].type, "transaction");
@@ -141,9 +147,9 @@ test("GET returns the spec shape with four fixed buttons, two custom ones, and t
     { name: "amount", label: "USDC amount (1–100)", type: "number", min: 1, max: 100, required: true },
   ]);
   // ?side=no narrows to that side.
-  const no = (await (await handleActionGet(get(`${BASE}?side=no`), fake().deps, MARKET)).json()) as any;
+  const no = (await (await handleActionGet(get(`${BASE}?side=no`), fake().deps, MARKET)).json()) as Json;
   assert.deepEqual(
-    no.links.actions.map((a: any) => a.label),
+    no.links.actions.map((a: { label: string }) => a.label),
     ["NO $1", "NO $5", "Bet NO"],
   );
 });
@@ -151,11 +157,11 @@ test("GET returns the spec shape with four fixed buttons, two custom ones, and t
 test("GET omits the odds when prices are missing, and is disabled outside the buying window", async () => {
   const noPrices = (await (
     await handleActionGet(get(), fake({}, { ...brief, yesPrice: null, noPrice: null }).deps, MARKET)
-  ).json()) as any;
+  ).json()) as Json;
   assert.equal(noPrices.description, "Breaking market on Panta. Made with Soothia.");
   const closed = (await (
     await handleActionGet(get(), fake({}, { ...brief, phase: "secondary" }).deps, MARKET)
-  ).json()) as any;
+  ).json()) as Json;
   assert.equal(closed.disabled, true);
   assert.equal(closed.error.message, "Betting is closed for this market.");
   assert.equal(closed.links, undefined);
@@ -202,7 +208,7 @@ test("POST quotes, builds, assembles, stores the order and returns a transaction
   const response = await handleActionPost(post(`${BASE}?side=yes&amount=1`, { account: WALLET }), f.deps, MARKET);
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("X-Blockchain-Ids"), "solana:5eykt4UsFv8P8NJdTREpY1vzqKqZKvdp");
-  const body = (await response.json()) as any;
+  const body = (await response.json()) as Json;
   assert.equal(body.type, "transaction");
   assert.equal(body.transaction, TX);
   assert.equal(body.message, "Buying ~2.00 YES shares for $1.02 (incl. 2% fee)");
@@ -258,7 +264,7 @@ test("the confirm callback finishes the order idempotently and returns a complet
     MARKET,
   );
   assert.equal(first.status, 200);
-  const done = (await first.json()) as any;
+  const done = (await first.json()) as Json;
   assert.equal(done.type, "completed");
   assert.equal(done.title, "Bet placed. Good luck.");
   assert.equal(done.description, `$1.00 on YES: ${brief.title}.`);
@@ -272,7 +278,7 @@ test("the confirm callback finishes the order idempotently and returns a complet
       f.deps,
       MARKET,
     )
-  ).json()) as any;
+  ).json()) as Json;
   assert.equal(second.title, "Bet placed. Good luck.");
   assert.deepEqual(f.calls, [`finish ord_1 ${SIGNATURE}`, `finish ord_1 ${SIGNATURE}`]);
   // Another wallet, another signature, or an unknown order are refused.
@@ -324,7 +330,7 @@ test("the confirm callback reports failed and still-pending transactions honestl
       f.deps,
       MARKET,
     )
-  ).json()) as any;
+  ).json()) as Json;
   assert.equal(failed.type, "completed");
   assert.equal(failed.title, "Bet failed");
   assert.equal(failed.error.message, "The transaction failed on Solana. No USDC was taken.");
@@ -339,7 +345,7 @@ test("the confirm callback reports failed and still-pending transactions honestl
       f.deps,
       MARKET,
     )
-  ).json()) as any;
+  ).json()) as Json;
   assert.equal(pending.title, "Bet sent");
   assert.equal(queued, 1);
 });
@@ -349,7 +355,7 @@ test("the quote route prices a side and amount, with a stand-in wallet before co
   const response = await handleActionQuote(get(`${BASE}/quote?side=no&amount=5`), f.deps, MARKET);
   assert.equal(response.status, 200);
   assert.equal(response.headers.get("Access-Control-Allow-Origin"), "*");
-  const body = (await response.json()) as any;
+  const body = (await response.json()) as Json;
   assert.deepEqual(body, {
     side: "no",
     amountUsdc: 5,
@@ -398,7 +404,7 @@ test("tx send broadcasts a signed transaction and turns RPC rejections into plai
   );
   const ok = await handleTxSend(post("https://proxy.test/api/tx/send", { signedTxBase64: signed }), fake().deps);
   assert.equal(ok.status, 200);
-  assert.equal(typeof ((await ok.json()) as any).signature, "string");
+  assert.equal(typeof ((await ok.json()) as Json).signature, "string");
   const unsigned = btoa(String.fromCharCode(1, ...new Uint8Array(64), ...new Uint8Array(200).fill(2)));
   assert.equal(
     (await handleTxSend(post("https://proxy.test/api/tx/send", { signedTxBase64: unsigned }), fake().deps)).status,
@@ -417,7 +423,7 @@ test("tx send broadcasts a signed transaction and turns RPC rejections into plai
   const rejected = await handleTxSend(post("https://proxy.test/api/tx/send", { signedTxBase64: signed }), empty.deps);
   assert.equal(rejected.status, 400);
   assert.equal(
-    ((await rejected.json()) as any).message,
+    ((await rejected.json()) as Json).message,
     "This wallet is empty. It needs SOL for network fees and USDC to pay with.",
   );
   const status = await handleTxStatus(get(`https://proxy.test/api/tx/status?signature=${SIGNATURE}`), fake().deps);
@@ -434,7 +440,7 @@ test("a failed order write never blocks the bet, and the confirm callback can fi
   });
   const built = await handleActionPost(post(`${BASE}?side=yes&amount=1`, { account: WALLET }), f.deps, MARKET);
   assert.equal(built.status, 200);
-  assert.equal(((await built.json()) as any).type, "transaction");
+  assert.equal(((await built.json()) as Json).type, "transaction");
   // Later the client calls back with the signature; there is no stored order, so the chain is the witness.
   const f2 = fake();
   const done = await handleActionConfirm(
@@ -443,7 +449,7 @@ test("a failed order write never blocks the bet, and the confirm callback can fi
     MARKET,
   );
   assert.equal(done.status, 200);
-  const body = (await done.json()) as any;
+  const body = (await done.json()) as Json;
   assert.equal(body.title, "Bet placed. Good luck.");
   assert.deepEqual(f2.calls, ["report"]);
   // A transaction by another wallet, or not touching the market, is refused.

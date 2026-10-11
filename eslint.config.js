@@ -57,7 +57,8 @@ export default tseslint.config(
   },
   {
     // Node tooling: build, packaging, and headless check scripts.
-    files: ["scripts/**/*.{mjs,ts}", "design/tools/**/*.mjs", "extension/build.mjs", "eslint.config.js"],
-    languageOptions: { globals: { ...globals.node, ...globals.browser } },
+    files: ["scripts/**/*.{mjs,ts}", "design/tools/**/*.{mjs,js}", "extension/build.mjs", "eslint.config.js"],
+    // `chrome` appears inside page.evaluate callbacks that run in the headless browser.
+    languageOptions: { globals: { ...globals.node, ...globals.browser, chrome: "readonly" } },
   },
 );

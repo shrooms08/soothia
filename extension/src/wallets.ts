@@ -168,7 +168,7 @@ export async function connect(name: string, options: { silent?: boolean } = {}):
         if (options.silent) return null;
         throw new WalletError("failed", "The wallet returned no account.");
       }
-      selected?.kind === "standard" && selected.off?.();
+      if (selected?.kind === "standard") selected.off?.();
       const events = wallet.features[EVENTS] as EventsFeature | undefined;
       const off = events?.on("change", (properties) => {
         if (!properties.accounts || selected?.kind !== "standard" || selected.wallet !== wallet) return;

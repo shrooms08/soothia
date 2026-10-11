@@ -575,10 +575,6 @@ async function mount(): Promise<void> {
     setTimeout(() => orb.classList.remove("success"), 1300);
   }
 
-  function line(text: string): HTMLElement {
-    return el("p", "line", text);
-  }
-
   /** The centered empty / skipped / error block from the sheet. */
   function stateBlock(
     kind: "empty" | "skipped" | "error" | "watching",

@@ -19,3 +19,6 @@ extension/public/
 worker/public/
 design/applied/
 docs/catalog-check.md
+
+# Test fixtures are captured page markup; their whitespace is part of the test.
+extension/test/fixtures/

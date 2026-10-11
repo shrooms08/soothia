@@ -8,7 +8,6 @@ import { chromium } from "../../scripts/node_modules/playwright/index.mjs";
 const root = fileURLToPath(new URL("../..", import.meta.url));
 const out = `${root}design/applied/`;
 const extension = `${root}extension/dist`;
-const siteUrl = process.argv[2] || "https://soothia.fun/";
 const userDataDir = `${root}design/tools/.chromium-profile`;
 await rm(userDataDir, { recursive: true, force: true });
 const context = await chromium.launchPersistentContext(userDataDir, {
@@ -20,7 +19,6 @@ const context = await chromium.launchPersistentContext(userDataDir, {
 });
 let worker = context.serviceWorkers()[0];
 if (!worker) worker = await context.waitForEvent("serviceworker", { timeout: 15000 });
-const id = new URL(worker.url()).host;
 await new Promise((resolve) => setTimeout(resolve, 2500));
 
 // The install opened welcome.html itself; inspect that tab, untouched.
