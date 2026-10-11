@@ -35,7 +35,13 @@ function fakeContext(): { ctx: BaseAudioContext; ramps: Ramp[]; nodes: number } 
     return self;
   };
   const ctx = { currentTime: 1, createGain: node, createOscillator: node } as unknown as BaseAudioContext;
-  return { ctx, ramps, get nodes() { return nodes; } };
+  return {
+    ctx,
+    ramps,
+    get nodes() {
+      return nodes;
+    },
+  };
 }
 
 test("every sound in every style schedules nodes without errors", () => {
@@ -44,7 +50,9 @@ test("every sound in every style schedules nodes without errors", () => {
       const fake = fakeContext();
       const into = fake.ctx.createGain();
       const send = fake.ctx.createGain();
-      assert.doesNotThrow(() => __synth.synth(fake.ctx, name, __synth.TIMBRES[style as keyof typeof __synth.TIMBRES], into, send));
+      assert.doesNotThrow(() =>
+        __synth.synth(fake.ctx, name, __synth.TIMBRES[style as keyof typeof __synth.TIMBRES], into, send),
+      );
       assert.ok(fake.nodes > 4, `${style}/${name} made ${fake.nodes} nodes`);
     }
   }
@@ -54,7 +62,13 @@ test("no exponential ramp targets zero, every envelope starts at the floor and a
   for (const style of SYNTH_STYLES) {
     for (const name of SOUND_NAMES) {
       const fake = fakeContext();
-      __synth.synth(fake.ctx, name, __synth.TIMBRES[style as keyof typeof __synth.TIMBRES], fake.ctx.createGain(), fake.ctx.createGain());
+      __synth.synth(
+        fake.ctx,
+        name,
+        __synth.TIMBRES[style as keyof typeof __synth.TIMBRES],
+        fake.ctx.createGain(),
+        fake.ctx.createGain(),
+      );
       const exponential = fake.ramps.filter((ramp) => ramp.kind === "exponential");
       assert.ok(exponential.length > 0);
       for (const ramp of exponential) assert.ok(ramp.value > 0, `${style}/${name} ramps to ${ramp.value}`);

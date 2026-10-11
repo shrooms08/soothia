@@ -113,8 +113,7 @@ export interface DetectDebug {
 }
 
 export type DetectResult = { debug: DetectDebug } & (
-  | { status: "ok"; tiles: Tile[] }
-  | { status: "error"; reason: "limit" | "unavailable" }
+  { status: "ok"; tiles: Tile[] } | { status: "error"; reason: "limit" | "unavailable" }
 );
 
 // ---- Wallet bridge (isolated world <-> MAIN world, via window.postMessage) ----
@@ -137,7 +136,14 @@ export interface WalletRpcRequest {
 }
 
 export type WalletRpcOutcome =
-  | { ok: true; publicKey?: string | null; wallet?: WalletInfo | null; wallets?: WalletInfo[]; signedTxBase64?: string; signature?: string }
+  | {
+      ok: true;
+      publicKey?: string | null;
+      wallet?: WalletInfo | null;
+      wallets?: WalletInfo[];
+      signedTxBase64?: string;
+      signature?: string;
+    }
   // The user said no in their wallet. A normal outcome, not a failure.
   | { ok: false; reason: "rejected" }
   // A legacy provider needs the web3.js signer bundle before it can sign.

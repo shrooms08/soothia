@@ -4,8 +4,10 @@ import { build } from "vite";
 import { cp, rm } from "node:fs/promises";
 
 const entries = ["background", "content", "wallet-bridge", "wallet-sign", "nav-hook", "welcome", "offscreen"];
+// CI builds into a temp dir (SOOTHIA_OUT_DIR) so the checked-in zip is never touched by a check.
+const outDir = process.env.SOOTHIA_OUT_DIR ?? "dist";
 
-await rm("dist", { recursive: true, force: true });
+await rm(outDir, { recursive: true, force: true });
 
 for (const name of entries) {
   await build({
@@ -13,7 +15,7 @@ for (const name of entries) {
     logLevel: "warn",
     publicDir: false,
     build: {
-      outDir: "dist",
+      outDir,
       emptyOutDir: false,
       target: "chrome110",
       minify: false,
@@ -27,5 +29,5 @@ for (const name of entries) {
   });
 }
 
-await cp("public", "dist", { recursive: true });
-console.log(`Built ${entries.length} scripts to extension/dist`);
+await cp("public", outDir, { recursive: true });
+console.log(`Built ${entries.length} scripts to ${outDir === "dist" ? "extension/dist" : outDir}`);

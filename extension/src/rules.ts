@@ -20,6 +20,9 @@ export const MIN_END_LEAD_MS = 2 * 3600 * 1000;
 export const MAX_END_HORIZON_MS = 365 * 24 * 3600 * 1000;
 // SOL a wallet needs for account rent and network fees.
 export const MIN_SOL_FOR_CREATE = 0.02;
+// What Panta charges to create a market, shown on the type cards until the live quote arrives.
+export const BREAKING_MARKET_COST_USDC = 20;
+export const STANDARD_MARKET_COST_USDC = 50;
 
 // Market types. Breaking: the event must start within 72 hours of creation;
 // buying runs until then, then shares trade between people until it

@@ -67,10 +67,19 @@ export function reconcileDeps(env: Env): ReconcileDeps {
     load: (orderId) => env.SOOTHIA_CACHE.get(`buy:${orderId}`, "json") as Promise<BuyRecord | null>,
     save: (orderId, record) => saveRecord(env, orderId, record),
     taken: async (signature) => (await env.SOOTHIA_CACHE.get(`sig:${signature}`)) !== null,
-    claim: async (signature, orderId) => { await kvPut(env, `sig:${signature}`, orderId, { expirationTtl: RECORD_TTL_SEC }); },
-    signaturesFor: (wallet) => rpc<SignatureRow[]>(env, "getSignaturesForAddress", [wallet, { limit: SIGNATURES_PER_WALLET, commitment: "confirmed" }]),
+    claim: async (signature, orderId) => {
+      await kvPut(env, `sig:${signature}`, orderId, { expirationTtl: RECORD_TTL_SEC });
+    },
+    signaturesFor: (wallet) =>
+      rpc<SignatureRow[]>(env, "getSignaturesForAddress", [
+        wallet,
+        { limit: SIGNATURES_PER_WALLET, commitment: "confirmed" },
+      ]),
     transaction: (signature) =>
-      rpc<TxRow | null>(env, "getTransaction", [signature, { encoding: "json", commitment: "confirmed", maxSupportedTransactionVersion: 0 }]),
+      rpc<TxRow | null>(env, "getTransaction", [
+        signature,
+        { encoding: "json", commitment: "confirmed", maxSupportedTransactionVersion: 0 },
+      ]),
     finish: async (record, signature) => {
       const status = await finishBuy(env, record, signature, 0);
       return { attributed: status.attributed, status: status.status };
@@ -82,7 +91,11 @@ export function reconcileDeps(env: Env): ReconcileDeps {
 const keyOf = (key: { pubkey: string } | string): string => (typeof key === "string" ? key : key.pubkey);
 
 /** The wallet's most recent confirmed transaction that is a Panta trade on this market, landed after the order. */
-export async function findBetSignature(deps: ReconcileDeps, record: BuyRecord, createdAtMs: number): Promise<string | null> {
+export async function findBetSignature(
+  deps: ReconcileDeps,
+  record: BuyRecord,
+  createdAtMs: number,
+): Promise<string | null> {
   const rows = await deps.signaturesFor(record.wallet);
   const notBefore = Math.floor(createdAtMs / 1000) - 60;
   for (const row of rows) {
@@ -92,7 +105,8 @@ export async function findBetSignature(deps: ReconcileDeps, record: BuyRecord, c
     const tx = await deps.transaction(row.signature);
     if (!tx || tx.meta?.err) continue;
     const keys = (tx.transaction?.message?.accountKeys ?? []).map(keyOf);
-    if (keys.includes(PANTA_PROGRAM) && keys.includes(record.marketId) && keys[0] === record.wallet) return row.signature;
+    if (keys.includes(PANTA_PROGRAM) && keys.includes(record.marketId) && keys[0] === record.wallet)
+      return row.signature;
   }
   return null;
 }
@@ -116,7 +130,10 @@ export async function reconcileOrders(deps: ReconcileDeps): Promise<ReconcileRep
     const record = await deps.load(orderId);
     if (!record?.orderId || record.attributed) continue;
     const looked = lastLook.get(orderId) ?? record.reconciledAt ?? 0;
-    if (now - looked < LOOK_INTERVAL_MS) { report.skipped++; continue; }
+    if (now - looked < LOOK_INTERVAL_MS) {
+      report.skipped++;
+      continue;
+    }
     if (!record.signature && now - createdAtMs > GIVE_UP_AFTER_MS) continue;
     report.looked++;
     lastLook.set(orderId, now);

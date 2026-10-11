@@ -36,10 +36,7 @@ import { handleStats } from "./stats";
 import { handleBalances } from "./wallet";
 
 // Wallet and create routes: POST, and only from a Soothia install.
-const INSTALL_ROUTES: Record<
-  string,
-  (request: Request, env: Env, ctx: ExecutionContext) => Promise<Response>
-> = {
+const INSTALL_ROUTES: Record<string, (request: Request, env: Env, ctx: ExecutionContext) => Promise<Response>> = {
   "/wallet/balances": handleBalances,
   "/create/quote": handleQuote,
   "/create/build": handleBuild,
@@ -60,12 +57,7 @@ const INSTALL_ROUTES: Record<
 // Query params documented for GET /markets/ (Panta names the phase filter `status`).
 const MARKET_PARAMS = ["limit", "cursor", "category", "status"] as const;
 
-async function proxyPanta(
-  request: Request,
-  env: Env,
-  path: string,
-  query?: URLSearchParams,
-): Promise<Response> {
+async function proxyPanta(request: Request, env: Env, path: string, query?: URLSearchParams): Promise<Response> {
   // Trim so a stray space or newline pasted with the secret does not break auth.
   const apiKey = env.PANTA_API_KEY?.trim();
   if (!apiKey) return json(request, { error: "proxy_misconfigured" }, 500);
@@ -123,7 +115,11 @@ export default {
 } satisfies ExportedHandler<Env>;
 
 /** A 429 when this IP has used up `limit` for `route`, otherwise null. */
-async function limited(request: Request, route: string, limit: { limit: number; windowSec: number }): Promise<Response | null> {
+async function limited(
+  request: Request,
+  route: string,
+  limit: { limit: number; windowSec: number },
+): Promise<Response | null> {
   const retryAfter = await rateLimited(request, route, limit);
   if (retryAfter === null) return null;
   return json(request, { error: "rate_limited" }, 429, { "Retry-After": String(retryAfter) });

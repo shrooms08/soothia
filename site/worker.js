@@ -73,20 +73,20 @@ export default {
 };
 
 async function handle(request, env, ctx) {
-    const url = new URL(request.url);
-    // www goes to the bare domain, same path and query.
-    if (url.hostname === "www.soothia.fun") {
-      return Response.redirect(`${SITE}${url.pathname}${url.search}`, 301);
-    }
-    if (url.pathname === "/actions.json") {
-      if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: ACTION_HEADERS });
-      const rules = { rules: [{ pathPattern: "/m/*", apiPath: `${PROXY}/api/actions/market/*` }] };
-      return new Response(JSON.stringify(rules), { headers: ACTION_HEADERS });
-    }
-    const match = MARKET_PATH.exec(url.pathname);
-    if (match) return sharePage(request, env, match[1], ctx);
-    if (url.pathname === "/markets" || url.pathname === "/markets/") return marketsPage(request, env, ctx);
-    return env.ASSETS.fetch(request);
+  const url = new URL(request.url);
+  // www goes to the bare domain, same path and query.
+  if (url.hostname === "www.soothia.fun") {
+    return Response.redirect(`${SITE}${url.pathname}${url.search}`, 301);
+  }
+  if (url.pathname === "/actions.json") {
+    if (request.method === "OPTIONS") return new Response(null, { status: 204, headers: ACTION_HEADERS });
+    const rules = { rules: [{ pathPattern: "/m/*", apiPath: `${PROXY}/api/actions/market/*` }] };
+    return new Response(JSON.stringify(rules), { headers: ACTION_HEADERS });
+  }
+  const match = MARKET_PATH.exec(url.pathname);
+  if (match) return sharePage(request, env, match[1], ctx);
+  if (url.pathname === "/markets" || url.pathname === "/markets/") return marketsPage(request, env, ctx);
+  return env.ASSETS.fetch(request);
 }
 
 async function sharePage(request, env, marketId, ctx) {
@@ -113,7 +113,10 @@ async function sharePage(request, env, marketId, ctx) {
 }
 
 export function escape(text) {
-  return String(text).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+  return String(text).replace(
+    /[&<>"']/g,
+    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c],
+  );
 }
 
 function pct(price) {
@@ -126,16 +129,20 @@ export function renderPage(marketId, market) {
   const hasOdds = found && typeof market.yesPrice === "number" && typeof market.noPrice === "number";
   const odds = hasOdds ? `YES ${pct(market.yesPrice)} · NO ${pct(market.noPrice)}` : "";
   const kind = market?.marketType === "breaking" ? "Breaking market" : "Market";
-  const description = found ? `${odds ? `${odds} · ` : ""}${kind} on Panta. Made with Soothia.` : "This Soothia bet link does not match a Panta market.";
+  const description = found
+    ? `${odds ? `${odds} · ` : ""}${kind} on Panta. Made with Soothia.`
+    : "This Soothia bet link does not match a Panta market.";
   const category = found && market.category ? market.category : "other";
   const image = `${PROXY}/img/${encodeURIComponent(category)}.png`;
   const pageUrl = `${SITE}/m/${marketId}`;
   const pantaUrl = httpsUrl(found ? market.marketUrl : null, `https://www.panta.market/market/${marketId}`);
-  const open = found && market.phase === "primary" && (!market.primaryPhaseEnd || Date.parse(market.primaryPhaseEnd) > Date.now());
+  const open =
+    found && market.phase === "primary" && (!market.primaryPhaseEnd || Date.parse(market.primaryPhaseEnd) > Date.now());
   const resolved = found && (market.resolvedOutcome === "YES" || market.resolvedOutcome === "NO");
   const p2p = found && !open && !resolved && market.phase !== "primary";
   const volume = found && typeof market.volumeUsdc === "number" ? `$${market.volumeUsdc.toFixed(2)} traded` : "";
-  const closes = found && market.primaryPhaseEnd ? new Date(market.primaryPhaseEnd).toUTCString().replace(/ GMT$/, " UTC") : "";
+  const closes =
+    found && market.primaryPhaseEnd ? new Date(market.primaryPhaseEnd).toUTCString().replace(/ GMT$/, " UTC") : "";
   const closesIso = found && market.primaryPhaseEnd ? new Date(market.primaryPhaseEnd).toISOString() : "";
   const sideButton = (side, price) =>
     `<button type="button" class="side side-${side}" data-side="${side}" role="radio" aria-checked="${side === "yes"}"><b>${side.toUpperCase()}</b><span class="side-pct" data-pct="${side}">${pct(price)}</span></button>`;
@@ -284,7 +291,6 @@ export function renderPage(marketId, market) {
 </html>`;
 }
 
-
 // ---- /markets ----
 
 async function marketsPage(request, env, ctx) {
@@ -295,7 +301,9 @@ async function marketsPage(request, env, ctx) {
   let data = null;
   try {
     const proxy = env.PROXY ? (r) => env.PROXY.fetch(r) : (r) => fetch(r);
-    const upstream = await proxy(new Request(`${PROXY}/markets?status=all&sort=closing`, { signal: AbortSignal.timeout(25000) }));
+    const upstream = await proxy(
+      new Request(`${PROXY}/markets?status=all&sort=closing`, { signal: AbortSignal.timeout(25000) }),
+    );
     if (upstream.ok) data = await upstream.json();
   } catch {
     data = null;
@@ -325,14 +333,18 @@ export function marketCard(item) {
   const volume = typeof item.volumeUsdc === "number" ? item.volumeUsdc : 0;
   const closes = item.closesAt ? new Date(item.closesAt) : null;
   const ends = item.endsAt ? new Date(item.endsAt) : null;
-  const when = live && closes
-    ? `Buying closes <time datetime="${closes.toISOString()}">${utc(closes)}</time>`
-    : item.phase === "resolved"
-      ? "Resolved"
-      : ends ? `Ends <time datetime="${ends.toISOString()}">${utc(ends)}</time>` : "";
-  const odds = item.phase === "resolved"
-    ? `<span class="chip-outcome ${item.resolvedOutcome === "YES" ? "yes" : "no"}">${item.resolvedOutcome ? `Resolved: ${item.resolvedOutcome}` : "Resolved"}</span>`
-    : `<span class="odds"><b class="yes">YES</b> ${pctOrDash(item.yesPct)} <span class="dim">\u00b7</span> <b class="no">NO</b> ${pctOrDash(item.noPct)}</span>`;
+  const when =
+    live && closes
+      ? `Buying closes <time datetime="${closes.toISOString()}">${utc(closes)}</time>`
+      : item.phase === "resolved"
+        ? "Resolved"
+        : ends
+          ? `Ends <time datetime="${ends.toISOString()}">${utc(ends)}</time>`
+          : "";
+  const odds =
+    item.phase === "resolved"
+      ? `<span class="chip-outcome ${item.resolvedOutcome === "YES" ? "yes" : "no"}">${item.resolvedOutcome ? `Resolved: ${item.resolvedOutcome}` : "Resolved"}</span>`
+      : `<span class="odds"><b class="yes">YES</b> ${pctOrDash(item.yesPct)} <span class="dim">\u00b7</span> <b class="no">NO</b> ${pctOrDash(item.noPct)}</span>`;
   const action = live
     ? `<a class="btn primary" href="${betHref}">Bet</a>`
     : `<a class="btn" href="${escape(pantaUrl)}" target="_blank" rel="noopener">${item.phase === "resolved" ? "View on Panta \u2197" : "Trade on Panta \u2197"}</a>`;
@@ -353,7 +365,12 @@ function renderMarkets(data) {
   const live = items.filter((i) => i.phase === "primary");
   const p2p = items.filter((i) => i.phase === "p2p");
   const resolved = items.filter((i) => i.phase === "resolved");
-  const chips = ["all", ...categories].map((cat) => `<button type="button" class="filter-cat${cat === "all" ? " selected" : ""}" data-cat="${escape(cat)}" aria-pressed="${cat === "all"}">${cat === "all" ? "All" : escape(cat)}</button>`).join("");
+  const chips = ["all", ...categories]
+    .map(
+      (cat) =>
+        `<button type="button" class="filter-cat${cat === "all" ? " selected" : ""}" data-cat="${escape(cat)}" aria-pressed="${cat === "all"}">${cat === "all" ? "All" : escape(cat)}</button>`,
+    )
+    .join("");
   const description = `${live.length} live and ${p2p.length} trading prediction markets on Panta, made and found with Soothia.`;
   return `<!doctype html>
 <html lang="en">

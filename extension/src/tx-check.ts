@@ -141,7 +141,10 @@ export function checkSignedTransaction(unsignedBase64: string, signedBase64: str
   const signedCore = core(signed);
   if (signedCore.length !== builtCore.length) {
     const extra = signedCore.find((instruction) => !builtCore.some((original) => same(original, instruction)));
-    return fail("changed", extra ? `unexpected instruction for program ${extra.program}` : "an instruction was removed");
+    return fail(
+      "changed",
+      extra ? `unexpected instruction for program ${extra.program}` : "an instruction was removed",
+    );
   }
   for (let index = 0; index < builtCore.length; index++) {
     if (!same(builtCore[index], signedCore[index])) {

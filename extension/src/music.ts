@@ -58,18 +58,21 @@ export function stopMusic(fadeSeconds = FADE_OUT_S): void {
   stopping = true;
   ramp(0.0001, fadeSeconds);
   const ending = source;
-  setTimeout(() => {
-    try {
-      ending?.stop();
-    } catch {
-      // Already stopped.
-    }
-    if (source === ending) {
-      source = null;
-      playing = false;
-      stopping = false;
-    }
-  }, fadeSeconds * 1000 + 50);
+  setTimeout(
+    () => {
+      try {
+        ending?.stop();
+      } catch {
+        // Already stopped.
+      }
+      if (source === ending) {
+        source = null;
+        playing = false;
+        stopping = false;
+      }
+    },
+    fadeSeconds * 1000 + 50,
+  );
 }
 
 /** Dips the music briefly under a UI sound. */

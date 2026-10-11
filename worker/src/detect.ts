@@ -1,5 +1,7 @@
 // POST /detect: drafts up to three market-ready claims from a page's text.
 // Page text is never logged and never stored; only validated claims are cached.
+// Prose goes through Claude and every draft must quote the page; a sports
+// fixture skips the model and its evidence lines stand in for the quote.
 import { AnthropicError, callTool, type ToolSpec } from "./anthropic";
 import { installId, json, readJsonObject, sha256Hex, type Env } from "./http";
 import { authorityFor } from "./resolution";
@@ -27,7 +29,8 @@ const MIN_PROSE_FOR_MODEL = 200;
 
 async function withIds(claims: Claim[], urlHash: string): Promise<Claim[]> {
   const out: Claim[] = [];
-  for (const claim of claims) out.push({ ...claim, id: `c_${urlHash}${(await sha256Hex(claim.question)).slice(0, 8)}` });
+  for (const claim of claims)
+    out.push({ ...claim, id: `c_${urlHash}${(await sha256Hex(claim.question)).slice(0, 8)}` });
   return out;
 }
 const DAILY_CAP = 200;
@@ -55,7 +58,20 @@ export interface FixturePayload {
   evidence: string[];
 }
 
-const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+const MONTHS = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
 const FIXTURE_MAX_DAYS_AHEAD = 60;
 const MATCH_DURATION_MS = 3 * 3600_000;
 
@@ -63,9 +79,17 @@ export function parseFixture(raw: unknown): FixturePayload | null {
   if (!raw || typeof raw !== "object") return null;
   const f = raw as Record<string, unknown>;
   const str = (v: unknown, max: number): string => (typeof v === "string" ? v.trim().slice(0, max) : "");
-  const home = str(f.home, 60), away = str(f.away, 60), startISO = str(f.startISO, 40), dateLabel = str(f.dateLabel, 40);
+  const home = str(f.home, 60),
+    away = str(f.away, 60),
+    startISO = str(f.startISO, 40),
+    dateLabel = str(f.dateLabel, 40);
   const competition = str(f.competition, 60) || undefined;
-  const evidence = Array.isArray(f.evidence) ? f.evidence.filter((e): e is string => typeof e === "string").map((e) => e.slice(0, 300)).slice(0, 8) : [];
+  const evidence = Array.isArray(f.evidence)
+    ? f.evidence
+        .filter((e): e is string => typeof e === "string")
+        .map((e) => e.slice(0, 300))
+        .slice(0, 8)
+    : [];
   if (!home || !away || !startISO || !dateLabel || evidence.length === 0) return null;
   if (Number.isNaN(Date.parse(startISO))) return null;
   return { home, away, competition, startISO, dateLabel, evidence };
@@ -84,16 +108,21 @@ export function fixtureGrounded(fixture: FixturePayload): boolean {
     const [, month, day, year] = dayLabel;
     const short = month.slice(0, 3);
     for (const m of [month, short]) {
-      candidates.add(`${day} ${m}`); candidates.add(`${m} ${day}`); candidates.add(`${m}. ${day}`); candidates.add(`${day}${m}`);
+      candidates.add(`${day} ${m}`);
+      candidates.add(`${m} ${day}`);
+      candidates.add(`${m}. ${day}`);
+      candidates.add(`${day}${m}`);
     }
     const index = MONTHS.indexOf(month) + 1;
     if (index > 0) {
       candidates.add(`${year}-${String(index).padStart(2, "0")}-${String(day).padStart(2, "0")}`);
-      candidates.add(`${day}/${index}`); candidates.add(`${index}/${day}`);
+      candidates.add(`${day}/${index}`);
+      candidates.add(`${index}/${day}`);
     }
   }
   candidates.add(start.toISOString().slice(0, 10));
-  candidates.add("today"); candidates.add("tomorrow");
+  candidates.add("today");
+  candidates.add("tomorrow");
   return [...candidates].some((candidate) => haystack.includes(normalize(candidate)));
 }
 
@@ -104,18 +133,34 @@ export function fixtureGrounded(fixture: FixturePayload): boolean {
 export function fixtureClaims(fixture: FixturePayload, nowMs: number): { claims: Claim[]; dropped: Dropped[] } {
   const dropped: Dropped[] = [];
   const start = Date.parse(fixture.startISO);
-  if (start <= nowMs) return { claims: [], dropped: [{ question: `${fixture.home} vs ${fixture.away}`, reason: "end_time_invalid" }] };
-  if (start - nowMs > FIXTURE_MAX_DAYS_AHEAD * 86_400_000) return { claims: [], dropped: [{ question: `${fixture.home} vs ${fixture.away}`, reason: "end_time_invalid" }] };
-  if (!fixtureGrounded(fixture)) return { claims: [], dropped: [{ question: `${fixture.home} vs ${fixture.away}`, reason: "source_quote_not_on_page" }] };
+  if (start <= nowMs)
+    return { claims: [], dropped: [{ question: `${fixture.home} vs ${fixture.away}`, reason: "end_time_invalid" }] };
+  if (start - nowMs > FIXTURE_MAX_DAYS_AHEAD * 86_400_000)
+    return { claims: [], dropped: [{ question: `${fixture.home} vs ${fixture.away}`, reason: "end_time_invalid" }] };
+  if (!fixtureGrounded(fixture))
+    return {
+      claims: [],
+      dropped: [{ question: `${fixture.home} vs ${fixture.away}`, reason: "source_quote_not_on_page" }],
+    };
   const where = fixture.competition ? ` in ${fixture.competition}` : "";
   const endTime = new Date(start + MATCH_DURATION_MS).toISOString();
   const evidence = fixture.evidence.join(" \u00b7 ").slice(0, 200);
   const claims: Claim[] = [];
-  for (const [winner, loser] of [[fixture.home, fixture.away], [fixture.away, fixture.home]]) {
+  for (const [winner, loser] of [
+    [fixture.home, fixture.away],
+    [fixture.away, fixture.home],
+  ]) {
     const question = `Will ${winner} beat ${loser}${where} on ${fixture.dateLabel}?`;
     // The official league site (or ESPN) decides, never the fixture page itself.
     const authority = authorityFor({
-      question, category: "sports", endTime, pageUrl: "", resolutionType: "sports_result", marketType: "breaking", buyWindowHours: 1, eventInProgress: false,
+      question,
+      category: "sports",
+      endTime,
+      pageUrl: "",
+      resolutionType: "sports_result",
+      marketType: "breaking",
+      buyWindowHours: 1,
+      eventInProgress: false,
     });
     const raw = {
       question,
@@ -266,7 +311,11 @@ export async function handleDetect(request: Request, env: Env): Promise<Response
   const urlHashEarly = cacheKey.slice("detect:".length, "detect:".length + 8);
   if (fixture && text.length < MIN_PROSE_FOR_MODEL) {
     const built = fixtureClaims(fixture, now);
-    const result: DetectBody = { claims: await withIds(built.claims, urlHashEarly), dropped: built.dropped, path: "fixture" };
+    const result: DetectBody = {
+      claims: await withIds(built.claims, urlHashEarly),
+      dropped: built.dropped,
+      path: "fixture",
+    };
     await cachePut(cacheKey, result, CACHE_TTL_SEC);
     return json(request, result, 200, { "X-Soothia-Cache": "MISS" });
   }
@@ -313,7 +362,12 @@ export async function handleDetect(request: Request, env: Env): Promise<Response
   // Prose found nothing but the page is a fixture: fall back to the match itself.
   if (claims.length === 0 && fixture) {
     const built = fixtureClaims(fixture, now);
-    if (built.claims.length > 0) result = { claims: await withIds(built.claims, urlHash), dropped: [...dropped, ...built.dropped], path: "fixture" };
+    if (built.claims.length > 0)
+      result = {
+        claims: await withIds(built.claims, urlHash),
+        dropped: [...dropped, ...built.dropped],
+        path: "fixture",
+      };
   }
   await cachePut(cacheKey, result, CACHE_TTL_SEC);
   return json(request, result, 200, { "X-Soothia-Cache": "MISS" });

@@ -74,7 +74,9 @@ body{margin:0;background:transparent}
 </style></head><body>
 <svg width="0" height="0" style="position:absolute"><defs>${CHROME("sth-chrome")}${STAR("sth-star", "sth-chrome")}</defs></svg>
 ${CATEGORIES.map((c) => `<div class="cell" id="img-${c[0]}">${marketSvg(c)}</div>`).join("")}
-${Object.entries(ICONS).map(([size, html]) => `<div class="cell" id="icon-${size}">${html}</div>`).join("")}
+${Object.entries(ICONS)
+  .map(([size, html]) => `<div class="cell" id="icon-${size}">${html}</div>`)
+  .join("")}
 </body></html>`);
 await page.evaluate(() => document.fonts.ready);
 await page.evaluate(() => document.fonts.load("92px Lora"));

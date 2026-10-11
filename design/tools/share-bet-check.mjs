@@ -14,7 +14,10 @@ const out = fileURLToPath(new URL("../applied/", import.meta.url));
 const keypair = Keypair.generate();
 const PUBKEY = keypair.publicKey.toBase58();
 let failures = 0;
-const check = (name, ok, detail = "") => { console.log(`${ok ? "ok " : "FAIL"} ${name}${detail ? ` (${detail})` : ""}`); if (!ok) failures++; };
+const check = (name, ok, detail = "") => {
+  console.log(`${ok ? "ok " : "FAIL"} ${name}${detail ? ` (${detail})` : ""}`);
+  if (!ok) failures++;
+};
 
 const browser = await chromium.launch();
 
@@ -31,7 +34,11 @@ const browser = await chromium.launch();
       solana: {
         isPhantom: true,
         publicKey: null,
-        connect: async () => { const pk = { toString: () => pubkey }; window.phantom.solana.publicKey = pk; return { publicKey: pk }; },
+        connect: async () => {
+          const pk = { toString: () => pubkey };
+          window.phantom.solana.publicKey = pk;
+          return { publicKey: pk };
+        },
         signTransaction: async (tx) => {
           const base64 = btoa(String.fromCharCode(...tx.serialize()));
           const signed = await window.__soothiaSign(base64);
@@ -41,37 +48,85 @@ const browser = await chromium.launch();
     };
   }, PUBKEY);
   const requests = [];
-  page.on("request", (r) => { if (/api\.soothia\.fun|soothia-proxy/.test(r.url())) requests.push(`${r.method()} ${r.url().replace(/^https:\/\/(api\.soothia\.fun|soothia-proxy\.heylana\.workers\.dev)/, "")}`); });
+  page.on("request", (r) => {
+    if (/api\.soothia\.fun|soothia-proxy/.test(r.url()))
+      requests.push(
+        `${r.method()} ${r.url().replace(/^https:\/\/(api\.soothia\.fun|soothia-proxy\.heylana\.workers\.dev)/, "")}`,
+      );
+  });
   await page.goto(URL_, { waitUntil: "networkidle" });
   await page.waitForTimeout(800);
   const quote = page.locator("#quote");
-  await page.waitForFunction(() => /shares for \$/.test(document.getElementById("quote")?.textContent ?? ""), null, { timeout: 15000 }).catch(() => {});
+  await page
+    .waitForFunction(() => /shares for \$/.test(document.getElementById("quote")?.textContent ?? ""), null, {
+      timeout: 15000,
+    })
+    .catch(() => {});
   const quoteText = await quote.textContent();
   check("quote line renders", /^~\d+\.\d\d YES shares for \$1\.02 incl\. 2% fee$/.test(quoteText), quoteText);
   const yesPct = await page.locator('[data-pct="yes"]').first().textContent();
-  check("odds have one decimal (or a dash when Panta has no price)", /^\d+\.\d%$/.test(yesPct) || yesPct === "—", yesPct);
+  check(
+    "odds have one decimal (or a dash when Panta has no price)",
+    /^\d+\.\d%$/.test(yesPct) || yesPct === "—",
+    yesPct,
+  );
   const fine = await page.locator("main > .fine").textContent();
   check("closing time is local", /Buying closes \w{3}, \w{3} \d{1,2}, \d{1,2}:\d{2}/.test(fine), fine);
   await page.click("text=Connect Phantom");
   await page.waitForSelector(".wallet-row", { timeout: 5000 });
-  check("connected address shown", (await page.locator(".wallet-row .mono").textContent()).includes(PUBKEY.slice(0, 4)));
+  check(
+    "connected address shown",
+    (await page.locator(".wallet-row .mono").textContent()).includes(PUBKEY.slice(0, 4)),
+  );
   // Switch to NO $5 and back to check the quote follows.
   await page.click('.side[data-side="no"]');
   await page.click('.chip[data-amount="5"]');
-  await page.waitForFunction(() => /NO shares for \$5\.10/.test(document.getElementById("quote")?.textContent ?? ""), null, { timeout: 15000 }).catch(() => {});
-  check("quote follows side and amount", /NO shares for \$5\.10/.test(await quote.textContent()), await quote.textContent());
+  await page
+    .waitForFunction(() => /NO shares for \$5\.10/.test(document.getElementById("quote")?.textContent ?? ""), null, {
+      timeout: 15000,
+    })
+    .catch(() => {});
+  check(
+    "quote follows side and amount",
+    /NO shares for \$5\.10/.test(await quote.textContent()),
+    await quote.textContent(),
+  );
   await page.click('.side[data-side="yes"]');
   await page.click('.chip[data-amount="1"]');
-  await page.waitForFunction(() => /YES shares for \$1\.02/.test(document.getElementById("quote")?.textContent ?? ""), null, { timeout: 15000 }).catch(() => {});
+  await page
+    .waitForFunction(() => /YES shares for \$1\.02/.test(document.getElementById("quote")?.textContent ?? ""), null, {
+      timeout: 15000,
+    })
+    .catch(() => {});
   check("place button is enabled", !(await page.locator("#place").isDisabled()));
   await page.screenshot({ path: `${out}share-bet-desktop.png` });
   await page.click("#place");
-  await page.waitForFunction(() => document.getElementById("status")?.classList.contains("error") || !document.getElementById("outcome")?.hidden, null, { timeout: 60000 });
+  await page.waitForFunction(
+    () => document.getElementById("status")?.classList.contains("error") || !document.getElementById("outcome")?.hidden,
+    null,
+    { timeout: 60000 },
+  );
   const status = await page.locator("#status").textContent();
-  const stepStates = await page.$$eval("#steps .step", (items) => items.map((i) => `${i.querySelector(".step-label").textContent}:${i.dataset.state}`));
-  check("pipeline reached Sending and Solana refused the empty wallet", /wallet is empty|not have enough SOL/.test(status), status);
-  check("steps show Signing done, Sending error", stepStates.join(",") === "Signing:done,Sending:error,Confirming:todo,Recording:todo", stepStates.join(","));
-  check("proxy calls: quote, build, send (no confirm)", requests.some((r) => r.startsWith(`POST /api/actions/market/${MARKET}?side=yes&amount=1.00`)) && requests.some((r) => r === "POST /api/tx/send") && !requests.some((r) => r.includes("/confirm")), requests.join(" | "));
+  const stepStates = await page.$$eval("#steps .step", (items) =>
+    items.map((i) => `${i.querySelector(".step-label").textContent}:${i.dataset.state}`),
+  );
+  check(
+    "pipeline reached Sending and Solana refused the empty wallet",
+    /wallet is empty|not have enough SOL/.test(status),
+    status,
+  );
+  check(
+    "steps show Signing done, Sending error",
+    stepStates.join(",") === "Signing:done,Sending:error,Confirming:todo,Recording:todo",
+    stepStates.join(","),
+  );
+  check(
+    "proxy calls: quote, build, send (no confirm)",
+    requests.some((r) => r.startsWith(`POST /api/actions/market/${MARKET}?side=yes&amount=1.00`)) &&
+      requests.some((r) => r === "POST /api/tx/send") &&
+      !requests.some((r) => r.includes("/confirm")),
+    requests.join(" | "),
+  );
   await page.close();
 }
 
@@ -85,7 +140,12 @@ const browser = await chromium.launch();
   const connect = await page.getAttribute('a[data-deeplink="connect"]', "href");
   const expectedYes = `https://phantom.app/ul/browse/${encodeURIComponent(`${URL_}?side=yes`)}?ref=${encodeURIComponent(SITE)}`;
   check("mobile Bet YES deep-links into Phantom", yes === expectedYes, yes);
-  check("mobile Connect deep-links into Phantom", connect === `https://phantom.app/ul/browse/${encodeURIComponent(`${URL_}?side=yes`)}?ref=${encodeURIComponent(SITE)}`, connect);
+  check(
+    "mobile Connect deep-links into Phantom",
+    connect ===
+      `https://phantom.app/ul/browse/${encodeURIComponent(`${URL_}?side=yes`)}?ref=${encodeURIComponent(SITE)}`,
+    connect,
+  );
   check("no horizontal scroll on phone", (await page.evaluate(() => document.documentElement.scrollWidth)) <= 390);
   await page.screenshot({ path: `${out}share-bet-mobile.png` });
   await context.close();

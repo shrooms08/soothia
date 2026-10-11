@@ -30,7 +30,12 @@ export function clientIp(request: Request): string {
  * Counts one request from this IP against `route`. Returns null when allowed, or
  * the number of seconds until the window resets when the limit is exceeded.
  */
-export async function rateLimited(request: Request, route: string, limit: Limit, nowMs = Date.now()): Promise<number | null> {
+export async function rateLimited(
+  request: Request,
+  route: string,
+  limit: Limit,
+  nowMs = Date.now(),
+): Promise<number | null> {
   const windowMs = limit.windowSec * 1000;
   const windowStart = Math.floor(nowMs / windowMs) * windowMs;
   // Hash the address so cache keys never carry a raw IP.

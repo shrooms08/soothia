@@ -68,7 +68,16 @@ export const ACTION_HEADERS: Record<string, string> = {
 
 const ACTION_PATH = /^\/api\/actions\/market\/([1-9A-HJ-NP-Za-km-z]{32,44})(\/confirm|\/quote)?$/;
 const STATUS_WAIT_MS = 20_000;
-const CATEGORY_IMAGES = new Set(["crypto", "entertainment", "finance", "other", "politics", "science", "sports", "world"]);
+const CATEGORY_IMAGES = new Set([
+  "crypto",
+  "entertainment",
+  "finance",
+  "other",
+  "politics",
+  "science",
+  "sports",
+  "world",
+]);
 const FIXED_AMOUNTS = [1, 5];
 const CONFIRM_WAIT_MS = 20_000;
 const BACKGROUND_WAIT_MS = 22_000;
@@ -101,10 +110,15 @@ export interface ActionDeps {
 export function actionDeps(env: Env, ctx: ExecutionContext): ActionDeps {
   return {
     brief: (marketId) => marketBrief(env, marketId),
-    quote: (wallet, marketId, side, amountUsdc) => quoteWithRetry(quoteDeps(env), { wallet, marketId, side, amountUsdc }),
+    quote: (wallet, marketId, side, amountUsdc) =>
+      quoteWithRetry(quoteDeps(env), { wallet, marketId, side, amountUsdc }),
     displayQuote: (marketId, side, amountUsdc) => displayQuote(quoteDeps(env), { marketId, side, amountUsdc }),
     build: (quoteId, wallet) =>
-      pantaPostWithRetry<PantaBuyBuild>(env, "/primaryorderbuild/", { quoteId, wallet, maxSlippageBps: MAX_SLIPPAGE_BPS }),
+      pantaPostWithRetry<PantaBuyBuild>(env, "/primaryorderbuild/", {
+        quoteId,
+        wallet,
+        maxSlippageBps: MAX_SLIPPAGE_BPS,
+      }),
     assemble: (instructions, wallet) => assembleWithFreshBlockhash(env, instructions ?? [], wallet),
     load: (orderId) => loadRecord(env, orderId),
     save: (id, record) => saveRecord(env, id, record),
@@ -117,17 +131,22 @@ export function actionDeps(env: Env, ctx: ExecutionContext): ActionDeps {
       ]);
     },
     status: async (signature, maxWaitMs) => {
-      const landed = maxWaitMs > 0 ? await waitForConfirmation(env, signature, maxWaitMs) : await txState(env, signature);
+      const landed =
+        maxWaitMs > 0 ? await waitForConfirmation(env, signature, maxWaitMs) : await txState(env, signature);
       return { state: landed.state };
     },
     transaction: async (signature) => {
-      const tx = await rpc<{ transaction?: { message?: { accountKeys?: ({ pubkey: string } | string)[] } }; meta?: { err?: unknown } } | null>(
-        env,
-        "getTransaction",
-        [signature, { encoding: "json", commitment: "confirmed", maxSupportedTransactionVersion: 0 }],
-      );
+      const tx = await rpc<{
+        transaction?: { message?: { accountKeys?: ({ pubkey: string } | string)[] } };
+        meta?: { err?: unknown };
+      } | null>(env, "getTransaction", [
+        signature,
+        { encoding: "json", commitment: "confirmed", maxSupportedTransactionVersion: 0 },
+      ]);
       if (!tx) return null;
-      const keys = (tx.transaction?.message?.accountKeys ?? []).map((key) => (typeof key === "string" ? key : key.pubkey));
+      const keys = (tx.transaction?.message?.accountKeys ?? []).map((key) =>
+        typeof key === "string" ? key : key.pubkey,
+      );
       return { keys, failed: Boolean(tx.meta?.err) };
     },
     report: async (signature, wallet, marketId) => {
@@ -147,7 +166,11 @@ function fail(message: string, status = 400, code?: string): Response {
 }
 
 function pantaFail(failure: { status: number; error: PantaError }): Response {
-  return fail(friendlyPantaError(failure.error), failure.status >= 500 ? 502 : 400, (failure.error.code ?? "upstream_error").toLowerCase());
+  return fail(
+    friendlyPantaError(failure.error),
+    failure.status >= 500 ? 502 : 400,
+    (failure.error.code ?? "upstream_error").toLowerCase(),
+  );
 }
 
 export function iconFor(origin: string, category: string): string {
@@ -270,7 +293,8 @@ export async function handleTxSend(request: Request, deps: ActionDeps): Promise<
   const signature = firstSignature(signed);
   if (!signature) return fail("The transaction is not signed.");
   // Soothia relays Panta bets, not arbitrary transactions.
-  if (!touchesPanta(signed)) return fail("Only Panta transactions can be sent through Soothia.", 400, "not_panta_transaction");
+  if (!touchesPanta(signed))
+    return fail("Only Panta transactions can be sent through Soothia.", 400, "not_panta_transaction");
   try {
     await deps.send(signed);
   } catch (error) {
@@ -282,7 +306,10 @@ export async function handleTxSend(request: Request, deps: ActionDeps): Promise<
         return fail("The transaction expired before it was sent. Please try again.", 409);
       }
       const logs = error instanceof RpcError ? error.logs : [];
-      return reply({ message: simulationReason(message, logs), logLine: logs.find((line) => RELEVANT_LOG.test(line)) ?? null }, 400);
+      return reply(
+        { message: simulationReason(message, logs), logLine: logs.find((line) => RELEVANT_LOG.test(line)) ?? null },
+        400,
+      );
     }
   }
   return reply({ signature });
@@ -347,7 +374,12 @@ export async function handleActionPost(request: Request, deps: ActionDeps, marke
     type: "transaction",
     transaction: txBase64,
     message: `Buying ~${shares.toFixed(2)} ${sideLabel(side)} shares for $${total.toFixed(2)} (incl. 2% fee)`,
-    links: { next: { type: "post", href: `/api/actions/market/${marketId}/confirm?orderId=${encodeURIComponent(build.orderId)}` } },
+    links: {
+      next: {
+        type: "post",
+        href: `/api/actions/market/${marketId}/confirm?orderId=${encodeURIComponent(build.orderId)}`,
+      },
+    },
   });
 }
 
@@ -370,7 +402,8 @@ export async function handleActionConfirm(request: Request, deps: ActionDeps, ma
     return confirmFromChain(deps, marketId, account, signature, url.origin);
   }
   if (record.wallet !== account) return fail("This order belongs to another wallet.", 403);
-  if (record.signature && record.signature !== signature) return fail("This order was already sent with a different transaction.", 409);
+  if (record.signature && record.signature !== signature)
+    return fail("This order was already sent with a different transaction.", 409);
 
   const sent: BuyRecord = { ...record, signature };
   if (!record.signature) await deps.save(record.orderId, sent).catch(() => {});
@@ -385,7 +418,13 @@ export async function handleActionConfirm(request: Request, deps: ActionDeps, ma
     status = await deps.finish(sent, signature, CONFIRM_WAIT_MS);
   } catch {
     deps.background(deps.finish(sent, signature, BACKGROUND_WAIT_MS));
-    return reply({ type: "completed", icon, title: "Bet sent", description: `${stake}: ${question}. Solana is still confirming it.`, label: "Sent" });
+    return reply({
+      type: "completed",
+      icon,
+      title: "Bet sent",
+      description: `${stake}: ${question}. Solana is still confirming it.`,
+      label: "Sent",
+    });
   }
   if (status.status === "failed") {
     return reply({
@@ -399,14 +438,32 @@ export async function handleActionConfirm(request: Request, deps: ActionDeps, ma
   }
   if (status.status === "pending") {
     deps.background(deps.finish(sent, signature, BACKGROUND_WAIT_MS));
-    return reply({ type: "completed", icon, title: "Bet sent", description: `${stake}: ${question}. Solana is still confirming it.`, label: "Sent" });
+    return reply({
+      type: "completed",
+      icon,
+      title: "Bet sent",
+      description: `${stake}: ${question}. Solana is still confirming it.`,
+      label: "Sent",
+    });
   }
   const tail = status.attributed ? "" : " Panta will show it in your positions shortly.";
-  return reply({ type: "completed", icon, title: "Bet placed. Good luck.", description: `${stake}: ${question}.${tail}`, label: "Done" });
+  return reply({
+    type: "completed",
+    icon,
+    title: "Bet placed. Good luck.",
+    description: `${stake}: ${question}.${tail}`,
+    label: "Done",
+  });
 }
 
 /** The confirm callback without an order record: validate on-chain, then report the trade to Panta. */
-async function confirmFromChain(deps: ActionDeps, marketId: string, account: string, signature: string, origin: string): Promise<Response> {
+async function confirmFromChain(
+  deps: ActionDeps,
+  marketId: string,
+  account: string,
+  signature: string,
+  origin: string,
+): Promise<Response> {
   const brief = await deps.brief(marketId);
   const icon = iconFor(origin, brief?.category ?? "other");
   const question = brief?.title ?? "your market";
@@ -415,57 +472,95 @@ async function confirmFromChain(deps: ActionDeps, marketId: string, account: str
     seen = await deps.transaction(signature).catch(() => null);
     if (!seen) await new Promise((resolve) => setTimeout(resolve, 2500));
   }
-  if (!seen) return reply({ type: "completed", icon, title: "Bet sent", description: `${question}. Solana is still confirming it.`, label: "Sent" });
+  if (!seen)
+    return reply({
+      type: "completed",
+      icon,
+      title: "Bet sent",
+      description: `${question}. Solana is still confirming it.`,
+      label: "Sent",
+    });
   if (seen.failed) {
-    return reply({ type: "completed", icon, title: "Bet failed", description: "The transaction failed on Solana. No USDC was taken.", label: "Failed", error: { message: "The transaction failed on Solana. No USDC was taken." } });
+    return reply({
+      type: "completed",
+      icon,
+      title: "Bet failed",
+      description: "The transaction failed on Solana. No USDC was taken.",
+      label: "Failed",
+      error: { message: "The transaction failed on Solana. No USDC was taken." },
+    });
   }
   if (seen.keys[0] !== account || !seen.keys.includes(PANTA_PROGRAM) || !seen.keys.includes(marketId)) {
     return fail("This transaction is not a bet on this market by this wallet.", 400);
   }
   const attributed = await deps.report(signature, account, marketId).catch(() => false);
   const tail = attributed ? "" : " Panta will show it in your positions shortly.";
-  return reply({ type: "completed", icon, title: "Bet placed. Good luck.", description: `${question}.${tail}`, label: "Done" });
+  return reply({
+    type: "completed",
+    icon,
+    title: "Bet placed. Good luck.",
+    description: `${question}.${tail}`,
+    label: "Done",
+  });
 }
 
 // ---- Router ----
 
 /** Answers action routes (and their preflights); null for every other path. */
 /** Runs `handler` unless this IP has used up `limit` for `route`, in which case a 429 ActionError. */
-async function guarded(request: Request, route: string, limit: Limit, handler: () => Promise<Response>): Promise<Response> {
+async function guarded(
+  request: Request,
+  route: string,
+  limit: Limit,
+  handler: () => Promise<Response>,
+): Promise<Response> {
   const retryAfter = await rateLimited(request, route, limit);
   if (retryAfter === null) return handler();
-  return new Response(JSON.stringify({ message: "Too many requests from your network. Try again in a minute.", code: "rate_limited" }), {
-    status: 429,
-    headers: { ...ACTION_HEADERS, "Retry-After": String(retryAfter) },
-  });
+  return new Response(
+    JSON.stringify({ message: "Too many requests from your network. Try again in a minute.", code: "rate_limited" }),
+    {
+      status: 429,
+      headers: { ...ACTION_HEADERS, "Retry-After": String(retryAfter) },
+    },
+  );
 }
 
 export function actionRoute(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> | null {
   const path = new URL(request.url).pathname.replace(/\/+$/, "");
   if (path === "/actions.json") {
-    if (request.method === "OPTIONS") return Promise.resolve(new Response(null, { status: 204, headers: ACTION_HEADERS }));
+    if (request.method === "OPTIONS")
+      return Promise.resolve(new Response(null, { status: 204, headers: ACTION_HEADERS }));
     return Promise.resolve(reply({ rules: [{ pathPattern: "/api/actions/**", apiPath: "/api/actions/**" }] }));
   }
   if (path === "/api/tx/send" || path === "/api/tx/status") {
-    if (request.method === "OPTIONS") return Promise.resolve(new Response(null, { status: 204, headers: ACTION_HEADERS }));
+    if (request.method === "OPTIONS")
+      return Promise.resolve(new Response(null, { status: 204, headers: ACTION_HEADERS }));
     const deps = actionDeps(env, ctx);
     if (path === "/api/tx/send") {
-      return request.method === "POST" ? guarded(request, "txSend", LIMITS.txSend, () => handleTxSend(request, deps)) : Promise.resolve(fail("Method not allowed.", 405));
+      return request.method === "POST"
+        ? guarded(request, "txSend", LIMITS.txSend, () => handleTxSend(request, deps))
+        : Promise.resolve(fail("Method not allowed.", 405));
     }
     return request.method === "GET" ? handleTxStatus(request, deps) : Promise.resolve(fail("Method not allowed.", 405));
   }
   const match = ACTION_PATH.exec(path);
   if (!match) return null;
-  if (request.method === "OPTIONS") return Promise.resolve(new Response(null, { status: 204, headers: ACTION_HEADERS }));
+  if (request.method === "OPTIONS")
+    return Promise.resolve(new Response(null, { status: 204, headers: ACTION_HEADERS }));
   const [, marketId, sub] = match;
   const deps = actionDeps(env, ctx);
   if (sub === "/confirm") {
-    return request.method === "POST" ? handleActionConfirm(request, deps, marketId) : Promise.resolve(fail("Method not allowed.", 405));
+    return request.method === "POST"
+      ? handleActionConfirm(request, deps, marketId)
+      : Promise.resolve(fail("Method not allowed.", 405));
   }
   if (sub === "/quote") {
-    return request.method === "GET" ? guarded(request, "quote", LIMITS.quote, () => handleActionQuote(request, deps, marketId)) : Promise.resolve(fail("Method not allowed.", 405));
+    return request.method === "GET"
+      ? guarded(request, "quote", LIMITS.quote, () => handleActionQuote(request, deps, marketId))
+      : Promise.resolve(fail("Method not allowed.", 405));
   }
   if (request.method === "GET") return handleActionGet(request, deps, marketId);
-  if (request.method === "POST") return guarded(request, "actionBuild", LIMITS.actionBuild, () => handleActionPost(request, deps, marketId));
+  if (request.method === "POST")
+    return guarded(request, "actionBuild", LIMITS.actionBuild, () => handleActionPost(request, deps, marketId));
   return Promise.resolve(fail("Method not allowed.", 405));
 }

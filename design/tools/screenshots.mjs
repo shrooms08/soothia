@@ -34,49 +34,192 @@ const SIG = "WT5qyHDfnP9pVUL4TvaBqpRceGxR2tPKR62sKYrBHqnEeN24hstUFbUKCpAZdGnr67b
 const soon = new Date(Date.now() + 5 * 60_000).toISOString();
 
 const claim = (id, question, category, endTime, sourceQuote, type = "price_threshold") => ({
-  id, question, category, endTime, sourceQuote, confidence: 0.8,
+  id,
+  question,
+  category,
+  endTime,
+  sourceQuote,
+  confidence: 0.8,
   resolution: { type, details: "", sources: ["https://www.coingecko.com"] },
 });
 const tiles = [
-  { claim: claim("c1", "Will Bitcoin close 2026 above $150,000?", "crypto", "2026-12-31T23:59:59Z", "…expect Bitcoin to close the year above $150,000 as ETF inflows continue…"), market: null },
   {
-    claim: claim("c2", "Will the Lakers win the Western Conference this season?", "sports", "2026-06-30T23:59:59Z", "Lakers win the West this season. Calling it now.", "sports_result"),
-    market: { id: MARKET, title: "Will the Lakers win the Western Conference this season?", category: "sports", yesPrice: 0.62, noPrice: 0.38, endTime: "2026-06-30T23:59:59Z" },
+    claim: claim(
+      "c1",
+      "Will Bitcoin close 2026 above $150,000?",
+      "crypto",
+      "2026-12-31T23:59:59Z",
+      "…expect Bitcoin to close the year above $150,000 as ETF inflows continue…",
+    ),
+    market: null,
   },
-  { claim: claim("c3", "Will the Fed cut rates twice before December?", "finance", "2026-12-31T23:59:59Z", "Two more cuts are priced in before the year is out.", "official_outcome"), market: null },
+  {
+    claim: claim(
+      "c2",
+      "Will the Lakers win the Western Conference this season?",
+      "sports",
+      "2026-06-30T23:59:59Z",
+      "Lakers win the West this season. Calling it now.",
+      "sports_result",
+    ),
+    market: {
+      id: MARKET,
+      title: "Will the Lakers win the Western Conference this season?",
+      category: "sports",
+      yesPrice: 0.62,
+      noPrice: 0.38,
+      endTime: "2026-06-30T23:59:59Z",
+    },
+  },
+  {
+    claim: claim(
+      "c3",
+      "Will the Fed cut rates twice before December?",
+      "finance",
+      "2026-12-31T23:59:59Z",
+      "Two more cuts are priced in before the year is out.",
+      "official_outcome",
+    ),
+    market: null,
+  },
 ];
-const finish = { signature: SIG, status: "confirmed", marketId: MARKET, eventPda: MARKET, marketUrl: MARKET_URL, registered: true, registerError: null };
-const buyStatus = { signature: SIG, status: "confirmed", confirmed: true, submitted: true, verified: "confirmed", attributed: true, errors: {}, marketUrl: MARKET_URL };
+const finish = {
+  signature: SIG,
+  status: "confirmed",
+  marketId: MARKET,
+  eventPda: MARKET,
+  marketUrl: MARKET_URL,
+  registered: true,
+  registerError: null,
+};
+const buyStatus = {
+  signature: SIG,
+  status: "confirmed",
+  confirmed: true,
+  submitted: true,
+  verified: "confirmed",
+  attributed: true,
+  errors: {},
+  marketUrl: MARKET_URL,
+};
 const mocks = {
   "/wallet/balances": { sol: 0.0021, usdc: 18 },
   "/create/quote": {
-    quoteId: "cr_mock", paymentUsdc: 20, breakdown: { liquidityUsdc: 5, platformFeeUsdc: 15 }, expiresAt: soon, marketId: MARKET,
-    marketType: "breaking", eventInProgress: false, startTime: soon, question: tiles[0].claim.question, adjustments: [], predictedBytes: 1051,
+    quoteId: "cr_mock",
+    paymentUsdc: 20,
+    breakdown: { liquidityUsdc: 5, platformFeeUsdc: 15 },
+    expiresAt: soon,
+    marketId: MARKET,
+    marketType: "breaking",
+    eventInProgress: false,
+    startTime: soon,
+    question: tiles[0].claim.question,
+    adjustments: [],
+    predictedBytes: 1051,
     authority: { name: "CoinGecko", url: "https://www.coingecko.com/en/coins/bitcoin" },
-    resolutionRule: "YES if this happens by 2026-12-31 23:59 UTC, per CoinGecko's BTC/USD price. Otherwise NO. Touching the level at any time before the deadline counts.",
+    resolutionRule:
+      "YES if this happens by 2026-12-31 23:59 UTC, per CoinGecko's BTC/USD price. Otherwise NO. Touching the level at any time before the deadline counts.",
     sourcesOfTruth: ["https://www.coingecko.com/en/coins/bitcoin", "https://x.com/mwatch/status/1"],
-    imageUrl: "https://api.soothia.fun/img/crypto.png", endTime: "2026-12-31T23:59:59Z", resolutionTime: "2027-01-01T00:59:59Z",
+    imageUrl: "https://api.soothia.fun/img/crypto.png",
+    endTime: "2026-12-31T23:59:59Z",
+    resolutionTime: "2027-01-01T00:59:59Z",
   },
-  "/create/build": { txBase64, bytes: 1051, recentBlockhash: "x", lastValidBlockHeight: 1, txExpiresAt: soon, quote: null },
+  "/create/build": {
+    txBase64,
+    bytes: 1051,
+    recentBlockhash: "x",
+    lastValidBlockHeight: 1,
+    txExpiresAt: soon,
+    quote: null,
+  },
   "/create/simulate": { ok: true, err: null, reason: null, logLine: null, logs: [], unitsConsumed: 48210 },
   "/tx/simulate": { ok: true, err: null, reason: null, logLine: null, logs: [], unitsConsumed: 31800 },
   "/create/send": finish,
   "/create/register-retry": finish,
-  "/buy/quote": { quoteId: "qt_mock", marketId: MARKET, side: "yes", amountUsdc: 1, shares: 1.996677, avgPrice: 0.500832, feeUsdc: 0.02, totalUsdc: 1.02, payoutPerShareUsdc: 1, expiresAt: soon },
+  "/buy/quote": {
+    quoteId: "qt_mock",
+    marketId: MARKET,
+    side: "yes",
+    amountUsdc: 1,
+    shares: 1.996677,
+    avgPrice: 0.500832,
+    feeUsdc: 0.02,
+    totalUsdc: 1.02,
+    payoutPerShareUsdc: 1,
+    expiresAt: soon,
+  },
   "/buy/build": { orderId: "ord_mock", txBase64, bytes: 706, expectedShares: 1.996677, expiresAt: soon },
   "/buy/send": buyStatus,
   "/buy/status": buyStatus,
   "/market": {
-    marketId: MARKET, title: tiles[0].claim.question, yesPrice: 0.5, noPrice: 0.5, endTime: "2026-12-31T23:59:59Z", marketUrl: MARKET_URL,
+    marketId: MARKET,
+    title: tiles[0].claim.question,
+    yesPrice: 0.5,
+    noPrice: 0.5,
+    endTime: "2026-12-31T23:59:59Z",
+    marketUrl: MARKET_URL,
     primaryPhaseEnd: new Date(Date.now() + 36 * 3600_000).toISOString(),
-    liquidity: { totalVolumeUsdc: 6, royaltyBps: 2000, skewBps: 5832, creatorFeesUsdc: 0, isGraduated: false, graduationThresholdUsdc: 1000 },
+    liquidity: {
+      totalVolumeUsdc: 6,
+      royaltyBps: 2000,
+      skewBps: 5832,
+      creatorFeesUsdc: 0,
+      isGraduated: false,
+      graduationThresholdUsdc: 1000,
+    },
   },
-  "/creator/markets": { markets: [{ marketId: MARKET, question: tiles[0].claim.question, liquidityUsdc: 5, pageUrl: "https://x.com/example/status/1", signature: SIG, createdAt: soon, marketUrl: MARKET_URL, registered: true }] },
+  "/creator/markets": {
+    markets: [
+      {
+        marketId: MARKET,
+        question: tiles[0].claim.question,
+        liquidityUsdc: 5,
+        pageUrl: "https://x.com/example/status/1",
+        signature: SIG,
+        createdAt: soon,
+        marketUrl: MARKET_URL,
+        registered: true,
+      },
+    ],
+  },
   "/positions": {
     positions: [
-      { marketId: MARKET, title: tiles[0].claim.question, side: "yes", shares: 7, phase: "primary", claimable: false, claimed: false, outcome: null, marketUrl: MARKET_URL, creatorSeedShares: 5 },
-      { marketId: MARKET, title: tiles[0].claim.question, side: "no", shares: 5, phase: "primary", claimable: false, claimed: false, outcome: null, marketUrl: MARKET_URL, creatorSeedShares: 5 },
-      { marketId: "LkrsMarket11111111111111111111111111111111", title: tiles[1].claim.question, side: "yes", shares: 2, phase: "primary", claimable: false, claimed: false, outcome: null, marketUrl: MARKET_URL, creatorSeedShares: null },
+      {
+        marketId: MARKET,
+        title: tiles[0].claim.question,
+        side: "yes",
+        shares: 7,
+        phase: "primary",
+        claimable: false,
+        claimed: false,
+        outcome: null,
+        marketUrl: MARKET_URL,
+        creatorSeedShares: 5,
+      },
+      {
+        marketId: MARKET,
+        title: tiles[0].claim.question,
+        side: "no",
+        shares: 5,
+        phase: "primary",
+        claimable: false,
+        claimed: false,
+        outcome: null,
+        marketUrl: MARKET_URL,
+        creatorSeedShares: 5,
+      },
+      {
+        marketId: "LkrsMarket11111111111111111111111111111111",
+        title: tiles[1].claim.question,
+        side: "yes",
+        shares: 2,
+        phase: "primary",
+        claimable: false,
+        claimed: false,
+        outcome: null,
+        marketUrl: MARKET_URL,
+        creatorSeedShares: null,
+      },
     ],
   },
 };
@@ -125,9 +268,15 @@ for (const [name, theme, scene, settle] of WANTED) {
   const page = await context.newPage();
   await page.goto(`${base}/${theme}.html`);
   await page.waitForTimeout(1800);
-  await page.evaluate(({ scene, mocks, tiles }) => {
-    window.postMessage({ type: "soothia:v1:dev-scene", scene, mocks, tiles, dryRun: scene.startsWith("success") ? false : true }, "*");
-  }, { scene, mocks, tiles });
+  await page.evaluate(
+    ({ scene, mocks, tiles }) => {
+      window.postMessage(
+        { type: "soothia:v1:dev-scene", scene, mocks, tiles, dryRun: scene.startsWith("success") ? false : true },
+        "*",
+      );
+    },
+    { scene, mocks, tiles },
+  );
   await page.waitForTimeout(settle);
   await page.screenshot({ path: `${out}${name}.png` });
   console.log(name);

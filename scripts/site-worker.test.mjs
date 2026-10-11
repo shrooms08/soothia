@@ -7,7 +7,10 @@ import { SECURITY_HEADERS, escape, httpsUrl, marketCard, renderPage, withSecurit
 const ID = "CLQqZ7r6WYC5xNumWrmC7UAkQ1Z6pdCbjJSy7wQu1DgL";
 
 test("escape neutralises every HTML special character", () => {
-  assert.equal(escape(`<img src=x onerror="alert('1')">&`), "&lt;img src=x onerror=&quot;alert(&#39;1&#39;)&quot;&gt;&amp;");
+  assert.equal(
+    escape(`<img src=x onerror="alert('1')">&`),
+    "&lt;img src=x onerror=&quot;alert(&#39;1&#39;)&quot;&gt;&amp;",
+  );
   assert.equal(escape(null), "null");
 });
 
@@ -42,7 +45,15 @@ test("marketCard escapes the question and category and refuses non-https image a
 });
 
 test("marketCard with a malformed id never links to /m/<junk>", () => {
-  const html = marketCard({ id: "../evil", phase: "primary", category: "crypto", question: "Q", imageUrl: "", pantaUrl: "", volumeUsdc: 0 });
+  const html = marketCard({
+    id: "../evil",
+    phase: "primary",
+    category: "crypto",
+    question: "Q",
+    imageUrl: "",
+    pantaUrl: "",
+    volumeUsdc: 0,
+  });
   assert.match(html, /href="\/markets"/);
   assert.doesNotMatch(html, /\/m\/\.\./);
 });

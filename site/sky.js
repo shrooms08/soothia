@@ -9,10 +9,32 @@
     var s = document.createElementNS("http://www.w3.org/2000/svg", "svg");
     s.setAttribute("class", "sky-star");
     s.innerHTML = '<use href="#star"/>';
-    var left = i % 2 ? (narrow ? 95 + Math.random() * 4 : 86 + Math.random() * 12) : (narrow ? 1 + Math.random() * 4 : 2 + Math.random() * 12);
+    var left =
+      i % 2
+        ? narrow
+          ? 95 + Math.random() * 4
+          : 86 + Math.random() * 12
+        : narrow
+          ? 1 + Math.random() * 4
+          : 2 + Math.random() * 12;
     var size = 6 + Math.random() * 8;
     // Rest opacity .25 to .55, 3 to 6 s cycles with random offsets: only a few peak at once.
-    s.style.cssText = "left:" + left.toFixed(1) + "%;top:" + (3 + Math.random() * 94).toFixed(1) + "%;width:" + size.toFixed(0) + "px;height:" + size.toFixed(0) + "px;--rest:" + (0.25 + Math.random() * 0.3).toFixed(2) + ";animation-delay:" + (Math.random() * 6).toFixed(1) + "s;animation-duration:" + (3 + Math.random() * 3).toFixed(1) + "s";
+    s.style.cssText =
+      "left:" +
+      left.toFixed(1) +
+      "%;top:" +
+      (3 + Math.random() * 94).toFixed(1) +
+      "%;width:" +
+      size.toFixed(0) +
+      "px;height:" +
+      size.toFixed(0) +
+      "px;--rest:" +
+      (0.25 + Math.random() * 0.3).toFixed(2) +
+      ";animation-delay:" +
+      (Math.random() * 6).toFixed(1) +
+      "s;animation-duration:" +
+      (3 + Math.random() * 3).toFixed(1) +
+      "s";
     sky.appendChild(s);
   }
 })();

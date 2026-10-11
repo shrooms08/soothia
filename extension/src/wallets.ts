@@ -51,11 +51,19 @@ interface LegacyProvider {
   signTransaction(transaction: unknown): Promise<unknown>;
 }
 
-interface ConnectFeature { connect(input?: { silent?: boolean }): Promise<{ accounts: readonly WalletAccount[] }> }
-interface DisconnectFeature { disconnect(): Promise<void> }
-interface EventsFeature { on(event: "change", listener: (properties: { accounts?: readonly WalletAccount[] }) => void): () => void }
+interface ConnectFeature {
+  connect(input?: { silent?: boolean }): Promise<{ accounts: readonly WalletAccount[] }>;
+}
+interface DisconnectFeature {
+  disconnect(): Promise<void>;
+}
+interface EventsFeature {
+  on(event: "change", listener: (properties: { accounts?: readonly WalletAccount[] }) => void): () => void;
+}
 interface SignFeature {
-  signTransaction(...inputs: { account: WalletAccount; transaction: Uint8Array; chain?: string }[]): Promise<readonly { signedTransaction: Uint8Array }[]>;
+  signTransaction(
+    ...inputs: { account: WalletAccount; transaction: Uint8Array; chain?: string }[]
+  ): Promise<readonly { signedTransaction: Uint8Array }[]>;
 }
 
 type Selected =
@@ -66,12 +74,21 @@ const LEGACY_PROVIDERS: { name: string; find(): LegacyProvider | null }[] = [
   {
     name: "Phantom",
     find: () => {
-      const w = window as unknown as { phantom?: { solana?: LegacyProvider & { isPhantom?: boolean } }; solana?: LegacyProvider & { isPhantom?: boolean } };
+      const w = window as unknown as {
+        phantom?: { solana?: LegacyProvider & { isPhantom?: boolean } };
+        solana?: LegacyProvider & { isPhantom?: boolean };
+      };
       return w.phantom?.solana ?? (w.solana?.isPhantom ? w.solana : null);
     },
   },
-  { name: "Solflare", find: () => (window as unknown as { solflare?: LegacyProvider & { isSolflare?: boolean } }).solflare ?? null },
-  { name: "Backpack", find: () => (window as unknown as { backpack?: LegacyProvider & { isBackpack?: boolean } }).backpack ?? null },
+  {
+    name: "Solflare",
+    find: () => (window as unknown as { solflare?: LegacyProvider & { isSolflare?: boolean } }).solflare ?? null,
+  },
+  {
+    name: "Backpack",
+    find: () => (window as unknown as { backpack?: LegacyProvider & { isBackpack?: boolean } }).backpack ?? null,
+  },
 ];
 
 let selected: Selected | null = null;
@@ -151,7 +168,7 @@ export async function connect(name: string, options: { silent?: boolean } = {}):
         if (options.silent) return null;
         throw new WalletError("failed", "The wallet returned no account.");
       }
-      selected?.kind === "standard" && selected.off?.();
+      if (selected?.kind === "standard") selected.off?.();
       const events = wallet.features[EVENTS] as EventsFeature | undefined;
       const off = events?.on("change", (properties) => {
         if (!properties.accounts || selected?.kind !== "standard" || selected.wallet !== wallet) return;
@@ -236,14 +253,21 @@ export function firstSignature(bytes: Uint8Array): string {
  * sign raw bytes; a legacy provider needs `legacy` to build its transaction
  * object (the caller loads web3.js for that only when needed).
  */
-export async function signTransaction(txBase64: string, legacy?: LegacySigner): Promise<{ signedTxBase64: string; signature: string }> {
+export async function signTransaction(
+  txBase64: string,
+  legacy?: LegacySigner,
+): Promise<{ signedTxBase64: string; signature: string }> {
   if (!selected) throw new WalletError("no_wallet");
   const bytes = fromBase64(txBase64);
   try {
     let signed: Uint8Array;
     if (selected.kind === "standard") {
       const feature = selected.wallet.features[SIGN] as SignFeature;
-      const [output] = await feature.signTransaction({ account: selected.account, transaction: bytes, chain: SOLANA_MAINNET });
+      const [output] = await feature.signTransaction({
+        account: selected.account,
+        transaction: bytes,
+        chain: SOLANA_MAINNET,
+      });
       signed = output.signedTransaction;
     } else {
       if (!legacy) throw new WalletError("legacy_needs_signer");

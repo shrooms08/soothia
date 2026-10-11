@@ -4,7 +4,14 @@ import { test } from "node:test";
 import { earningsView, estimateUsdc } from "../src/earnings";
 
 const NOW = Date.parse("2026-10-11T12:00:00Z");
-const live = { totalVolumeUsdc: 6, royaltyBps: 2000, skewBps: 5832, creatorFeesUsdc: 0, isGraduated: false, graduationThresholdUsdc: 1000 };
+const live = {
+  totalVolumeUsdc: 6,
+  royaltyBps: 2000,
+  skewBps: 5832,
+  creatorFeesUsdc: 0,
+  isGraduated: false,
+  graduationThresholdUsdc: 1000,
+};
 
 test("the estimate is the royalty share of the whole pool, rounded to cents", () => {
   assert.equal(estimateUsdc(live), 1.2);
@@ -16,7 +23,10 @@ test("during the buying window the line shows the estimate and the local close t
   const view = earningsView("2026-10-12T12:14:35Z", live, NOW);
   assert.equal(view.phase, "open");
   assert.equal(view.estimateUsdc, 1.2);
-  assert.match(view.text, /^Estimated ~\$1\.20 so far \(up to 20% of the pool, lower if the market is very one-sided\)\. Claimable after the buying window closes on .+\.$/);
+  assert.match(
+    view.text,
+    /^Estimated ~\$1\.20 so far \(up to 20% of the pool, lower if the market is very one-sided\)\. Claimable after the buying window closes on .+\.$/,
+  );
   const reduced = earningsView("2026-10-12T12:14:35Z", { ...live, royaltyBps: 1200 }, NOW);
   assert.match(reduced.text, /\(12%, down from 20% of the pool/);
 });

@@ -36,7 +36,9 @@ interface TradesPage {
 }
 
 /** Attributed buys: count, volume and distinct wallets. `fetchPage` is injectable for tests. */
-export async function aggregateTrades(fetchPage: (offset: number) => Promise<TradesPage | null>): Promise<Pick<Stats, "betsPlaced" | "volumeUsdc" | "uniqueWallets"> & { complete: boolean }> {
+export async function aggregateTrades(
+  fetchPage: (offset: number) => Promise<TradesPage | null>,
+): Promise<Pick<Stats, "betsPlaced" | "volumeUsdc" | "uniqueWallets"> & { complete: boolean }> {
   let betsPlaced = 0;
   let volumeBase = 0;
   let complete = true;
@@ -44,7 +46,10 @@ export async function aggregateTrades(fetchPage: (offset: number) => Promise<Tra
   for (let page = 0; page < MAX_PAGES; page++) {
     const body = await fetchPage(page * PAGE_LIMIT);
     // A failed page means the numbers are not the truth; the caller keeps the last good ones.
-    if (!body) { complete = false; break; }
+    if (!body) {
+      complete = false;
+      break;
+    }
     const items = body.items ?? [];
     for (const row of items) {
       // Only confirmed buys count as bets; claims are payouts, not bets.

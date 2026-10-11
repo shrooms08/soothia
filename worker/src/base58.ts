@@ -1,4 +1,6 @@
 // Base58 (Bitcoin alphabet), as Solana uses for addresses and signatures.
+// Hand-rolled so the Worker can validate keys and read transaction bytes
+// without loading @solana/web3.js on every request.
 const ALPHABET = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
 export function encodeBase58(bytes: Uint8Array): string {

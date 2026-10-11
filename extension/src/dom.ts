@@ -1,4 +1,6 @@
-// Small DOM helpers shared by the card and the review sheet.
+// Small DOM helpers shared by the card and the review sheet. Text always goes
+// through textContent; innerHTML is used only for the constant SVG icons here,
+// so page titles, AI output and wallet names can never become markup.
 
 export function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -102,7 +104,10 @@ export function icon(name: "close" | "refresh" | "warn" | "sound" | "muted"): SV
   svg.setAttribute("aria-hidden", "true");
   const paths: Record<typeof name, [string, string]> = {
     close: ["14", `<path d="M3 3l8 8M11 3l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>`],
-    refresh: ["12", `<path d="M10 6a4 4 0 1 1-1.2-2.85M10 1.5v2.5H7.5" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round"/>`],
+    refresh: [
+      "12",
+      `<path d="M10 6a4 4 0 1 1-1.2-2.85M10 1.5v2.5H7.5" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round"/>`,
+    ],
     sound: [
       "14",
       `<path d="M2 5.5v3h2.2L7.5 11V3L4.2 5.5H2z" fill="currentColor"/><path d="M9.5 4.8a2.6 2.6 0 0 1 0 4.4M11.2 3a5 5 0 0 1 0 8" stroke="currentColor" stroke-width="1.3" fill="none" stroke-linecap="round"/>`,

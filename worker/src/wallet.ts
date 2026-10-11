@@ -1,4 +1,6 @@
 // POST /wallet/balances: SOL and USDC held by a wallet, as plain numbers.
+// The review and bet sheets use it to say "you need SOL for fees" before a
+// transaction is built, so a failure is explained rather than simulated.
 import { isAddress } from "./base58";
 import { json, readJsonObject, type Env } from "./http";
 import { USDC_MINT } from "./pantaRules";
@@ -31,6 +33,10 @@ export async function handleBalances(request: Request, env: Env): Promise<Respon
     return json(request, { sol: balance.value / LAMPORTS_PER_SOL, usdc });
   } catch (error) {
     const misconfigured = error instanceof RpcError && error.message === "rpc_not_configured";
-    return json(request, { error: misconfigured ? "proxy_misconfigured" : "rpc_unavailable" }, misconfigured ? 500 : 502);
+    return json(
+      request,
+      { error: misconfigured ? "proxy_misconfigured" : "rpc_unavailable" },
+      misconfigured ? 500 : 502,
+    );
   }
 }

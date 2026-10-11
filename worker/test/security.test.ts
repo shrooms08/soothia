@@ -51,7 +51,12 @@ const WALLET = "BCMmCN6PPN4LaZjoWLvufmCaHYZE5PEaU3hHzYqeorne";
 const SYSTEM = "11111111111111111111111111111111";
 
 test("/debug/* does not exist without the admin header, and needs the exact token", async () => {
-  for (const headers of [{}, { "X-Soothia-Admin": "x".repeat(40) }, { "X-Soothia-Admin": TOKEN.slice(0, 39) }]) {
+  const attempts: Record<string, string>[] = [
+    {},
+    { "X-Soothia-Admin": "x".repeat(40) },
+    { "X-Soothia-Admin": TOKEN.slice(0, 39) },
+  ];
+  for (const headers of attempts) {
     const response = await call("/debug/kv-budget", { headers });
     assert.equal(response.status, 404);
     assert.deepEqual(await response.json(), { error: "not_found" });
@@ -65,8 +70,14 @@ test("/debug/* does not exist without the admin header, and needs the exact toke
 });
 
 test("/debug/* is closed entirely when ADMIN_TOKEN is unset or too short", async () => {
-  assert.equal((await call("/debug/kv-budget", { headers: { "X-Soothia-Admin": "" } }, env({ ADMIN_TOKEN: undefined }))).status, 404);
-  assert.equal((await call("/debug/kv-budget", { headers: { "X-Soothia-Admin": "short" } }, env({ ADMIN_TOKEN: "short" }))).status, 404);
+  assert.equal(
+    (await call("/debug/kv-budget", { headers: { "X-Soothia-Admin": "" } }, env({ ADMIN_TOKEN: undefined }))).status,
+    404,
+  );
+  assert.equal(
+    (await call("/debug/kv-budget", { headers: { "X-Soothia-Admin": "short" } }, env({ ADMIN_TOKEN: "short" }))).status,
+    404,
+  );
 });
 
 test("rateLimited counts per IP and route, then answers with seconds until the window resets", async () => {
@@ -85,7 +96,8 @@ test("rateLimited counts per IP and route, then answers with seconds until the w
 
 test("POST /match is limited per IP and the 429 carries Retry-After", async () => {
   clearMemoryCache();
-  const post = (ip: string) => call("/match", { method: "POST", body: "{}", headers: { "Content-Type": "application/json" }, ip });
+  const post = (ip: string) =>
+    call("/match", { method: "POST", body: "{}", headers: { "Content-Type": "application/json" }, ip });
   for (let i = 0; i < LIMITS.match.limit; i++) assert.equal((await post("192.0.2.10")).status, 400);
   const blocked = await post("192.0.2.10");
   assert.equal(blocked.status, 429);
@@ -102,9 +114,17 @@ test("POST /detect validates the install header, the body size, and the page URL
   assert.equal((await post(JSON.stringify({ url: "https://x.com", text: "a".repeat(300) }))).status, 400);
   const withInstall = { "X-Soothia-Install": install };
   assert.deepEqual(await (await post("not json", withInstall)).json(), { error: "bad_request" });
-  assert.deepEqual(await (await post(JSON.stringify({ url: "javascript:alert(1)", text: "a".repeat(300) }), withInstall)).json(), { error: "bad_request" });
-  assert.deepEqual(await (await post(JSON.stringify({ url: "https://x.com", text: "a".repeat(40_000) }), withInstall)).json(), { error: "bad_request" });
-  assert.deepEqual(await (await post(JSON.stringify({ url: "https://x.com" }), withInstall)).json(), { error: "bad_request" });
+  assert.deepEqual(
+    await (await post(JSON.stringify({ url: "javascript:alert(1)", text: "a".repeat(300) }), withInstall)).json(),
+    { error: "bad_request" },
+  );
+  assert.deepEqual(
+    await (await post(JSON.stringify({ url: "https://x.com", text: "a".repeat(40_000) }), withInstall)).json(),
+    { error: "bad_request" },
+  );
+  assert.deepEqual(await (await post(JSON.stringify({ url: "https://x.com" }), withInstall)).json(), {
+    error: "bad_request",
+  });
 });
 
 test("unknown routes and methods answer with a short JSON error and no stack", async () => {
@@ -136,10 +156,17 @@ test("staticAccountKeys reads legacy and v0 messages; touchesPanta needs the Pan
 test("POST /api/tx/send refuses transactions that do not invoke Panta, and relays the rest", async () => {
   clearMemoryCache();
   const send = (signedTxBase64: string) =>
-    call("/api/tx/send", { method: "POST", body: JSON.stringify({ signedTxBase64 }), headers: { "Content-Type": "application/json" } });
+    call("/api/tx/send", {
+      method: "POST",
+      body: JSON.stringify({ signedTxBase64 }),
+      headers: { "Content-Type": "application/json" },
+    });
   const refused = await send(signedTx([WALLET, SYSTEM]));
   assert.equal(refused.status, 400);
-  assert.deepEqual(await refused.json(), { message: "Only Panta transactions can be sent through Soothia.", code: "not_panta_transaction" });
+  assert.deepEqual(await refused.json(), {
+    message: "Only Panta transactions can be sent through Soothia.",
+    code: "not_panta_transaction",
+  });
   // A Panta transaction passes the gate and reaches the RPC step (unconfigured in tests).
   const relayed = await send(signedTx([WALLET, PANTA_PROGRAM, SYSTEM]));
   assert.equal(relayed.status, 500);

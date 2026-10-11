@@ -1,7 +1,17 @@
 // The share page's wallet bundle: the shared Wallet Standard layer plus the
 // signed-transaction check, and a lazy loader for the Mobile Wallet Adapter
 // (Android Chrome only). Legacy providers still need share-tx.js for web3.js.
-export { connect, connected, disconnect, firstSignature, isRejection, listWallets, onWalletsChange, signTransaction, WalletError } from "../../extension/src/wallets";
+export {
+  connect,
+  connected,
+  disconnect,
+  firstSignature,
+  isRejection,
+  listWallets,
+  onWalletsChange,
+  signTransaction,
+  WalletError,
+} from "../../extension/src/wallets";
 export { checkSignedTransaction } from "../../extension/src/tx-check";
 
 let mwa: Promise<void> | null = null;

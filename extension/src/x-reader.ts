@@ -64,10 +64,14 @@ export function readTweetArticle(article: Element, statusId?: string): TweetRead
   // The first text block is the tweet's own; a quoted tweet's comes later.
   const body = article.querySelector(TEXT);
   if (!body) return null;
-  const text = renderedText(body).replace(/[ \t]+/g, " ").replace(/\s*\n\s*/g, "\n").trim();
+  const text = renderedText(body)
+    .replace(/[ \t]+/g, " ")
+    .replace(/\s*\n\s*/g, "\n")
+    .trim();
   if (!text) return null;
 
   const handle = /@\w{1,15}/.exec(article.querySelector('[data-testid="User-Name"]')?.textContent ?? "")?.[0] ?? null;
-  const time = (statusId && permalinkTime(article, statusId)) || permalinkTime(article) || article.querySelector("time");
+  const time =
+    (statusId && permalinkTime(article, statusId)) || permalinkTime(article) || article.querySelector("time");
   return { handle, postedAt: time?.getAttribute("datetime") ?? null, text };
 }

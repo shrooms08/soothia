@@ -141,7 +141,9 @@ export function isQuoteId(value: unknown): value is string {
 }
 
 export function isTxBase64(value: unknown): value is string {
-  return typeof value === "string" && value.length > 100 && value.length <= MAX_TX_BASE64 && /^[A-Za-z0-9+/]+=*$/.test(value);
+  return (
+    typeof value === "string" && value.length > 100 && value.length <= MAX_TX_BASE64 && /^[A-Za-z0-9+/]+=*$/.test(value)
+  );
 }
 
 // ---- POST /create/quote ----
@@ -356,7 +358,11 @@ export function simulationReason(err: unknown, logs: string[]): string {
   if (text.includes("accountnotfound") || text.includes("found no record of a prior credit")) {
     return "This wallet is empty. It needs SOL for network fees and USDC to pay with.";
   }
-  if (text.includes("insufficient lamports") || text.includes("insufficientfundsforfee") || text.includes("insufficientfundsforrent")) {
+  if (
+    text.includes("insufficient lamports") ||
+    text.includes("insufficientfundsforfee") ||
+    text.includes("insufficientfundsforrent")
+  ) {
     return "This wallet does not have enough SOL for network fees.";
   }
   if (text.includes("insufficient funds")) return "This wallet does not have enough USDC for this.";
@@ -418,7 +424,11 @@ export async function txState(env: Env, signature: string): Promise<{ state: TxS
   return { state: done ? "confirmed" : "pending" };
 }
 
-export async function waitForConfirmation(env: Env, signature: string, maxWaitMs: number): Promise<{ state: TxState; err?: unknown }> {
+export async function waitForConfirmation(
+  env: Env,
+  signature: string,
+  maxWaitMs: number,
+): Promise<{ state: TxState; err?: unknown }> {
   const deadline = Date.now() + maxWaitMs;
   for (;;) {
     try {
@@ -431,7 +441,6 @@ export async function waitForConfirmation(env: Env, signature: string, maxWaitMs
     await sleep(POLL_INTERVAL_MS);
   }
 }
-
 
 interface FinishResult {
   signature: string;

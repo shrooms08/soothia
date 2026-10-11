@@ -14,7 +14,16 @@ import {
   type WalletRpcResponse,
   type WalletStatusMessage,
 } from "./messages";
-import { connect, connected, disconnect, listWallets, onWalletsChange, signTransaction, WalletError, type LegacySigner } from "./wallets";
+import {
+  connect,
+  connected,
+  disconnect,
+  listWallets,
+  onWalletsChange,
+  signTransaction,
+  WalletError,
+  type LegacySigner,
+} from "./wallets";
 
 /** wallet-sign.ts leaves its web3.js helpers here for legacy providers. */
 const LEGACY_SIGNER_KEY = "__soothiaLegacySigner";
@@ -35,7 +44,8 @@ function report(force = false): void {
 
 function failure(error: unknown): WalletRpcOutcome {
   if (error instanceof WalletError) {
-    if (error.reason === "rejected" || error.reason === "legacy_needs_signer") return { ok: false, reason: error.reason };
+    if (error.reason === "rejected" || error.reason === "legacy_needs_signer")
+      return { ok: false, reason: error.reason };
     return { ok: false, reason: error.reason, message: error.message.slice(0, 200) };
   }
   return { ok: false, reason: "failed", message: String((error as Error)?.message ?? "").slice(0, 200) };

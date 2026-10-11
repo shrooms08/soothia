@@ -8,7 +8,11 @@ import { build } from "../extension/node_modules/vite/dist/node/index.js";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
 const nodeModules = `${root}extension/node_modules`;
-for (const [entry, file] of [["wallets", "wallets.js"], ["mwa", "mwa.js"], ["share-tx", "share-tx.js"]]) {
+for (const [entry, file] of [
+  ["wallets", "wallets.js"],
+  ["mwa", "mwa.js"],
+  ["share-tx", "share-tx.js"],
+]) {
   await build({
     configFile: false,
     logLevel: "warn",
