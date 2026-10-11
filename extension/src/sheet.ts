@@ -28,6 +28,8 @@ import {
   MIN_SOL_FOR_CREATE,
   QUESTION_MAX_LENGTH,
   type MarketType,
+  BREAKING_MARKET_COST_USDC,
+  STANDARD_MARKET_COST_USDC,
 } from "./rules";
 import { checkSignedTransaction } from "./tx-check";
 import { wallet } from "./wallet-client";
@@ -195,13 +197,13 @@ export function openSheet(host: SheetHost): Sheet {
   const TYPE_COPY: Record<MarketType, { name: string; fee: string; blurb: string }> = {
     breaking: {
       name: "Breaking",
-      fee: "20 USDC",
+      fee: `${BREAKING_MARKET_COST_USDC} USDC`,
       blurb:
         "People can buy YES/NO until the buying window closes, then shares trade between people until it resolves.",
     },
     standard: {
       name: "Standard",
-      fee: "50 USDC",
+      fee: `${STANDARD_MARKET_COST_USDC} USDC`,
       blurb: "For events more than 3 days away that need a longer buying window.",
     },
   };

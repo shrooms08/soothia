@@ -1,4 +1,6 @@
 // POST /wallet/balances: SOL and USDC held by a wallet, as plain numbers.
+// The review and bet sheets use it to say "you need SOL for fees" before a
+// transaction is built, so a failure is explained rather than simulated.
 import { isAddress } from "./base58";
 import { json, readJsonObject, type Env } from "./http";
 import { USDC_MINT } from "./pantaRules";

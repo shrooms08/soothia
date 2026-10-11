@@ -1,4 +1,6 @@
-// Small DOM helpers shared by the card and the review sheet.
+// Small DOM helpers shared by the card and the review sheet. Text always goes
+// through textContent; innerHTML is used only for the constant SVG icons here,
+// so page titles, AI output and wallet names can never become markup.
 
 export function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,

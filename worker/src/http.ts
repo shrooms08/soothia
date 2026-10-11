@@ -1,4 +1,7 @@
-// Shared types and response helpers for soothia-proxy.
+// Shared types and response helpers for soothia-proxy: the Env shape, CORS for
+// the extension and site origins only, JSON responses, a size-capped body
+// parser, and the install and admin header checks. Everything that answers a
+// request goes through json() so errors are short codes, never stack traces.
 
 export interface Env {
   PANTA_API_KEY: string;

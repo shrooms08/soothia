@@ -1,5 +1,7 @@
 // POST /detect: drafts up to three market-ready claims from a page's text.
 // Page text is never logged and never stored; only validated claims are cached.
+// Prose goes through Claude and every draft must quote the page; a sports
+// fixture skips the model and its evidence lines stand in for the quote.
 import { AnthropicError, callTool, type ToolSpec } from "./anthropic";
 import { installId, json, readJsonObject, sha256Hex, type Env } from "./http";
 import { authorityFor } from "./resolution";
