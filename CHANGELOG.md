@@ -23,6 +23,7 @@ Branch `total-recall`. A local CLI that locks football predictions as memories o
 - Staking pool identity (`worker/src/stake/identity.ts`): one pool per question, whichever way round a page lists the match.
 - Stakes are remembered on Walrus Memory as a `stake` record, and `/recall/record` shows each staked pick's amount, status and payout.
 - Staking routes under `/stake/*`: pool, build, confirm, positions, claim/build and admin/pending. A pool closes at ESPN's kickoff, never the page's, and pool creation is capped at 30 a day and stops when `RESOLVER_KEY` falls below 0.05 SUI.
+- Staking sweep in the scheduled handler: resolves finished matches from ESPN, voids matches that are missing or not played a day after kickoff, and collects the fee after the challenge window. Each action is logged for `/stake/admin/pending`.
 - Called matches: `/recall/insights` returns `called` from the full pick list. Both tiles of a called match show "Your call" with a Proof link instead of Call it.
 - Sui-only: removed Solana, Panta, betting, market creation, wallet connection and the markets and share pages. Tag `v0.9-solana-final` marks the last commit with them. `/stats` now reports Total Recall numbers. Extension 0.11.0.
 - Calling is now the primary action: Call it leads each tile, betting and market creation become text links, the wallet row shows only for betting, and the first-run copy leads with calling.
