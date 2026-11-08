@@ -5,7 +5,7 @@ import { button, el, externalLink } from "./dom";
 import type { ApiError, ApiPath, ApiResponse, RecallCalled } from "./messages";
 import type { Sheet } from "./call-sheet";
 import {
-  amountProblem,
+  backButtonState,
   backsYes,
   feePercent,
   formatSui,
@@ -37,6 +37,7 @@ export interface BackHost {
   sound?: (name: "betPlaced" | "softError") => void;
   /** For tests: how a pause between confirm attempts is spent. */
   wait?: (ms: number) => Promise<void>;
+  now?: () => number;
 }
 
 interface Built {
@@ -53,8 +54,13 @@ export function openBackSheet(host: BackHost): Sheet {
   const wait = host.wait ?? pause;
 
   let pool: PoolView | null = null;
+  let poolFailed = false;
   let held = 0n;
   let balance: bigint | null = null;
+  let balanceFailed = false;
+  let connected: ConnectedWallet | null = null;
+  /** The last attempt's failure. It stays on screen until the user changes something. */
+  let failure: { retry: boolean } | null = null;
   let chosen = CHIPS[0];
   let busy = false;
   let disposed = false;
@@ -76,6 +82,7 @@ export function openBackSheet(host: BackHost): Sheet {
     const chip = button(`${value} SUI`, "button small back-chip", () => {
       chosen = value;
       custom.value = "";
+      clearFailure();
       render();
     });
     chipButtons.set(value, chip);
@@ -88,27 +95,29 @@ export function openBackSheet(host: BackHost): Sheet {
   custom.setAttribute("aria-label", "Other amount in SUI");
   custom.addEventListener("input", () => {
     chosen = custom.value;
+    clearFailure();
     render();
   });
   const amountField = el("div", "field");
   amountField.append(el("span", "field-label", "How much?"), chipRow, custom);
 
-  const problem = el("p", "note back-problem");
   const estimate = el("p", "back-estimate");
   const fee = el("p", "note");
   const schedule = el("p", "note", "Results from ESPN, settled 2h15m after kickoff, 6h challenge window, then claim");
   const notice = el("p", "note back-notice", "Staking may be restricted where you live. Unaudited beta: stake only what you can lose.");
   const trust = externalLink("Who can do what", TRUST_DOC_URL, "link ext");
-  form.append(sideRow, amountField, problem, estimate, fee, schedule, notice, trust);
+  form.append(sideRow, amountField, estimate, fee, schedule, notice, trust);
 
   const picker = el("div", "wallet-row wallet-picker");
   picker.hidden = true;
   const status = el("p", "line status-line");
   status.setAttribute("aria-live", "polite");
   const check = el("p", "note", "Check the amount in your wallet popup before approving.");
-  const backButton = button("Back it", "button buy wide", () => void submit());
+  const balanceNote = el("p", "note");
+  const backButton = button("Back it", "button primary wide back-submit", () => void submit());
   const foot = el("div", "sheet-foot");
-  foot.append(picker, status, check, backButton);
+  // The status line sits directly above the button: it carries every reason for disabling it.
+  foot.append(picker, check, balanceNote, status, backButton);
 
   const header = el("div", "sheet-head");
   header.append(
@@ -126,30 +135,40 @@ export function openBackSheet(host: BackHost): Sheet {
 
   const amount = (): bigint | null => parseSuiAmount(chosen);
 
-  function currentProblem(): string | null {
-    if (!pool) return "Loading the pool…";
-    return amountProblem({
+  const buttonState = () =>
+    backButtonState({
+      pool,
+      poolFailed,
       amountMist: amount(),
-      limits: pool.limits,
       heldMist: held,
-      poolTotalMist: BigInt(pool.yesTotal) + BigInt(pool.noTotal),
       balanceMist: balance,
+      balanceFailed,
+      walletConnected: connected !== null,
+      nowMs: host.now?.() ?? Date.now(),
     });
+
+  function clearFailure(): void {
+    if (digest === null) failure = null;
   }
 
   function render(): void {
     for (const [value, chip] of chipButtons) chip.classList.toggle("selected", value === chosen);
-    const trouble = currentProblem();
-    problem.textContent = pool ? (trouble ?? "") : "";
+    const state = buttonState();
     const stake = amount();
-    if (pool && stake !== null && !trouble) {
+    if (pool && stake !== null && state.enabled) {
       const { multiplier, payoutMist } = stakeEstimate(pool, side, stake, held);
       estimate.textContent = `Pays about ${multiplier.toFixed(2)}x right now. About ${formatSui(payoutMist, 4)} SUI back if your side wins. It moves as others stake.`;
     } else {
       estimate.textContent = "";
     }
     if (pool) fee.textContent = `Soothia takes a ${feePercent(pool.feeBps)} fee from the pot.`;
-    if (!busy && digest === null) backButton.disabled = trouble !== null;
+    balanceNote.textContent = state.note ?? "";
+    // Busy steps and failures own the status line and the button until they end.
+    if (!busy && failure === null) {
+      setStatus(state.reason ?? "", state.reason !== null);
+      backButton.textContent = state.label;
+      backButton.disabled = !state.enabled;
+    }
     host.layout();
   }
 
@@ -161,18 +180,30 @@ export function openBackSheet(host: BackHost): Sheet {
       subject: fixture.subject,
     });
     if (disposed) return;
-    if (response.ok && response.body) pool = response.body as PoolView;
-    else if (!pool) setStatus("Couldn't load this pool. Go back and try again.", true);
+    if (response.ok && response.body) {
+      pool = response.body as PoolView;
+      poolFailed = false;
+    } else if (!pool) {
+      poolFailed = true;
+    }
     render();
   }
 
   async function loadAccount(wallet: ConnectedWallet): Promise<void> {
+    connected = wallet;
+    render();
     const [balanceResponse, positionsResponse] = await Promise.all([
       host.api<{ balanceMist: string }>("/stake/balance", { address: wallet.address }),
       host.api<{ positions: StakePositionView[] }>("/stake/positions", { address: wallet.address }),
     ]);
     if (disposed) return;
-    if (balanceResponse.ok && balanceResponse.body) balance = BigInt((balanceResponse.body as { balanceMist: string }).balanceMist);
+    if (balanceResponse.ok && balanceResponse.body) {
+      balance = BigInt((balanceResponse.body as { balanceMist: string }).balanceMist);
+      balanceFailed = false;
+    } else {
+      balance = null;
+      balanceFailed = true;
+    }
     if (positionsResponse.ok && positionsResponse.body) {
       const found = (positionsResponse.body as { positions: StakePositionView[] }).positions.find((position) => position.pickId === called.pickId);
       held = found ? BigInt(found.amountMist) : 0n;
@@ -198,8 +229,9 @@ export function openBackSheet(host: BackHost): Sheet {
 
   function fail(text: string, retry: boolean): void {
     busy = false;
+    failure = { retry };
     setStatus(text, true);
-    backButton.textContent = retry ? "Try again" : "Back it";
+    backButton.textContent = retry ? "Try again" : buttonState().label;
     backButton.disabled = !retry;
     custom.disabled = false;
     host.sound?.("softError");
@@ -251,12 +283,16 @@ export function openBackSheet(host: BackHost): Sheet {
   }
 
   async function ensureWallet(): Promise<ConnectedWallet | null> {
-    const existing = await host.wallet.current();
-    if (existing) return existing;
-    setBusy("Connect your wallet…");
-    const connected = await host.wallet.connect(chooseWallet);
-    if (connected) await loadAccount(connected);
-    return connected;
+    if (connected) return connected;
+    const saved = await host.wallet.current();
+    if (saved) {
+      await loadAccount(saved);
+      return saved;
+    }
+    setBusy("Connect your wallet\u2026");
+    const fresh = await host.wallet.connect(chooseWallet);
+    if (fresh) await loadAccount(fresh);
+    return fresh;
   }
 
   async function submit(): Promise<void> {
@@ -266,7 +302,11 @@ export function openBackSheet(host: BackHost): Sheet {
       await confirm(digest, stake);
       return;
     }
-    if (currentProblem() !== null || stake === null) return;
+    failure = null;
+    if (!buttonState().enabled || stake === null) {
+      render();
+      return;
+    }
 
     let wallet: ConnectedWallet | null;
     try {
@@ -282,10 +322,9 @@ export function openBackSheet(host: BackHost): Sheet {
       return;
     }
     busy = false;
-    const trouble = currentProblem();
-    if (trouble !== null) {
-      fail(trouble, false);
-      backButton.disabled = true;
+    // The wallet is known now, and may not have enough for this amount.
+    if (!buttonState().enabled) {
+      custom.disabled = false;
       render();
       return;
     }

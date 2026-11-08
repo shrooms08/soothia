@@ -11,6 +11,7 @@ import type { ConnectedWallet, WalletSummary } from "../src/wallet-protocol";
 const dom = new JSDOM("<!doctype html><body></body>");
 Object.assign(globalThis, { document: dom.window.document });
 const { openBackSheet, TRUST_DOC_URL } = await import("../src/back-sheet");
+const { STYLES } = await import("../src/styles");
 
 const KICKOFF = "2026-11-21T17:30:00.000Z";
 const called: RecallCalled = { side: "Arsenal win", confidence: 60, pickId: "p1", committed: true, pYes: 0.6, fixture: { home: "Newcastle United", away: "Arsenal", startISO: KICKOFF, subject: "away" } };
@@ -31,6 +32,8 @@ interface Options {
   wallet?: ConnectedWallet | null;
   wallets?: WalletSummary[];
   balance?: string;
+  balanceFails?: boolean;
+  poolFails?: boolean;
   held?: string;
   build?: () => Reply;
   confirm?: (() => Reply)[];
@@ -80,8 +83,8 @@ async function open(options: Options = {}) {
     api: async <T,>(path: ApiPath, body: unknown) => {
       asked.push([path, body as Record<string, unknown>]);
       let reply: Reply;
-      if (path === "/stake/pool") reply = OK(options.pool ?? pool);
-      else if (path === "/stake/balance") reply = OK({ balanceMist: options.balance ?? "1000000000" });
+      if (path === "/stake/pool") reply = options.poolFails ? NO(502, { error: "stake_unavailable" }) : OK(options.pool ?? pool);
+      else if (path === "/stake/balance") reply = options.balanceFails ? NO(502, { error: "stake_unavailable" }) : OK({ balanceMist: options.balance ?? "1000000000" });
       else if (path === "/stake/positions") reply = OK({ positions: options.held ? [{ pickId: "p1", amountMist: options.held }] : [] });
       else if (path === "/stake/build") reply = options.build ? options.build() : OK(BUILT);
       else if (path === "/stake/confirm") reply = (confirms.shift() ?? (() => OK({ ok: true })))();
@@ -92,9 +95,9 @@ async function open(options: Options = {}) {
   sheets.push(sheet);
   await tick();
   const q = <T extends Element>(selector: string) => sheet.node.querySelector<T>(selector);
-  const main = () => q<HTMLButtonElement>(".button.buy")!;
+  const main = () => q<HTMLButtonElement>(".back-submit")!;
   const status = () => q(".status-line")?.textContent ?? "";
-  const problem = () => q(".back-problem")?.textContent ?? "";
+  const problem = status;
   const chip = (label: string) => [...sheet.node.querySelectorAll<HTMLButtonElement>(".back-chip")].find((node) => node.textContent === label)!;
   const paths = () => asked.map(([path]) => path);
   return { sheet, asked, signed, q, main, status, problem, chip, paths, connects: () => connects, backs: () => backs };
@@ -125,6 +128,100 @@ test("a NO call backs the NO side", async () => {
   const s = await open({ sideCalled: { ...called, pYes: 0.3, side: "Arsenal doesn't win (Newcastle United win or draw)" } });
   await press(s);
   assert.equal((s.signed[0].expected as { side: boolean }).side, false);
+});
+
+// The states reported from Chrome: label, enabled flag and the reason right above the button.
+function reasonAboveButton(s: Awaited<ReturnType<typeof open>>): string {
+  const above = s.main().previousElementSibling as HTMLElement;
+  assert.ok(above.classList.contains("status-line"));
+  return above.textContent ?? "";
+}
+
+test("the default chip sets the amount, so a fresh sheet can act at once", async () => {
+  const s = await open({ wallet: null });
+  assert.ok(s.chip("0.1 SUI").classList.contains("selected"));
+  assert.equal(s.main().disabled, false);
+  await press(s);
+  assert.equal(s.asked.find(([path]) => path === "/stake/build")?.[1].amountMist, "100000000");
+});
+
+test("state: no wallet is enabled and offers to connect", async () => {
+  const s = await open({ wallet: null });
+  assert.equal(s.main().textContent, "Connect wallet to back it");
+  assert.equal(s.main().disabled, false);
+  assert.equal(reasonAboveButton(s), "");
+});
+
+test("state: an unreadable balance still allows the attempt", async () => {
+  const s = await open({ balanceFails: true });
+  assert.equal(s.main().textContent, "Back it");
+  assert.equal(s.main().disabled, false);
+  assert.equal(reasonAboveButton(s), "");
+  assert.ok(s.q(".sheet-foot")?.textContent?.includes("Couldn't check your balance"));
+  await press(s);
+  assert.equal(s.signed.length, 1);
+});
+
+test("state: not enough SUI is disabled, with the reason above it", async () => {
+  const s = await open({ balance: "50000000" });
+  assert.equal(s.main().textContent, "Back it");
+  assert.equal(s.main().disabled, true);
+  assert.equal(reasonAboveButton(s), "Not enough SUI: you have 0.05, need 0.12 with gas");
+});
+
+test("state: over the limit is disabled, with the reason above it", async () => {
+  const s = await open();
+  const input = s.q<HTMLInputElement>(".back-custom")!;
+  input.value = "6";
+  input.dispatchEvent(new dom.window.Event("input"));
+  assert.equal(s.main().disabled, true);
+  assert.equal(reasonAboveButton(s), "Above your 5 SUI limit");
+});
+
+test("state: a closed pool is disabled, with the reason above it", async () => {
+  const s = await open({ pool: { ...pool, status: "void" } });
+  assert.equal(s.main().disabled, true);
+  assert.equal(reasonAboveButton(s), "Pool closed");
+});
+
+test("state: valid is enabled with no reason", async () => {
+  const s = await open();
+  assert.equal(s.main().textContent, "Back it");
+  assert.equal(s.main().disabled, false);
+  assert.equal(reasonAboveButton(s), "");
+});
+
+test("a pool still loading or failing says so instead of sitting disabled", async () => {
+  const s = await open({ poolFails: true });
+  assert.equal(s.main().disabled, true);
+  assert.equal(reasonAboveButton(s), "Couldn't load this pool. Trying again\u2026");
+});
+
+test("the button uses the primary style in every state", async () => {
+  for (const options of [{}, { wallet: null }, { balance: "50000000" }]) {
+    const s = await open(options);
+    assert.ok(s.main().classList.contains("primary"));
+    assert.ok(s.main().classList.contains("wide"));
+    // .button.buy has dark text and needs data-side for a background.
+    assert.equal(s.main().classList.contains("buy"), false);
+  }
+});
+
+test("the disabled style keeps the primary colours at reduced opacity", () => {
+  const rule = /\.button\.primary\.back-submit:disabled[^{]*\{([^}]*)\}/.exec(STYLES)?.[1] ?? "";
+  assert.match(rule, /background: linear-gradient/);
+  assert.match(rule, /color: var\(--sth-text-on-orb\)/);
+  assert.match(rule, /opacity: \.55/);
+});
+
+test("a failure stays on screen until the amount changes", async () => {
+  const s = await open({ build: () => NO(409, { error: "too_close_to_kickoff" }) });
+  await press(s);
+  assert.match(reasonAboveButton(s), /about to start/);
+  assert.equal(s.main().disabled, true);
+  s.chip("0.5 SUI").click();
+  assert.equal(reasonAboveButton(s), "");
+  assert.equal(s.main().disabled, false);
 });
 
 test("the full path: build, check and sign, confirm, done with proof", async () => {
@@ -177,7 +274,7 @@ test("a custom amount works, and bad text blocks the button", async () => {
   bad.value = "abc";
   bad.dispatchEvent(new dom.window.Event("input"));
   assert.equal(t.main().disabled, true);
-  assert.equal(t.problem(), "Enter an amount in SUI.");
+  assert.equal(t.problem(), "Enter an amount in SUI");
 });
 
 test("the wallet balance limits the amount", async () => {
@@ -185,13 +282,13 @@ test("the wallet balance limits the amount", async () => {
   assert.equal(s.main().disabled, false);
   s.chip("0.5 SUI").click();
   assert.equal(s.main().disabled, true);
-  assert.match(s.problem(), /needs 0\.52 SUI including gas\. Your wallet has 0\.1535 SUI/);
+  assert.equal(s.problem(), "Not enough SUI: you have 0.1535, need 0.52 with gas");
 });
 
 test("earlier stakes count against the personal limit", async () => {
   const s = await open({ held: "4500000000" });
   s.chip("1 SUI").click();
-  assert.match(s.problem(), /add at most 0\.5 SUI more/);
+  assert.equal(s.problem(), "Above your 5 SUI limit: you can add 0.5 more");
   assert.equal(s.main().disabled, true);
 });
 
@@ -216,7 +313,7 @@ test("several wallets show a picker in the sheet", async () => {
 test("after connecting, an unaffordable amount stops before anything is built", async () => {
   const s = await open({ wallet: null, balance: "50000000" });
   await press(s);
-  assert.match(s.status(), /needs 0\.12 SUI including gas/);
+  assert.equal(s.status(), "Not enough SUI: you have 0.05, need 0.12 with gas");
   assert.equal(s.paths().includes("/stake/build"), false);
   assert.equal(s.signed.length, 0);
 });

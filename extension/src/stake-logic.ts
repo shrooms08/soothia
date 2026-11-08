@@ -138,19 +138,54 @@ export function amountProblem(input: {
   balanceMist: bigint | null;
 }): string | null {
   const { amountMist, limits, heldMist, poolTotalMist, balanceMist } = input;
-  if (amountMist === null) return "Enter an amount in SUI.";
+  if (amountMist === null) return "Enter an amount in SUI";
   const minimum = BigInt(limits.minStakeMist);
-  if (amountMist < minimum) return `The minimum stake is ${formatSui(minimum)} SUI.`;
-  const room = BigInt(limits.maxStakePerUserMist) - heldMist;
+  if (amountMist < minimum) return `Below the ${formatSui(minimum)} SUI minimum`;
+  const limit = BigInt(limits.maxStakePerUserMist);
+  const room = limit - heldMist;
   if (amountMist > room) {
-    return heldMist > 0n ? `You can add at most ${formatSui(room < 0n ? 0n : room)} SUI more to this pool.` : `The most you can stake on one pool is ${formatSui(room)} SUI.`;
+    return heldMist > 0n ? `Above your ${formatSui(limit)} SUI limit: you can add ${formatSui(room < 0n ? 0n : room)} more` : `Above your ${formatSui(limit)} SUI limit`;
   }
   const poolRoom = BigInt(limits.maxPoolMist) - poolTotalMist;
-  if (amountMist > poolRoom) return `This pool only has room for ${formatSui(poolRoom < 0n ? 0n : poolRoom)} SUI more.`;
+  if (amountMist > poolRoom) return poolRoom > 0n ? `Pool is nearly full: room for ${formatSui(poolRoom)} SUI more` : "Pool is full";
   if (balanceMist !== null && amountMist + GAS_RESERVE_MIST > balanceMist) {
-    return `That needs ${formatSui(amountMist + GAS_RESERVE_MIST)} SUI including gas. Your wallet has ${formatSui(balanceMist, 4)} SUI.`;
+    return `Not enough SUI: you have ${formatSui(balanceMist, 4)}, need ${formatSui(amountMist + GAS_RESERVE_MIST)} with gas`;
   }
   return null;
+}
+
+export interface BackButtonState {
+  label: string;
+  enabled: boolean;
+  /** Why it is disabled, shown directly above it. Null when it is enabled. */
+  reason: string | null;
+  /** A small remark that does not block anything. */
+  note: string | null;
+}
+
+/** What the Back it button says and does. It is never disabled without a reason. */
+export function backButtonState(input: {
+  pool: PoolView | null;
+  poolFailed: boolean;
+  amountMist: bigint | null;
+  heldMist: bigint;
+  /** Null when not connected, still loading, or unreadable. An unknown balance never blocks. */
+  balanceMist: bigint | null;
+  balanceFailed: boolean;
+  walletConnected: boolean;
+  nowMs: number;
+}): BackButtonState {
+  const { pool, poolFailed, amountMist, heldMist, balanceMist, balanceFailed, walletConnected, nowMs } = input;
+  let reason: string | null;
+  if (!pool) reason = poolFailed ? "Couldn't load this pool. Trying again\u2026" : "Loading the pool\u2026";
+  else if (!poolIsOpenForStakes(pool, nowMs)) reason = "Pool closed";
+  else reason = amountProblem({ amountMist, limits: pool.limits, heldMist, poolTotalMist: BigInt(pool.yesTotal) + BigInt(pool.noTotal), balanceMist });
+  return {
+    label: walletConnected ? "Back it" : "Connect wallet to back it",
+    enabled: reason === null,
+    reason,
+    note: walletConnected && balanceFailed ? "Couldn't check your balance" : null,
+  };
 }
 
 export interface StakeEstimate {

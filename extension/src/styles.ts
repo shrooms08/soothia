@@ -801,9 +801,15 @@ input[type="number"].input { font-family: var(--sth-font-mono); }
 .back-chips .button.small { margin: 0; padding: 0; }
 .back-chip.selected { outline: 2px solid var(--sth-text-2); outline-offset: -2px; }
 .back-custom { width: 100%; height: 32px; font-size: 12px; }
-.back-problem:empty, .back-estimate:empty { display: none; }
+.back-estimate:empty { display: none; }
 .back-estimate { margin: 8px 0 0; font-size: 13px; }
-.status-line.bad, .back-problem, .stake-claim-note.bad { color: var(--sth-no); }
+.status-line.bad, .stake-claim-note.bad { color: var(--sth-no); }
+.button.primary.back-submit:disabled, .button.primary.back-submit:disabled:hover {
+  background: linear-gradient(180deg, #F4F1FF, #C9C3F2);
+  color: var(--sth-text-on-orb);
+  box-shadow: 0 0 0 1px rgba(255,255,255,.4) inset;
+  opacity: .55;
+}
 .stake-block { margin-top: 8px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .stake-text { font-size: 12px; color: var(--sth-text-2); flex: 1 1 auto; min-width: 0; }
 .stake-block .button.small { flex: none; margin: 0; }

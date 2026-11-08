@@ -4,6 +4,7 @@ import { test } from "node:test";
 import type { RecallCalled, Tile } from "../src/messages";
 import {
   amountProblem,
+  backButtonState,
   backedLine,
   canTopUp,
   formatSui,
@@ -125,13 +126,14 @@ test("amount validation: the good cases", () => {
 });
 
 test("amount validation: every refusal says why", () => {
-  assert.match(amountProblem(input({ amountMist: null }))!, /Enter an amount/);
-  assert.match(amountProblem(input({ amountMist: 99_999_999n }))!, /minimum stake is 0\.1 SUI/);
-  assert.match(amountProblem(input({ amountMist: 5n * SUI + 1n }))!, /most you can stake on one pool is 5 SUI/);
-  assert.match(amountProblem(input({ amountMist: SUI + 1n, heldMist: 4n * SUI }))!, /add at most 1 SUI more/);
-  assert.match(amountProblem(input({ amountMist: SUI, heldMist: 5n * SUI }))!, /add at most 0 SUI more/);
-  assert.match(amountProblem(input({ poolTotalMist: 50n * SUI }))!, /room for 0 SUI more/);
-  assert.match(amountProblem(input({ balanceMist: 100_000_000n + GAS_RESERVE_MIST - 1n }))!, /needs 0\.12 SUI including gas/);
+  assert.equal(amountProblem(input({ amountMist: null })), "Enter an amount in SUI");
+  assert.equal(amountProblem(input({ amountMist: 99_999_999n })), "Below the 0.1 SUI minimum");
+  assert.equal(amountProblem(input({ amountMist: 5n * SUI + 1n })), "Above your 5 SUI limit");
+  assert.equal(amountProblem(input({ amountMist: SUI + 1n, heldMist: 4n * SUI })), "Above your 5 SUI limit: you can add 1 more");
+  assert.equal(amountProblem(input({ amountMist: SUI, heldMist: 5n * SUI })), "Above your 5 SUI limit: you can add 0 more");
+  assert.equal(amountProblem(input({ poolTotalMist: 50n * SUI })), "Pool is full");
+  assert.equal(amountProblem(input({ amountMist: SUI, poolTotalMist: 49n * SUI + 500_000_000n })), "Pool is nearly full: room for 0.5 SUI more");
+  assert.equal(amountProblem(input({ balanceMist: 50_000_000n })), "Not enough SUI: you have 0.05, need 0.12 with gas");
 });
 
 test("a first stake pays the pot less the fee", () => {
@@ -254,4 +256,42 @@ test("signed amounts", () => {
   assert.equal(signedSui(500_000_000n), "+0.5 SUI");
   assert.equal(signedSui(-100_000_000n), "-0.1 SUI");
   assert.equal(signedSui(0n), "+0 SUI");
+});
+
+const buttonInput = (overrides: Partial<Parameters<typeof backButtonState>[0]> = {}) => ({
+  pool: pool({ exists: false, poolId: null, status: null, yesTotal: "0", noTotal: "0" }) as PoolView | null,
+  poolFailed: false,
+  amountMist: 100_000_000n as bigint | null,
+  heldMist: 0n,
+  balanceMist: SUI as bigint | null,
+  balanceFailed: false,
+  walletConnected: true,
+  nowMs: NOW,
+  ...overrides,
+});
+
+const buttonCases: [string, Partial<Parameters<typeof backButtonState>[0]>, { label: string; enabled: boolean; reason: string | null; note: string | null }][] = [
+  ["valid", {}, { label: "Back it", enabled: true, reason: null, note: null }],
+  ["no wallet", { walletConnected: false, balanceMist: null }, { label: "Connect wallet to back it", enabled: true, reason: null, note: null }],
+  ["balance unknown", { balanceMist: null, balanceFailed: true }, { label: "Back it", enabled: true, reason: null, note: "Couldn't check your balance" }],
+  ["balance still loading", { balanceMist: null }, { label: "Back it", enabled: true, reason: null, note: null }],
+  ["insufficient", { balanceMist: 50_000_000n }, { label: "Back it", enabled: false, reason: "Not enough SUI: you have 0.05, need 0.12 with gas", note: null }],
+  ["over limit", { amountMist: 5n * SUI + 1n }, { label: "Back it", enabled: false, reason: "Above your 5 SUI limit", note: null }],
+  ["pool closed", { pool: pool({ status: "void" }) }, { label: "Back it", enabled: false, reason: "Pool closed", note: null }],
+  ["kickoff near", { nowMs: Date.parse(KICKOFF) - 120_000 }, { label: "Back it", enabled: false, reason: "Pool closed", note: null }],
+  ["pool loading", { pool: null }, { label: "Back it", enabled: false, reason: "Loading the pool\u2026", note: null }],
+  ["pool failed", { pool: null, poolFailed: true }, { label: "Back it", enabled: false, reason: "Couldn't load this pool. Trying again\u2026", note: null }],
+];
+
+for (const [name, overrides, expected] of buttonCases) {
+  test(`the button when: ${name}`, () => {
+    assert.deepEqual(backButtonState(buttonInput(overrides)), expected);
+  });
+}
+
+test("the button is never disabled without a reason", () => {
+  for (const [, overrides] of buttonCases) {
+    const state = backButtonState(buttonInput(overrides));
+    assert.equal(state.enabled, state.reason === null);
+  }
 });
