@@ -38,6 +38,8 @@ export interface PickRecord {
   fixture?: PickFixture;
   /** Panta market the claim matched, when it resolves through Panta. */
   marketId?: string;
+  /** The latest Sui mainnet checkpoint seen when the call was made. */
+  anchor?: { checkpoint: string; timestampMs: number; via: "tatum-sui-mainnet" };
   /** SHA-256 of the canonical pick, committed on Sui before the event. */
   hash: string;
   /** The Sui transaction that committed the hash, if the commit went through. */
@@ -170,6 +172,9 @@ export function canonicalPick(pick: Omit<PickRecord, "hash" | "commit">): string
         }
       : null,
     marketId: pick.marketId ?? null,
+    anchor: pick.anchor
+      ? { checkpoint: pick.anchor.checkpoint, timestampMs: pick.anchor.timestampMs, via: pick.anchor.via }
+      : null,
   });
 }
 

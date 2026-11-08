@@ -177,6 +177,16 @@ export async function verifyCommit(env: RecallEnv, digest: string, expectedHash:
   }
 }
 
+/** Sui mainnet's latest checkpoint through Tatum, or null when no Tatum key is set. */
+export async function latestCheckpoint(env: RecallEnv): Promise<{ checkpoint: string; timestampMs: number } | null> {
+  if (!tatumConfigured(env)) return null;
+  const checkpoint = await tatumRpc<string>(env, "sui_getLatestCheckpointSequenceNumber");
+  const detail = await tatumRpc<{ timestampMs?: string }>(env, "sui_getCheckpoint", [checkpoint]);
+  const timestampMs = Number(detail?.timestampMs);
+  if (!Number.isFinite(timestampMs) || timestampMs <= 0) throw new Error("tatum_bad_checkpoint");
+  return { checkpoint, timestampMs };
+}
+
 export interface MemoryAccountInfo {
   accountId: string;
   owner: string | null;
