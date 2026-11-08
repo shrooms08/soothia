@@ -581,6 +581,15 @@ test("a long list of positions is capped and says so", async () => {
   assert.equal(body.truncated, true);
 });
 
+// ---- /stake/balance ----
+
+test("the balance comes back as MIST text, for a full address only", async () => {
+  const { body } = await result(call(harness({ balance: 153_574_000n }), "GET", `/stake/balance?address=${SENDER}`));
+  assert.deepEqual(body, { address: SENDER, balanceMist: "153574000" });
+  assert.equal((await result(call(harness(), "GET", "/stake/balance?address=0x12"))).body.error, "invalid_address");
+  assert.equal((await result(call(harness(), "GET", `/stake/balance?address=${SENDER}`, undefined, {}))).body.error, "missing_install");
+});
+
 // ---- /stake/claim/build ----
 
 const claim = (h: Harness) => result(call(h, "POST", "/stake/claim/build", { poolId: POOL, sender: SENDER }));

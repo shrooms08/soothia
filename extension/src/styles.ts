@@ -796,6 +796,22 @@ input[type="number"].input { font-family: var(--sth-font-mono); }
 .stake-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; }
 .stake-line { margin: 0; font-size: 12px; color: var(--sth-text-2); }
 .stake-row .button.small { flex: none; margin: 0; }
+.back-side { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.back-chips { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 6px 0; }
+.back-chips .button.small { margin: 0; padding: 0; }
+.back-chip.selected { outline: 2px solid var(--sth-text-2); outline-offset: -2px; }
+.back-custom { width: 100%; height: 32px; font-size: 12px; }
+.back-problem:empty, .back-estimate:empty { display: none; }
+.back-estimate { margin: 8px 0 0; font-size: 13px; }
+.status-line.bad, .back-problem, .stake-claim-note.bad { color: var(--sth-no); }
+.stake-block { margin-top: 8px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.stake-text { font-size: 12px; color: var(--sth-text-2); flex: 1 1 auto; min-width: 0; }
+.stake-block .button.small { flex: none; margin: 0; }
+.stake-claim-note { flex: 1 1 100%; margin: 0; font-size: 12px; color: var(--sth-text-2); overflow-wrap: anywhere; }
+.stake-claim-note:empty { display: none; }
+.wallet-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.wallet-stat { display: flex; flex-direction: column; font-size: 12px; color: var(--sth-text-2); }
+.wallet-stat b { font-size: 14px; font-weight: 500; color: var(--sth-text); }
 .wallet-field { margin: 8px 0; }
 .wallet-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .wallet-row .button.small { margin: 0; padding: 0 10px; }

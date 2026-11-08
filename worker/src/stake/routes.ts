@@ -355,6 +355,11 @@ async function positionsRoute(context: Context): Promise<Response> {
   return json(context.request, { positions, truncated: keys.length > MAX_POSITIONS });
 }
 
+async function balanceRoute(context: Context): Promise<Response> {
+  const address = parseAddress(new URL(context.request.url).searchParams.get("address"), "invalid_address");
+  return json(context.request, { address, balanceMist: (await context.chain.balanceOf(address)).toString() });
+}
+
 async function claimBuildRoute(context: Context): Promise<Response> {
   const { chain, settings, nowMs } = context;
   const body = (await readJsonObject(context.request)) ?? refuse(400, "invalid_body");
@@ -402,7 +407,7 @@ async function adminPendingRoute(context: Context): Promise<Response> {
   return json(context.request, { pending, recentActions });
 }
 
-const USER_ROUTES = ["POST /stake/pool", "POST /stake/build", "POST /stake/confirm", "GET /stake/positions", "POST /stake/claim/build"];
+const USER_ROUTES = ["POST /stake/pool", "POST /stake/build", "POST /stake/confirm", "GET /stake/positions", "GET /stake/balance", "POST /stake/claim/build"];
 
 /** Answers a /stake/* request. */
 export async function stakeRoute(request: Request, env: Env, path: string, deps: StakeDeps = {}): Promise<Response> {
@@ -439,6 +444,8 @@ export async function stakeRoute(request: Request, env: Env, path: string, deps:
         return await confirmRoute(context, user);
       case "GET /stake/positions":
         return await positionsRoute(context);
+      case "GET /stake/balance":
+        return await balanceRoute(context);
       default:
         return await claimBuildRoute(context);
     }

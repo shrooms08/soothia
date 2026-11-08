@@ -21,6 +21,7 @@ import {
   OPEN_WELCOME,
   NAV_CHANGED,
   RECALL_ID_KEY,
+  SUI_WALLET_KEY,
   type ApiError,
   type ApiPath,
   type ApiRequestMessage,
@@ -48,6 +49,7 @@ import {
   visibleNotes,
   type QuietPending,
 } from "./recall-logic";
+import { openBackSheet } from "./back-sheet";
 import { openCallSheet, type Sheet } from "./call-sheet";
 import { describeFixture, findFixture } from "./fixture";
 import { guarded, installGuards, isContextDead, safe } from "./guard";
@@ -592,8 +594,13 @@ async function mount(): Promise<void> {
     for (const row of stakeRows) void safe("stake row", row.refresh);
   }
 
-  function openBack(_called: RecallCalled): void {
-    // The Back it sheet arrives in the next step.
+  function openBack(called: RecallCalled): void {
+    closeSheet();
+    showTab("claims");
+    sheet = openBackSheet({ called, api, wallet: walletAccess, layout, back: showTiles, celebrate: pulseOrb, sound });
+    body.classList.add("has-sheet");
+    body.replaceChildren(sheet.node);
+    layout();
   }
 
   function openCall(tile: Tile): void {
@@ -1212,6 +1219,12 @@ async function mount(): Promise<void> {
   renderDebug();
   await safe("settings", loadSettings);
   await safe("wallet", walletSettings.load);
+  // A wallet connected from the Back it sheet shows in settings too.
+  chrome.storage.onChanged.addListener(
+    guarded("wallet change", (changes: Record<string, chrome.storage.StorageChange>) => {
+      if (SUI_WALLET_KEY in changes) void safe("wallet", walletSettings.load);
+    }),
+  );
   void safe("bubble", maybeShowBubble);
   render({ kind: "watching" });
   document.documentElement.append(host);
