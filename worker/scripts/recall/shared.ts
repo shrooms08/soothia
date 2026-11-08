@@ -31,8 +31,12 @@ export function parseDevVars(text: string): Record<string, string> {
   return vars;
 }
 
+export function readDevVars(): Record<string, string> {
+  return parseDevVars(readFileSync(join(WORKER_ROOT, ".dev.vars"), "utf8"));
+}
+
 export function loadEnv(): CliEnv {
-  const vars = parseDevVars(readFileSync(join(WORKER_ROOT, ".dev.vars"), "utf8"));
+  const vars = readDevVars();
   const missing = ["MEMWAL_ACCOUNT_ID", "MEMWAL_KEY", "RECALL_INSTALL_ID"].filter((name) => !vars[name]);
   if (missing.length) throw new Error(`Missing in worker/.dev.vars: ${missing.join(", ")}`);
   // Sui object ids are 0x-prefixed and the client sends this one as given.
