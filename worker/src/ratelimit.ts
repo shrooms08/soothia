@@ -20,6 +20,7 @@ export const LIMITS = {
   actionBuild: { limit: 30, windowSec: 60 },
   txSend: { limit: 30, windowSec: 60 },
   quote: { limit: 120, windowSec: 60 },
+  recall: { limit: 60, windowSec: 60 },
 } satisfies Record<string, Limit>;
 
 export function clientIp(request: Request): string {

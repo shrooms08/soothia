@@ -3,7 +3,9 @@
 // parser, and the install and admin header checks. Everything that answers a
 // request goes through json() so errors are short codes, never stack traces.
 
-export interface Env {
+import type { RecallEnv } from "./recall/env";
+
+export interface Env extends RecallEnv {
   PANTA_API_KEY: string;
   ANTHROPIC_API_KEY: string;
   /** Solana mainnet RPC URL. Contains an API key: never log it or return it. */
@@ -33,7 +35,7 @@ export function corsHeaders(request: Request): Record<string, string> {
   if (origin) {
     headers["Access-Control-Allow-Origin"] = origin;
     headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS";
-    headers["Access-Control-Allow-Headers"] = "Content-Type, X-Soothia-Install, X-Soothia-Refresh";
+    headers["Access-Control-Allow-Headers"] = "Content-Type, X-Soothia-Install, X-Soothia-Refresh, X-Soothia-Recall";
     headers["Access-Control-Expose-Headers"] = "X-Soothia-Cache";
     headers["Access-Control-Max-Age"] = "86400";
   }

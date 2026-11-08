@@ -31,6 +31,8 @@ import { handleMarkets, warmCatalog } from "./catalog";
 import { pendingCreatorCount } from "./creators";
 import { reconcileDeps, reconcileOrders } from "./reconcile";
 import { LIMITS, rateLimited } from "./ratelimit";
+import { recallRoute } from "./recall/routes";
+import { sweepRecall } from "./recall/sweep";
 import { budgetDirty, kvBudgetReport, reportBudgetToEdge } from "./store";
 import { handleStats } from "./stats";
 import { handleBalances } from "./wallet";
@@ -111,6 +113,8 @@ export default {
     // Keep the catalog warm and fill blank titles a few at a time.
     ctx.waitUntil(warmCatalog(env).catch(() => {}));
     ctx.waitUntil(reportBudgetToEdge().catch(() => {}));
+    // Settle open Total Recall picks every 15 minutes.
+    if (new Date().getUTCMinutes() % 15 < 5) ctx.waitUntil(sweepRecall(env).catch(() => {}));
   },
 } satisfies ExportedHandler<Env>;
 
@@ -137,6 +141,10 @@ async function route(request: Request, env: Env, ctx: ExecutionContext): Promise
 
     const url = new URL(request.url);
     const path = url.pathname.replace(/\/+$/, "") || "/";
+
+    if (path.startsWith("/recall/")) {
+      return (await limited(request, "recall", LIMITS.recall)) ?? recallRoute(request, env, path);
+    }
 
     if (request.method === "POST") {
       const installRoute = INSTALL_ROUTES[path];

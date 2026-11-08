@@ -7,3 +7,17 @@ ANTHROPIC_API_KEY=
 HELIUS_RPC_URL=
 # Any long random string (32+ characters). Sent as X-Soothia-Admin to read /debug/* routes.
 ADMIN_TOKEN=
+# Total Recall. Walrus Memory account object id on Sui (0x...), not a wallet address.
+MEMWAL_ACCOUNT_ID=
+# Walrus Memory delegate PRIVATE key. Also pays for Sui commits unless SUI_COMMIT_KEY is set.
+MEMWAL_KEY=
+# Optional: overrides the Walrus Memory mainnet relayer.
+MEMWAL_SERVER_URL=
+# Tatum API key, for Sui mainnet reads and commits.
+TATUM_API_KEY=
+# Optional: a separate private key that pays for Sui commits.
+SUI_COMMIT_KEY=
+# Published soothia_recall package id. Not secret. Set by scripts/recall/publish.ts.
+SOOTHIA_RECALL_PACKAGE=
+# Local CLI only: which record the scripts in scripts/recall read and write (a UUID).
+RECALL_INSTALL_ID=
