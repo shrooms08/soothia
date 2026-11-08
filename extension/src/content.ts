@@ -219,7 +219,7 @@ function tileNode(
     link.prepend(el("span", "live-dot"));
     actions.append(
       link,
-      button("Bet", "button", () => onBet(target)),
+      button("Bet on Panta", "link", () => onBet(target)),
     );
   } else if (market && market.phase === "p2p") {
     // The buying window has closed; shares trade between people on Panta.
@@ -229,7 +229,7 @@ function tileNode(
     oddsNode.title = `${market.title} (trading between people on Panta)`;
     actions.append(
       oddsNode,
-      externalLink("Trade on Panta", market.pantaUrl ?? `https://www.panta.market/market/${market.id}`, "button ext"),
+      externalLink("Trade on Panta", market.pantaUrl ?? `https://www.panta.market/market/${market.id}`, "link ext"),
     );
   } else if (market) {
     const odds = market.yesPrice === null ? "YES \u2013" : `YES ${(market.yesPrice * 100).toFixed(1)}%`;
@@ -243,11 +243,11 @@ function tileNode(
     };
     actions.append(
       oddsNode,
-      button("Bet", "button", () => onBet(target)),
+      button("Bet on Panta", "link", () => onBet(target)),
     );
   } else {
     actions.classList.add("end");
-    actions.append(button("Make it a market", "button primary", onMake));
+    actions.append(button("Make it a market", "link", onMake));
   }
 
   const source = claim.fromFixture
@@ -261,7 +261,7 @@ function tileNode(
 
   const recall = el("div", "tile-recall");
   if (insight?.existing) recall.append(el("span", "called-badge", `You called this: ${leanLabel(insight.existing.pYes)}`));
-  recall.append(button("Call it", "button small call-it", onCall));
+  recall.append(button("Call it", "button primary call-it", onCall));
   tile.append(recall);
   const notes = visibleNotes(insight);
   if (notes.length > 0) {
@@ -334,7 +334,14 @@ async function mount(): Promise<void> {
   for (let i = 0; i < 6; i++) cardStars.append(starSvg("card-star"));
   card.append(cardStars);
   const walletRow = statusRow();
+  walletRow.row.hidden = true;
   const proxyRow = statusRow();
+  // The wallet only matters for betting: My bets, or a bet sheet in progress.
+  let activeTab: "claims" | "bets" | "record" = "claims";
+  let betSheetOpen = false;
+  function syncWalletRow(): void {
+    walletRow.row.hidden = activeTab !== "bets" && !betSheetOpen;
+  }
   const body = el("div", "body");
   // Two views: the claims on this page, and the wallet's bets.
   const betsPane = el("div", "body");
@@ -360,6 +367,8 @@ async function mount(): Promise<void> {
   for (const tab of [claimsTab, betsTab, recordTab]) tab.setAttribute("role", "tab");
   tabs.append(claimsTab, betsTab, recordTab);
   function showTab(which: "claims" | "bets" | "record"): void {
+    activeTab = which;
+    syncWalletRow();
     body.hidden = which !== "claims";
     betsPane.hidden = which !== "bets";
     recordPane.hidden = which !== "record";
@@ -510,7 +519,7 @@ async function mount(): Promise<void> {
   bubbleClose.setAttribute("aria-label", "Dismiss");
   bubbleClose.append(icon("close"));
   bubble.append(
-    el("p", "bubble-text", "I'll glow when I spot something you can bet on. Click me anytime."),
+    el("p", "bubble-text", "I'll glow when I spot something you can call. Click me anytime."),
     bubbleClose,
   );
   let bubbleTimer: ReturnType<typeof setTimeout> | undefined;
@@ -693,6 +702,8 @@ async function mount(): Promise<void> {
     sheet?.dispose();
     sheet = null;
     body.classList.remove("has-sheet");
+    betSheetOpen = false;
+    syncWalletRow();
   }
 
   function showTiles(): void {
@@ -865,6 +876,8 @@ async function mount(): Promise<void> {
       celebrate: pulseOrb,
       sound,
     });
+    betSheetOpen = true;
+    syncWalletRow();
     body.classList.add("has-sheet");
     body.replaceChildren(sheet.node);
     layout();
