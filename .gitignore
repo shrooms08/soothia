@@ -19,3 +19,6 @@ id.json
 # Local harness state
 design/tools/.chromium-profile*
 design/tools/.orb-frames/
+
+# Total Recall local backups
+.recall-local
