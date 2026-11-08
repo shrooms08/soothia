@@ -133,7 +133,8 @@ export function resolveKickoff(text: string, nowMs: number): { date: Date; evide
   let month: number | null = null;
   let year: number | null = null;
   let dateText = "";
-  const dayFirst = new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(${MONTH_RE})\\.?(?:\\s+(\\d{4}))?\\b`, "i").exec(
+  // Not after a digit and hyphen: in "3-3-4 Nov 21", the 4 is a team's record, not a day.
+  const dayFirst = new RegExp(`(?<![\\d-])\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(${MONTH_RE})\\.?(?:\\s+(\\d{4}))?\\b`, "i").exec(
     source,
   );
   const monthFirst = new RegExp(`\\b(${MONTH_RE})\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:,?\\s+(\\d{4}))?\\b`, "i").exec(
@@ -259,6 +260,8 @@ export interface PageSignals {
   titles: string[];
   /** The visible text around the team names (the fixture header), short. */
   headerText: string;
+  /** Where to look for a live or full-time marker, when narrower than headerText. */
+  statusText?: string;
   url: string;
 }
 
@@ -270,7 +273,7 @@ export function fixtureFromSignals(signals: PageSignals, nowMs: number): Fixture
     const sides = sidesFromTitle(title);
     if (!sides) continue;
     const header = signals.headerText;
-    if (looksStartedOrFinished(header)) return null;
+    if (looksStartedOrFinished(signals.statusText ?? header)) return null;
     const kickoff = resolveKickoff(header, nowMs);
     if (!kickoff || kickoff.date.getTime() <= nowMs) return null;
     const competition = competitionIn(`${title} ${header}`, signals.url);
@@ -289,6 +292,41 @@ export function fixtureFromSignals(signals: PageSignals, nowMs: number): Fixture
   return null;
 }
 
+const MAX_HEADER_CHARS = 700;
+const MAX_HEADER_TRIES = 12;
+const NOT_TEXT = /^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE)$/;
+
+const visibleText = (element: Element): string => ((element as HTMLElement).innerText ?? element.textContent ?? "").replace(/\s+/g, " ");
+
+/**
+ * The text of this match's own header: from each place the home team is named, in page
+ * order, the smallest surrounding block that also holds the away team and a kickoff or a
+ * status. A site's scores bar is another block, so other matches' "FT" stays out, and the
+ * first place wins, so a league table or a past meeting further down does not count.
+ */
+function matchHeaderText(doc: Document, sides: { home: string; away: string }, nowMs: number): string | null {
+  if (!doc.body) return null;
+  const home = sides.home.toLowerCase();
+  const away = sides.away.toLowerCase();
+  const walker = doc.createTreeWalker(doc.body, 4 /* NodeFilter.SHOW_TEXT */);
+  let tries = 0;
+  for (let node = walker.nextNode(); node && tries < MAX_HEADER_TRIES; node = walker.nextNode()) {
+    const parent = node.parentElement;
+    if (!parent || NOT_TEXT.test(parent.tagName) || !(node.nodeValue ?? "").toLowerCase().includes(home)) continue;
+    tries += 1;
+    for (let block: Element | null = parent; block && block !== doc.body; block = block.parentElement) {
+      // Narrow layouts hide the full names and show "NEW", so names may be found in hidden
+      // text, but the kickoff and status must come from what is on screen.
+      if (block.checkVisibility?.() === false) continue;
+      const text = visibleText(block);
+      if (text.length > MAX_HEADER_CHARS) break;
+      const all = (block.textContent ?? "").toLowerCase();
+      if (all.includes(home) && all.includes(away) && (resolveKickoff(text, nowMs) !== null || looksStartedOrFinished(text))) return text;
+    }
+  }
+  return null;
+}
+
 /** Collects the signals from the live document (browser only). */
 export function findFixture(doc: Document, nowMs: number): FixtureSignal | null {
   const jsonLd = [...doc.querySelectorAll('script[type="application/ld+json"]')].map((node) => node.textContent ?? "");
@@ -301,18 +339,27 @@ export function findFixture(doc: Document, nowMs: number): FixtureSignal | null 
   const sides = titles.map(sidesFromTitle).find(Boolean) ?? null;
   const body = (doc.body?.innerText ?? "").replace(/\s+/g, " ");
   let headerText = "";
-  if (sides) {
+  let statusText: string | undefined;
+  const ownHeader = sides ? matchHeaderText(doc, sides, nowMs) : null;
+  if (ownHeader) {
+    headerText = ownHeader;
+    statusText = ownHeader;
+  } else if (sides) {
+    // No single block holds the match. The kickoff can sit just before the home team,
+    // but that text can also be another match's, so status is read from the team on.
     const lower = body.toLowerCase();
     const at = lower.indexOf(sides.home.toLowerCase());
     const other = lower.indexOf(sides.away.toLowerCase(), at >= 0 ? at : 0);
-    if (at >= 0 && other >= 0 && other - at < 400)
-      headerText = body.slice(Math.max(0, at - 60), other + sides.away.length + 120);
-    else if (at >= 0) headerText = body.slice(Math.max(0, at - 60), at + 260);
+    const end = at >= 0 && other >= 0 && other - at < 400 ? other + sides.away.length + 120 : at + 260;
+    if (at >= 0) {
+      headerText = body.slice(Math.max(0, at - 60), end);
+      statusText = body.slice(at, end);
+    }
   }
   // Explicit <time datetime> near the top of the page beats parsed text.
   const timeNode = doc.querySelector<HTMLTimeElement>("time[datetime]");
   if (timeNode?.dateTime && !/\d{4}-\d{2}-\d{2}/.test(headerText)) headerText = `${timeNode.dateTime} ${headerText}`;
-  return fixtureFromSignals({ jsonLd, titles, headerText, url: doc.location.href.split("#")[0] }, nowMs);
+  return fixtureFromSignals({ jsonLd, titles, headerText, statusText, url: doc.location.href.split("#")[0] }, nowMs);
 }
 
 /** "Levante vs Sevilla · 12 Oct 20:00 · LaLiga", for the tile and the debug footer. */

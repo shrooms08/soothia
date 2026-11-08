@@ -28,3 +28,6 @@ worker/public
 
 # Move build output
 move/*/build/
+
+# Chrome's asset folders from "Webpage, Complete" test fixtures (the .html is kept)
+extension/test/fixtures/*_files/
