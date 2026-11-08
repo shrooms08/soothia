@@ -35,7 +35,7 @@ const FIXTURE: FixtureSignal = {
   evidence: [],
 };
 
-const tile = (question: string, overrides: Partial<Tile["claim"]> = {}, market: Tile["market"] = null): Tile => ({
+const tile = (question: string, overrides: Partial<Tile["claim"]> = {}): Tile => ({
   claim: {
     id: question,
     question,
@@ -46,7 +46,6 @@ const tile = (question: string, overrides: Partial<Tile["claim"]> = {}, market: 
     sourceQuote: "",
     ...overrides,
   },
-  market,
 });
 
 const PAGE = { site: "espn.com", url: "https://www.espn.com/match" };
@@ -106,22 +105,10 @@ test("a fixture call sends the match, with the backed team as subject", () => {
     startISO: FIXTURE.startISO,
     subject: "away",
   });
-  assert.equal(body.marketId, undefined);
-  assert.equal(body.marketYes, undefined);
 });
 
 test("a prose claim on a match page does not send the match", () => {
   assert.equal(callBody(tile("Will rates fall?"), "yes", 60, PAGE, FIXTURE).fixture, undefined);
-});
-
-test("a market's id and YES price are sent, and a missing price is left out", () => {
-  const market = { id: "m1", title: "t", category: "sports", yesPrice: 0.42, noPrice: 0.58, endTime: "" };
-  const priced = callBody(tile("Q", {}, market), "yes", 60, PAGE, null);
-  assert.equal(priced.marketId, "m1");
-  assert.equal(priced.marketYes, 0.42);
-  const unpriced = callBody(tile("Q", {}, { ...market, yesPrice: null }), "yes", 60, PAGE, null);
-  assert.equal(unpriced.marketId, "m1");
-  assert.equal(unpriced.marketYes, undefined);
 });
 
 test("long source urls are shortened to fit the Worker's limit", () => {

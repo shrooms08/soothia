@@ -6,8 +6,6 @@ import {
   API_ROUTES,
   DETECT_REQUEST,
   HEALTH_REQUEST,
-  IMAGE_REQUEST,
-  INJECT_SIGNER,
   MUSIC_CONTROL,
   OPEN_WELCOME,
   RECALL_ID_KEY,
@@ -20,7 +18,6 @@ import {
   type DetectResult,
   type DroppedClaim,
   type HealthResponse,
-  type MatchedMarket,
   type PageContext,
   type FixtureSignal,
 } from "./messages";
@@ -104,20 +101,7 @@ async function detect(page: PageContext, refresh: boolean, fixture?: FixtureSign
     debug.path = body.path;
     if (claims.length === 0) return { status: "ok", tiles: [], debug };
 
-    // A failed match is not an error: the claims still show, unmatched.
-    const markets = new Map<string, MatchedMarket | null>();
-    try {
-      const matched = await post("/match", { claims });
-      if (matched.ok) {
-        const { matches } = (await matched.json()) as {
-          matches: { claimId: string; market: MatchedMarket | null }[];
-        };
-        for (const match of matches) markets.set(match.claimId, match.market);
-      }
-    } catch {
-      // Leave every claim unmatched.
-    }
-    const tiles = claims.map((claim) => ({ claim, market: markets.get(claim.id) ?? null }));
+    const tiles = claims.map((claim) => ({ claim }));
     return { status: "ok", tiles, debug };
   } catch {
     return { status: "error", reason: "unavailable", debug };
@@ -168,8 +152,7 @@ const FAILED: DetectResult = {
   debug: { httpStatus: null, cache: null, fromClientCache: false, claimsReturned: 0, dropped: [] },
 };
 
-// Relays one wallet or create call to the Worker. Bodies (which can hold a
-// signed transaction) pass straight through and are never logged or stored.
+// Relays one call to the Worker. Bodies pass straight through and are never logged or stored.
 async function relay(message: ApiRequestMessage): Promise<ApiResponse> {
   if (!Object.hasOwn(API_ROUTES, message.path)) return { ok: false, status: 0, body: null };
   try {
@@ -183,32 +166,6 @@ async function relay(message: ApiRequestMessage): Promise<ApiResponse> {
     return { ok: response.ok, status: response.status, body: await response.json().catch(() => null) };
   } catch {
     return { ok: false, status: 0, body: null };
-  }
-}
-
-// Pages with a strict CSP (X, for one) block images from other hosts, so the
-// category image is fetched here and handed over as a data: URL.
-async function categoryImage(category: unknown): Promise<string | null> {
-  if (typeof category !== "string" || !/^[a-z-]{1,30}$/.test(category)) return null;
-  try {
-    const response = await fetch(`${WORKER_URL}/img/${category}.png`, { signal: AbortSignal.timeout(10_000) });
-    if (!response.ok) return null;
-    const bytes = new Uint8Array(await response.arrayBuffer());
-    let binary = "";
-    for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-    return `data:image/png;base64,${btoa(binary)}`;
-  } catch {
-    return null;
-  }
-}
-
-async function injectSigner(tabId: number | undefined): Promise<boolean> {
-  if (tabId === undefined) return false;
-  try {
-    await chrome.scripting.executeScript({ target: { tabId }, files: ["wallet-sign.js"], world: "MAIN" });
-    return true;
-  } catch {
-    return false;
   }
 }
 
@@ -348,12 +305,6 @@ function handleMessage(
       return true;
     case API_REQUEST:
       respondSafely(relay(message as ApiRequestMessage), sendResponse, { ok: false, status: 0, body: null });
-      return true;
-    case IMAGE_REQUEST:
-      respondSafely(categoryImage(message.category ?? ""), sendResponse, null);
-      return true;
-    case INJECT_SIGNER:
-      respondSafely(injectSigner(sender.tab?.id), sendResponse, false);
       return true;
     case OPEN_WELCOME:
       respondSafely(

@@ -1,6 +1,6 @@
 // The Call it sheet: the user's own probability on a claim, saved as a memory on
 // Walrus and, when the Worker's spending guard allows, committed on Sui. No wallet
-// and no money from the user: this sits beside the betting flow, not inside it.
+// and no money from the user.
 import { button, el, externalLink } from "./dom";
 import type { ApiError, ApiPath, ApiResponse, FixtureSignal, RecallSavedPick, Tile } from "./messages";
 import {
@@ -11,7 +11,16 @@ import {
   suggestedPercent,
   type CallSide,
 } from "./recall-logic";
-import type { Sheet } from "./sheet";
+
+/** A panel that replaces the card body. */
+export interface Sheet {
+  node: HTMLElement;
+  /** Wake after being hidden. */
+  refresh(): void;
+  dispose(): void;
+  /** Presses the sheet's main button. */
+  trigger?: () => void;
+}
 
 export interface CallHost {
   tile: Tile;
@@ -34,10 +43,8 @@ const MIN_PERCENT = 51;
 const MAX_PERCENT = 99;
 const DEFAULT_PERCENT = 60;
 
-const price = (value: number | null): string => (value === null ? "–" : `${(value * 100).toFixed(1)}%`);
-
 export function openCallSheet(host: CallHost): Sheet {
-  const { claim, market } = host.tile;
+  const { claim } = host.tile;
   // A fixture claim whose match is no longer upcoming would save as an unscorable call.
   const closed = claim.fromFixture === true && host.fixture === null;
   let side: CallSide = "yes";
@@ -92,7 +99,6 @@ export function openCallSheet(host: CallHost): Sheet {
   nudge.hidden = host.shrink >= 1;
 
   form.append(el("p", "question", claim.question), sides);
-  if (market) form.append(el("p", "note call-market", `Market: YES ${price(market.yesPrice)} · NO ${price(market.noPrice)}`));
   form.append(sliderField, nudge);
 
   const status = el("p", "line status-line");

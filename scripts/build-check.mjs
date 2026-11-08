@@ -16,7 +16,7 @@ try {
     env: { ...process.env, SOOTHIA_OUT_DIR: out },
   });
   const files = await readdir(out);
-  for (const name of ["manifest.json", "background.js", "content.js", "wallet-bridge.js", "welcome.js"]) {
+  for (const name of ["manifest.json", "background.js", "content.js", "welcome.js"]) {
     if (!files.includes(name)) throw new Error(`build is missing ${name}`);
   }
   console.log(`extension builds (${files.length} entries in a temp dir)`);

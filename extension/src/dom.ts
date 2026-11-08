@@ -1,6 +1,6 @@
-// Small DOM helpers shared by the card and the review sheet. Text always goes
-// through textContent; innerHTML is used only for the constant SVG icons here,
-// so page titles, AI output and wallet names can never become markup.
+// Small DOM helpers shared by the card and its sheets. Text always goes through
+// textContent; innerHTML is used only for the constant SVG icons here, so page
+// titles and AI output can never become markup.
 
 export function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
@@ -20,28 +20,6 @@ export function button(label: string, className: string, onClick?: () => void): 
   return node;
 }
 
-/** A button that copies text and reads "Copied" for a moment. `onCopied` runs on success. */
-export function copyButton(label: string, text: string, className: string, onCopied?: () => void): HTMLButtonElement {
-  const node = button(label, className, () => {
-    void navigator.clipboard
-      .writeText(text)
-      .then(() => {
-        node.textContent = "Copied";
-        node.classList.add("copied");
-        onCopied?.();
-        setTimeout(() => {
-          node.textContent = label;
-          node.classList.remove("copied");
-        }, 1500);
-      })
-      .catch(() => {
-        node.textContent = "Couldn't copy";
-        setTimeout(() => (node.textContent = label), 1500);
-      });
-  });
-  return node;
-}
-
 /** A link that opens in a new tab and tells the destination nothing about this page. */
 export function externalLink(label: string, href: string, className: string): HTMLAnchorElement {
   const node = el("a", className, label);
@@ -51,7 +29,7 @@ export function externalLink(label: string, href: string, className: string): HT
   return node;
 }
 
-// A market's end date is a UTC calendar date ("Dec 31, 2026"), the same for
+// A claim's end date is a UTC calendar date ("Dec 31, 2026"), the same for
 // every reader. Local time would push a 23:59 UTC deadline into the next day.
 const END_DATE = new Intl.DateTimeFormat("en-US", {
   month: "short",
@@ -63,20 +41,6 @@ const END_DATE = new Intl.DateTimeFormat("en-US", {
 export function endDate(iso: string): string {
   const date = new Date(iso);
   return Number.isNaN(date.getTime()) ? "" : END_DATE.format(date);
-}
-
-/** "coingecko.com" for "https://www.coingecko.com/en/coins/bitcoin". */
-export function domainName(url: string): string {
-  try {
-    return new URL(url).hostname.replace(/^www\./, "");
-  } catch {
-    return url;
-  }
-}
-
-/** "7xKX…3fPq" */
-export function shortAddress(address: string): string {
-  return address.length > 10 ? `${address.slice(0, 4)}…${address.slice(-4)}` : address;
 }
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -131,18 +95,4 @@ export function icon(name: "close" | "refresh" | "warn" | "sound" | "muted" | "q
   svg.setAttribute("viewBox", `0 0 ${size} ${size}`);
   svg.innerHTML = body;
   return svg;
-}
-
-/** Text with numbers in mono: "missing 2.00 USDC and 0.0100 SOL" -> spans. */
-export function withMono(text: string): (string | HTMLElement)[] {
-  const out: (string | HTMLElement)[] = [];
-  const pattern = /\$?\d[\d,]*(?:\.\d+)?(?: ?(?:USDC|SOL|%|bytes))?/g;
-  let last = 0;
-  for (const match of text.matchAll(pattern)) {
-    if (match.index! > last) out.push(text.slice(last, match.index));
-    out.push(el("span", "mono", match[0]));
-    last = match.index! + match[0].length;
-  }
-  if (last < text.length) out.push(text.slice(last));
-  return out;
 }

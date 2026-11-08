@@ -66,7 +66,7 @@ export function trimSourceUrl(url: string): string {
 
 /** The POST /recall/pick body for a tile. */
 export function callBody(
-  { claim, market }: Tile,
+  { claim }: Tile,
   side: CallSide,
   percent: number,
   page: { site: string; url: string },
@@ -78,8 +78,6 @@ export function callBody(
     pYes: pYesFor(side, percent),
     endTime: claim.endTime,
     source: { site: page.site, url: trimSourceUrl(page.url) },
-    ...(market ? { marketId: market.id } : {}),
-    ...(market && market.yesPrice !== null ? { marketYes: market.yesPrice } : {}),
     ...(claim.fromFixture && fixture
       ? {
           fixture: {

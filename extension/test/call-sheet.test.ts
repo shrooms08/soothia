@@ -17,7 +17,7 @@ const FIXTURE: FixtureSignal = {
   evidence: [],
 };
 
-const fixtureTile = (market: Tile["market"] = null): Tile => ({
+const fixtureTile = (): Tile => ({
   claim: {
     id: "c1",
     question: "Will Arsenal beat Chelsea on Sat 21 Nov?",
@@ -28,7 +28,6 @@ const fixtureTile = (market: Tile["market"] = null): Tile => ({
     sourceQuote: "",
     fromFixture: true,
   },
-  market,
 });
 
 function setup(answer: ApiResponse<unknown>, overrides: Partial<CallHost> = {}) {
@@ -129,12 +128,6 @@ test("the nudge suggests a shaded percent and Use applies it", async () => {
   use.click();
   assert.equal(q<HTMLInputElement>(".call-slider").value, "74");
   assert.equal(q(".call-value").textContent, "YES 74%");
-});
-
-test("market odds show when the tile has a market", () => {
-  const market = { id: "m1", title: "t", category: "sports", yesPrice: 0.42, noPrice: 0.58, endTime: "" };
-  const { q } = setup(saved({}), { tile: fixtureTile(market) });
-  assert.equal(q(".call-market").textContent, "Market: YES 42.0% · NO 58.0%");
 });
 
 test("a fixture claim with no upcoming match cannot be locked", async () => {

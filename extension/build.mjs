@@ -3,7 +3,7 @@
 import { build } from "vite";
 import { cp, rm } from "node:fs/promises";
 
-const entries = ["background", "content", "wallet-bridge", "wallet-sign", "nav-hook", "welcome", "offscreen"];
+const entries = ["background", "content", "nav-hook", "welcome", "offscreen"];
 // CI builds into a temp dir (SOOTHIA_OUT_DIR) so the checked-in zip is never touched by a check.
 const outDir = process.env.SOOTHIA_OUT_DIR ?? "dist";
 
