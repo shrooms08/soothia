@@ -24,4 +24,4 @@ design/tools/.orb-frames/
 .recall-local
 
 # Move build output
-move/soothia_recall/build/
+move/*/build/

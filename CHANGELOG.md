@@ -16,6 +16,7 @@ Branch `total-recall`. A local CLI that locks football predictions as memories o
 - Worker routes under `/recall/*` (status, record, proof, insights, pick, pref, resolve) and a cron sweep that settles open picks every 15 minutes.
 - Spending guard on `/recall/pick` commits: daily caps per user (5, or 30 for `RECALL_OWNER_KEYS`) and overall (50), a 0.05 SUI balance floor, and no commit when KV fails. A skipped pick is still saved, with `commitSkipped` saying why.
 - Extension 0.10.0: insights on tiles, a Call it sheet with a calibration nudge, a My record tab with on-chain proof, Quiet here per site, and a Link record field in settings. The betting flow is unchanged.
+- `soothia_stake`: a parimutuel YES/NO staking pool in SUI, as a new Move package with 27 tests.
 - Called matches: `/recall/insights` returns `called` from the full pick list. Both tiles of a called match show "Your call" with a Proof link instead of Call it.
 - Sui-only: removed Solana, Panta, betting, market creation, wallet connection and the markets and share pages. Tag `v0.9-solana-final` marks the last commit with them. `/stats` now reports Total Recall numbers. Extension 0.11.0.
 - Calling is now the primary action: Call it leads each tile, betting and market creation become text links, the wallet row shows only for betting, and the first-run copy leads with calling.
