@@ -793,6 +793,9 @@ input[type="number"].input { font-family: var(--sth-font-mono); }
 .toggle { display: flex; align-items: center; gap: 8px; padding: 3px 0; color: var(--sth-text-2); cursor: pointer; }
 .toggle-box { margin: 0; accent-color: var(--sth-orb-edge); }
 .recall-field { margin: 8px 0; }
+.stake-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; }
+.stake-line { margin: 0; font-size: 12px; color: var(--sth-text-2); }
+.stake-row .button.small { flex: none; margin: 0; }
 .wallet-field { margin: 8px 0; }
 .wallet-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .wallet-row .button.small { margin: 0; padding: 0 10px; }

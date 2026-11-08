@@ -33,6 +33,7 @@ import {
   type PageContext,
   type FixtureSignal,
   type RecallInsight,
+  type RecallCalled,
   type RecallInsights,
   type RecallRecord,
 } from "./messages";
@@ -50,7 +51,10 @@ import {
 import { openCallSheet, type Sheet } from "./call-sheet";
 import { describeFixture, findFixture } from "./fixture";
 import { guarded, installGuards, isContextDead, safe } from "./guard";
-import { createWalletBridge } from "./wallet-client";
+import { createStakeRow, type StakeRow } from "./stake-row";
+import { stakeTileIds } from "./stake-logic";
+import { createWalletAccess } from "./wallet-access";
+import { checkInBackground, createWalletBridge } from "./wallet-client";
 import { chromeWalletStorage, createWalletSettings } from "./wallet-settings";
 import { CARD_GAP, CARD_WIDTH, EDGE_PADDING, HOST_STYLES, ORB_MARGIN, ORB_SIZE, STYLES } from "./styles";
 
@@ -144,6 +148,7 @@ function tileNode(
   insight: RecallInsight | undefined,
   onCall: () => void,
   proofHost: Parameters<typeof calledRow>[1],
+  stakeRow?: HTMLElement,
 ): HTMLElement {
   const tile = el("div", "tile");
 
@@ -162,6 +167,7 @@ function tileNode(
 
   if (insight?.called) {
     tile.append(calledRow(insight.called, proofHost));
+    if (stakeRow) tile.append(stakeRow);
   } else {
     const recall = el("div", "tile-recall");
     recall.append(button("Call it", "button primary call-it", onCall));
@@ -332,8 +338,10 @@ async function mount(): Promise<void> {
   );
   recallField.append(el("span", "field-label", "Link record"), recallRow, recallNote);
 
+  const walletBridge = createWalletBridge(() => chrome.runtime.getURL("wallet-bridge.js"));
+  const walletAccess = createWalletAccess(walletBridge, chromeWalletStorage, checkInBackground);
   const walletSettings = createWalletSettings(
-    createWalletBridge(() => chrome.runtime.getURL("wallet-bridge.js")),
+    walletBridge,
     chromeWalletStorage,
     () => {
       if (!card.hidden) layout();
@@ -551,6 +559,7 @@ async function mount(): Promise<void> {
 
   let tiles: Tile[] = [];
   let sheet: Sheet | null = null;
+  let stakeRows: StakeRow[] = [];
 
   function closeSheet(): void {
     sheet?.dispose();
@@ -561,10 +570,30 @@ async function mount(): Promise<void> {
   function showTiles(): void {
     closeSheet();
     setOrb("found", tiles.length);
+    const staking = stakeTileIds(tiles, (claimId) => insightsByClaim.get(claimId)?.called, Date.now());
+    stakeRows = [];
     body.replaceChildren(
-      ...tiles.map((tile) => tileNode(tile, insightsByClaim.get(tile.claim.id), () => openCall(tile), { api, layout })),
+      ...tiles.map((tile) => {
+        const insight = insightsByClaim.get(tile.claim.id);
+        let row: HTMLElement | undefined;
+        if (insight?.called && staking.has(tile.claim.id)) {
+          const stakeRow = createStakeRow({ api, wallet: walletAccess, layout, onBack: (called) => openBack(called) }, insight.called);
+          stakeRows.push(stakeRow);
+          row = stakeRow.node;
+        }
+        return tileNode(tile, insight, () => openCall(tile), { api, layout }, row);
+      }),
     );
+    if (!card.hidden) refreshStakeRows();
     layout();
+  }
+
+  function refreshStakeRows(): void {
+    for (const row of stakeRows) void safe("stake row", row.refresh);
+  }
+
+  function openBack(_called: RecallCalled): void {
+    // The Back it sheet arrives in the next step.
   }
 
   function openCall(tile: Tile): void {
@@ -1100,6 +1129,7 @@ async function mount(): Promise<void> {
     dismissBubble();
     void refreshProxy();
     sheet?.refresh();
+    if (!sheet) refreshStakeRows();
     layout();
   }
 

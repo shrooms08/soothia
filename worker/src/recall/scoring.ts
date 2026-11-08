@@ -282,6 +282,10 @@ export interface CalledMatch {
   confidence: number;
   pickId: string;
   committed: boolean;
+  /** The user's probability of YES, which fixes the side they can back. */
+  pYes: number;
+  /** The match, so the card can look up its staking pool. */
+  fixture: { home: string; away: string; startISO: string; subject: "home" | "away" } | null;
 }
 
 /** What a call backs. YES on "Will A beat B" is "A win"; NO is "A doesn't win (B win or draw)". */
@@ -322,6 +326,8 @@ export function matchCalled(claim: Pick<ClaimInput, "question" | "fixture">, pic
     confidence: Math.round(Math.max(pick.pYes, 1 - pick.pYes) * 100),
     pickId: pick.id,
     committed: pick.commit !== null,
+    pYes: pick.pYes,
+    fixture: pick.fixture ? { home: pick.fixture.home, away: pick.fixture.away, startISO: pick.fixture.startISO, subject: pick.fixture.subject } : null,
   };
 }
 

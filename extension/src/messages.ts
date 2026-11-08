@@ -104,6 +104,12 @@ export const API_ROUTES = {
   "/recall/insights": "POST",
   "/recall/pick": "POST",
   "/recall/pref": "POST",
+  "/stake/pool": "POST",
+  "/stake/build": "POST",
+  "/stake/confirm": "POST",
+  "/stake/positions": "GET",
+  "/stake/balance": "GET",
+  "/stake/claim/build": "POST",
 } as const;
 export type ApiPath = keyof typeof API_ROUTES;
 
@@ -137,6 +143,9 @@ export interface RecallCalled {
   confidence: number;
   pickId: string;
   committed: boolean;
+  /** Missing on a Worker older than this extension. */
+  pYes?: number;
+  fixture?: { home: string; away: string; startISO: string; subject: "home" | "away" } | null;
 }
 
 export interface RecallInsight {
@@ -171,7 +180,7 @@ export interface RecallSavedPick {
   pYes: number;
   commit: { digest: string; network: string } | null;
   commitSkipped?: CommitSkipReason;
-  fixture?: { home: string; away: string; subject: "home" | "away" };
+  fixture?: { home: string; away: string; startISO: string; subject: "home" | "away" };
 }
 
 export interface RecallLesson {

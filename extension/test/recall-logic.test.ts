@@ -140,8 +140,8 @@ test("a match call reads with its confidence, and other calls stay short", () =>
 });
 
 test("a newly locked call becomes the tile's call state", () => {
-  const pick = { id: "p_9", at: "x", pYes: 0.25, commit: { digest: "d", network: "mainnet" }, fixture: { ...NAPOLI, subject: "away" as const } };
-  assert.deepEqual(calledFromPick(pick), { side: "Lazio doesn't win (Napoli win or draw)", confidence: 75, pickId: "p_9", committed: true });
+  const pick = { id: "p_9", at: "x", pYes: 0.25, commit: { digest: "d", network: "mainnet" }, fixture: { ...NAPOLI, startISO: "2026-11-21T15:00:00.000Z", subject: "away" as const } };
+  assert.deepEqual(calledFromPick(pick), { side: "Lazio doesn't win (Napoli win or draw)", confidence: 75, pickId: "p_9", committed: true, pYes: 0.25, fixture: pick.fixture });
   assert.equal(calledFromPick({ ...pick, commit: null }).committed, false);
 });
 

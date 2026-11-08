@@ -143,6 +143,8 @@ export function calledFromPick(pick: RecallSavedPick): RecallCalled {
     confidence: callConfidence(pick.pYes),
     pickId: pick.id,
     committed: pick.commit !== null,
+    pYes: pick.pYes,
+    fixture: pick.fixture ?? null,
   };
 }
 

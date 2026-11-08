@@ -76,6 +76,8 @@ test("the same match is found from either question on the page", () => {
     confidence: 60,
     pickId: "p_1",
     committed: true,
+    pYes: 0.6,
+    fixture: { home: "Arsenal", away: "Chelsea", startISO: "2026-11-21T15:00:00.000Z", subject: "home" },
   });
   const reversed = matchCalled({ question: "Will Chelsea beat Arsenal on Sat 21 Nov?", fixture: claimOn("Arsenal", "Chelsea").fixture }, picks);
   assert.equal(reversed?.side, "Arsenal win");
@@ -100,7 +102,7 @@ test("a different day or a different opponent is not the same match", () => {
 
 test("a non-fixture claim matches only on the exact question", () => {
   const picks = [{ ...pick(2, 0.8), question: "Will rates fall by June?" }];
-  assert.deepEqual(matchCalled({ question: "Will rates fall by June?" }, picks), { side: "YES", confidence: 80, pickId: "p_2", committed: false });
+  assert.deepEqual(matchCalled({ question: "Will rates fall by June?" }, picks), { side: "YES", confidence: 80, pickId: "p_2", committed: false, pYes: 0.8, fixture: null });
   assert.equal(matchCalled({ question: "Will rates fall by July?" }, picks), null);
 });
 
