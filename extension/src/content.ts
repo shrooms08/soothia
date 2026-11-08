@@ -43,9 +43,11 @@ import {
   type WalletInfo,
   type WalletRpcOutcome,
   type PageContext,
+  type RecallInsight,
+  type RecallInsights,
 } from "./messages";
 import { readPage, type ReadInfo } from "./reader";
-import { isRecallId } from "./recall-logic";
+import { isRecallId, leanLabel, sortByRelevance, visibleNotes } from "./recall-logic";
 import { openBetSheet } from "./bet-sheet";
 import { openSheet, type CreateDebug, type PendingCreate, type Sheet } from "./sheet";
 import { checkSignedTransaction } from "./tx-check";
@@ -186,6 +188,7 @@ function tileNode(
   live: LiveMarket | undefined,
   onMake: () => void,
   onBet: (target: BuyTarget) => void,
+  insight: RecallInsight | undefined,
 ): HTMLElement {
   const tile = el("div", "tile");
 
@@ -239,6 +242,16 @@ function tileNode(
       })()
     : el("p", "quote", `\u201C${claim.sourceQuote}\u201D`);
   tile.append(el("p", "question", claim.question), meta, source, actions);
+
+  const recall = el("div", "tile-recall");
+  if (insight?.existing) recall.append(el("span", "called-badge", `You called this: ${leanLabel(insight.existing.pYes)}`));
+  if (recall.childElementCount > 0) tile.append(recall);
+  const notes = visibleNotes(insight);
+  if (notes.length > 0) {
+    const list = el("div", "tile-notes");
+    list.append(...notes.map((note) => el("p", "tile-note", note)));
+    tile.append(list);
+  }
   return tile;
 }
 
@@ -645,9 +658,32 @@ async function mount(): Promise<void> {
     closeSheet();
     setOrb("found", tiles.length);
     body.replaceChildren(
-      ...tiles.map((tile) => tileNode(tile, liveMarkets.get(tile.claim.id), () => review(tile), openBet)),
+      ...tiles.map((tile) =>
+        tileNode(tile, liveMarkets.get(tile.claim.id), () => review(tile), openBet, insightsByClaim.get(tile.claim.id)),
+      ),
     );
     layout();
+  }
+
+  // ---- Total Recall insights ----
+
+  let insightsByClaim = new Map<string, RecallInsight>();
+  let recallShrink = 1;
+  let insightSeq = 0;
+
+  // Extra information only: any failure leaves the tiles exactly as they were.
+  async function loadInsights(): Promise<void> {
+    const seq = ++insightSeq;
+    const claims = tiles.slice(0, 3).map(({ claim }) => ({ id: claim.id, question: claim.question, category: claim.category }));
+    if (claims.length === 0) return;
+    const response = await api<RecallInsights>("/recall/insights", { claims });
+    if (seq !== insightSeq || !response.ok || !response.body) return;
+    const result = response.body as RecallInsights;
+    if (!Array.isArray(result.insights)) return;
+    insightsByClaim = new Map(result.insights.map((insight) => [insight.claimId, insight]));
+    recallShrink = typeof result.shrink === "number" ? result.shrink : 1;
+    tiles = sortByRelevance(tiles, insightsByClaim);
+    if (!sheet) showTiles();
   }
 
   function openBet(target: BuyTarget): void {
@@ -1029,8 +1065,10 @@ async function mount(): Promise<void> {
         break;
       case "tiles":
         tiles = view.tiles;
+        insightsByClaim = new Map();
         showTiles();
         attachCreatorMarkets();
+        void safe("insights", loadInsights);
         break;
       case "empty":
         setOrb("idle");
@@ -1147,7 +1185,14 @@ async function mount(): Promise<void> {
   };
 
   // The linked record changed, so anything read from the old one is out of date.
-  function onRecallIdentityChanged(): void {}
+  function onRecallIdentityChanged(): void {
+    insightsByClaim = new Map();
+    recallShrink = 1;
+    if (tiles.length > 0) {
+      if (!sheet) showTiles();
+      void safe("insights", loadInsights);
+    }
+  }
 
   function setCreateDebug(update: Partial<CreateDebug>): void {
     createDebug = { ...createDebug, ...update };

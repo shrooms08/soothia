@@ -984,6 +984,18 @@ input[type="number"].input { font-family: var(--sth-font-mono); }
 .side-chip-yes { color: var(--sth-yes); background: var(--sth-yes-bg); }
 .side-chip-no { color: var(--sth-no); background: var(--sth-no-bg); }
 .position-text { color: var(--sth-text); font: 400 13px/1 var(--sth-font-mono); }
+
+/* ---------- Total Recall on tiles ---------- */
+.tile-recall { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.called-badge {
+  padding: 5px 8px;
+  border-radius: var(--sth-r-pill);
+  background: var(--sth-raised-hover);
+  color: var(--sth-link);
+  font: 500 11px/1 var(--sth-font-mono);
+}
+.tile-notes { display: flex; flex-direction: column; gap: 4px; }
+.tile-note { margin: 0; color: var(--sth-text-3); font: 400 12px/1.45 var(--sth-font-sans); overflow-wrap: anywhere; }
 .tile.market .question { font-size: 16px; }
 .tile.market .actions { margin-top: 8px; gap: 14px; }
 .tile.market .actions .link { margin-right: auto; }
