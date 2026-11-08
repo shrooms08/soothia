@@ -38,7 +38,7 @@ export interface PickRecord {
   fixture?: PickFixture;
   /** Panta market the claim matched, when it resolves through Panta. */
   marketId?: string;
-  /** The latest Sui mainnet checkpoint seen when the call was made. */
+  /** Anchor: the call was made after this Sui mainnet checkpoint. Says nothing about kickoff. */
   anchor?: { checkpoint: string; timestampMs: number; via: "tatum-sui-mainnet" };
   /** SHA-256 of the canonical pick, committed on Sui before the event. */
   hash: string;

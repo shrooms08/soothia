@@ -10,7 +10,7 @@ Branch `total-recall`. A local CLI that locks football predictions as memories o
 
 - Scaffold: record shapes, scoring and lessons, Walrus Memory client, Tatum Sui RPC, and the `soothia_recall` Move package (`worker/src/recall`, `move/soothia_recall`).
 - ESPN fixtures and results for six leagues (`worker/src/recall/espn.ts`).
-- Optional Sui checkpoint anchor on each pick, read through Tatum and covered by the pick's hash.
+- Optional Sui checkpoint anchor on each pick, read through Tatum's gRPC gateway and covered by the pick's hash. An anchor shows a call was made after checkpoint N.
 - CLI: `lock.ts`, `list.ts`, `resolve.ts` in `worker/scripts/recall`, with a gitignored local backup in `worker/.recall-local`.
 
 ## [Unreleased]

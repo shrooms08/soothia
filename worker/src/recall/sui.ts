@@ -15,6 +15,7 @@ import { decodeSuiPrivateKey } from "@mysten/sui/cryptography";
 import { JsonRpcHTTPTransport, SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
 import { Transaction } from "@mysten/sui/transactions";
 import type { RecallEnv } from "./env";
+import { tatumSuiClient } from "./tatumGrpc";
 
 export const TATUM_SUI_MAINNET = "https://sui-mainnet.gateway.tatum.io";
 
@@ -177,14 +178,21 @@ export async function verifyCommit(env: RecallEnv, digest: string, expectedHash:
   }
 }
 
-/** Sui mainnet's latest checkpoint through Tatum, or null when no Tatum key is set. */
+/**
+ * Sui mainnet's latest checkpoint through Tatum gRPC, for a pick's anchor, or null
+ * when no Tatum key is set. An anchor shows a call was made after checkpoint N. It
+ * does not show the call came before kickoff: that takes commitPick.
+ */
 export async function latestCheckpoint(env: RecallEnv): Promise<{ checkpoint: string; timestampMs: number } | null> {
   if (!tatumConfigured(env)) return null;
-  const checkpoint = await tatumRpc<string>(env, "sui_getLatestCheckpointSequenceNumber");
-  const detail = await tatumRpc<{ timestampMs?: string }>(env, "sui_getCheckpoint", [checkpoint]);
-  const timestampMs = Number(detail?.timestampMs);
-  if (!Number.isFinite(timestampMs) || timestampMs <= 0) throw new Error("tatum_bad_checkpoint");
-  return { checkpoint, timestampMs };
+  const { response } = await tatumSuiClient(env.TATUM_API_KEY.trim()).ledgerService.getCheckpoint({
+    checkpointId: { oneofKind: undefined },
+    readMask: { paths: ["sequence_number", "summary.timestamp"] },
+  });
+  const sequence = response.checkpoint?.sequenceNumber;
+  const timestamp = response.checkpoint?.summary?.timestamp;
+  if (sequence === undefined || !timestamp) throw new Error("tatum_bad_checkpoint");
+  return { checkpoint: sequence.toString(), timestampMs: Number(timestamp.seconds) * 1000 + Math.floor(timestamp.nanos / 1_000_000) };
 }
 
 export interface MemoryAccountInfo {
@@ -199,21 +207,18 @@ export interface MemoryAccountInfo {
 export async function memoryAccount(env: RecallEnv): Promise<MemoryAccountInfo | null> {
   const accountId = env.MEMWAL_ACCOUNT_ID?.trim();
   if (!accountId || !tatumConfigured(env)) return null;
-  const [object, checkpoint] = await Promise.all([
-    tatumRpc<{ data?: { type?: string; owner?: unknown; content?: { fields?: Record<string, unknown> } } }>(
-      env,
-      "sui_getObject",
-      [accountId, { showType: true, showOwner: true, showContent: true }],
-    ),
-    tatumRpc<string>(env, "sui_getLatestCheckpointSequenceNumber").catch(() => null),
+  const [{ object }, checkpoint] = await Promise.all([
+    tatumSuiClient(env.TATUM_API_KEY.trim()).core.getObject({ objectId: accountId, include: { json: true } }),
+    latestCheckpoint(env)
+      .then((latest) => latest?.checkpoint ?? null)
+      .catch(() => null),
   ]);
-  const fields = object.data?.content?.fields ?? {};
+  const fields = (object.json ?? {}) as Record<string, unknown>;
   const ownerField = typeof fields.owner === "string" ? fields.owner : null;
-  const objectOwner = object.data?.owner as { AddressOwner?: string; Shared?: unknown } | undefined;
   return {
     accountId,
-    owner: ownerField ?? objectOwner?.AddressOwner ?? null,
-    type: object.data?.type ?? null,
+    owner: ownerField ?? (object.owner.$kind === "AddressOwner" ? object.owner.AddressOwner : null),
+    type: object.type ?? null,
     checkpoint,
     explorerUrl: `https://suivision.xyz/object/${accountId}`,
   };

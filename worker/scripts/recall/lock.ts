@@ -98,7 +98,7 @@ async function main(): Promise<number> {
         return store.write("pick", pick);
       });
       saved += 1;
-      console.log(`Locked ${pick.id}: ${lean} | job ${jobId} | checkpoint ${checkpoint}`);
+      console.log(`Locked ${pick.id}: ${lean} | job ${jobId} | anchor: after checkpoint ${checkpoint}`);
     } catch (error) {
       failed += 1;
       console.log(`NOT saved to Walrus (kept in the local backup): ${lean}\n  ${safeError(error, env)}`);
