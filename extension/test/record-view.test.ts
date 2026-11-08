@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { JSDOM } from "jsdom";
 import type { ApiResponse, RecallProof, RecallRecord } from "../src/messages";
-import { createRecordView, type RecordHost } from "../src/record-view";
+import { calledRow, createRecordView, type RecordHost } from "../src/record-view";
 
 const { window } = new JSDOM("<!doctype html><body></body>");
 Object.assign(globalThis, { document: window.document });
@@ -101,7 +101,7 @@ test("the record shows the headline, bars, teams, lessons and calls", async () =
   assert.equal(pane.querySelector(".lesson-text")!.textContent, "Shade your calls toward 50%.");
   const calls = pane.querySelectorAll(".record-call");
   assert.equal(calls[0].querySelector(".record-match")!.textContent, "Arsenal vs Chelsea");
-  assert.equal(calls[0].querySelector(".position-text")!.textContent, "Arsenal to win: YES 70%");
+  assert.equal(calls[0].querySelector(".position-text")!.textContent, "Arsenal win \u00b7 70%");
   assert.equal(calls[1].querySelector(".record-match")!.textContent, "Will rates fall?");
   assert.match(calls[1].textContent!, /No Sui proof \(Soothia reached today's limit\)/);
 });
@@ -173,4 +173,30 @@ test("quiet sites are listed and Undo removes them", async () => {
   await tick();
   assert.deepEqual(undone, ["espn.com"]);
   assert.equal(pane.querySelector(".quiet-site"), null);
+});
+
+test("a called tile shows the call and a Proof link that works", async () => {
+  const proof = { digest: "D", verified: true, timestampMs: 1, explorerUrl: "x", kickoffISO: "k", gapMs: 3_600_000, beforeKickoff: true };
+  const calls: unknown[] = [];
+  const row = calledRow(
+    { side: "Arsenal win", confidence: 60, pickId: "p_1", committed: true },
+    {
+      api: (async (_path: string, body: unknown) => {
+        calls.push(body);
+        return ok(proof);
+      }) as RecordHost["api"],
+      layout: () => undefined,
+    },
+  );
+  assert.equal(row.querySelector(".called-badge")!.textContent, "Your call: Arsenal win \u00b7 60%");
+  row.querySelector("button")!.click();
+  await tick();
+  assert.deepEqual(calls, [{ pickId: "p_1" }]);
+  assert.equal(row.querySelector(".proof-result")!.textContent, "Committed 1h 0m before kickoff \u2713");
+});
+
+test("a called tile with no commit has no Proof link", () => {
+  const row = calledRow({ side: "YES", confidence: 80, pickId: "p_2", committed: false }, { api: (async () => ok({})) as RecordHost["api"], layout: () => undefined });
+  assert.equal(row.querySelector("button"), null);
+  assert.equal(row.textContent, "Your call: YES \u00b7 80%");
 });

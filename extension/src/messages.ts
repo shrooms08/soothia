@@ -125,12 +125,21 @@ export interface ApiResponse<T = unknown> {
 
 export const RECALL_ID_KEY = "soothia.recallId";
 
+export interface RecallCalled {
+  /** "Arsenal win", or "Arsenal doesn't win (Chelsea win or draw)". */
+  side: string;
+  confidence: number;
+  pickId: string;
+  committed: boolean;
+}
+
 export interface RecallInsight {
   claimId: string;
   relevance: number;
   notes: string[];
-  existing: { pYes: number; at: string } | null;
   nudge: number;
+  /** Missing on a Worker older than this extension. */
+  called?: RecallCalled | null;
 }
 
 export interface RecallInsights {
@@ -156,6 +165,7 @@ export interface RecallSavedPick {
   pYes: number;
   commit: { digest: string; network: string } | null;
   commitSkipped?: CommitSkipReason;
+  fixture?: { home: string; away: string; subject: "home" | "away" };
 }
 
 export interface RecallLesson {

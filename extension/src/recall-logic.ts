@@ -5,11 +5,13 @@ import type {
   ApiError,
   CommitSkipReason,
   FixtureSignal,
+  RecallCalled,
   RecallInsight,
   RecallPickBody,
   RecallProof,
   RecallRecord,
   RecallRecordPick,
+  RecallSavedPick,
   Tile,
 } from "./messages";
 
@@ -97,10 +99,25 @@ export function leanLabel(pYes: number): string {
   return pYes >= 0.5 ? `YES ${Math.round(pYes * 100)}%` : `NO ${Math.round((1 - pYes) * 100)}%`;
 }
 
-/** A call's lean, naming the team when "YES" alone would be unclear. */
+/** What a call backs. YES on "Will A beat B" is "A win"; NO is "A doesn't win (B win or draw)". */
+export function leanSide(pick: Pick<RecallRecordPick, "pYes"> & { fixture?: RecallRecordPick["fixture"] }): string {
+  const yes = pick.pYes >= 0.5;
+  if (!pick.fixture) return yes ? "YES" : "NO";
+  const { home, away, subject } = pick.fixture;
+  const backed = subject === "home" ? home : away;
+  const other = subject === "home" ? away : home;
+  return yes ? `${backed} win` : `${backed} doesn't win (${other} win or draw)`;
+}
+
+/** A call's confidence in the side it backs, in percent. */
+export function callConfidence(pYes: number): number {
+  return Math.round(Math.max(pYes, 1 - pYes) * 100);
+}
+
+/** A call's lean, in the same words as "Your call" on a tile. */
 export function pickLean(pick: Pick<RecallRecordPick, "pYes" | "fixture">): string {
   if (!pick.fixture) return leanLabel(pick.pYes);
-  return `${pick.fixture[pick.fixture.subject]} to win: ${leanLabel(pick.pYes)}`;
+  return `${leanSide(pick)} \u00b7 ${callConfidence(pick.pYes)}%`;
 }
 
 /** The record tab's one-line summary. */
@@ -114,10 +131,19 @@ export function recordHeadline(summary: RecallRecord["summary"]): string {
   return parts.join(" · ");
 }
 
-/** Up to two notes for a tile. The badge already says "you called this". */
+/** Up to two notes for a tile. */
 export function visibleNotes(insight: RecallInsight | undefined): string[] {
-  if (!insight) return [];
-  return insight.notes.filter((note) => !(insight.existing && note.startsWith("You already called this"))).slice(0, 2);
+  return insight ? insight.notes.slice(0, 2) : [];
+}
+
+/** The tile's call state, right after the user locks a new call. */
+export function calledFromPick(pick: RecallSavedPick): RecallCalled {
+  return {
+    side: leanSide(pick),
+    confidence: callConfidence(pick.pYes),
+    pickId: pick.id,
+    committed: pick.commit !== null,
+  };
 }
 
 /** Most relevant first; equal tiles keep their order. */

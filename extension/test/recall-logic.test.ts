@@ -4,12 +4,14 @@ import { test } from "node:test";
 import type { FixtureSignal, RecallInsight, Tile } from "../src/messages";
 import {
   callBody,
+  calledFromPick,
   callErrorMessage,
   fixtureSubject,
   formatGap,
   isQuietableSite,
   isRecallId,
   leanLabel,
+  leanSide,
   mergeQuietSites,
   overconfidencePoints,
   pickLean,
@@ -49,11 +51,10 @@ const tile = (question: string, overrides: Partial<Tile["claim"]> = {}): Tile =>
 });
 
 const PAGE = { site: "espn.com", url: "https://www.espn.com/match" };
-const insight = (id: string, relevance: number, notes: string[] = [], existing: RecallInsight["existing"] = null): RecallInsight => ({
+const insight = (id: string, relevance: number, notes: string[] = []): RecallInsight => ({
   claimId: id,
   relevance,
   notes,
-  existing,
   nudge: 0,
 });
 
@@ -124,10 +125,24 @@ test("the lean reads as the side and its confidence", () => {
   assert.equal(leanLabel(0.5), "YES 50%");
 });
 
-test("a match call names the team the question backs", () => {
-  assert.equal(pickLean({ pYes: 0.35, fixture: { home: "Napoli", away: "Lazio", subject: "home" } }), "Napoli to win: NO 65%");
-  assert.equal(pickLean({ pYes: 0.6, fixture: { home: "Napoli", away: "Lazio", subject: "away" } }), "Lazio to win: YES 60%");
+const NAPOLI = { home: "Napoli", away: "Lazio" };
+
+test("lean wording: YES backs the team, NO says what that means", () => {
+  assert.equal(leanSide({ pYes: 0.6, fixture: { ...NAPOLI, subject: "home" } }), "Napoli win");
+  assert.equal(leanSide({ pYes: 0.35, fixture: { ...NAPOLI, subject: "home" } }), "Napoli doesn't win (Lazio win or draw)");
+  assert.equal(leanSide({ pYes: 0.6, fixture: { ...NAPOLI, subject: "away" } }), "Lazio win");
+  assert.equal(leanSide({ pYes: 0.6, fixture: null }), "YES");
+});
+
+test("a match call reads with its confidence, and other calls stay short", () => {
+  assert.equal(pickLean({ pYes: 0.35, fixture: { ...NAPOLI, subject: "home" } }), "Napoli doesn't win (Lazio win or draw) \u00b7 65%");
   assert.equal(pickLean({ pYes: 0.6, fixture: null }), "YES 60%");
+});
+
+test("a newly locked call becomes the tile's call state", () => {
+  const pick = { id: "p_9", at: "x", pYes: 0.25, commit: { digest: "d", network: "mainnet" }, fixture: { ...NAPOLI, subject: "away" as const } };
+  assert.deepEqual(calledFromPick(pick), { side: "Lazio doesn't win (Napoli win or draw)", confidence: 75, pickId: "p_9", committed: true });
+  assert.equal(calledFromPick({ ...pick, commit: null }).committed, false);
 });
 
 test("the headline leaves out what is not known yet", () => {
@@ -136,9 +151,7 @@ test("the headline leaves out what is not known yet", () => {
   assert.equal(recordHeadline({ ...base, picks: 4, resolved: 4, hits: 3, brier: 0.2 }), "4 calls · 3 right · 75% hit rate · Brier 0.200");
 });
 
-test("tiles show two notes and skip the one the badge repeats", () => {
-  const existing = { pYes: 0.7, at: "2026-11-08T00:00:00.000Z" };
-  assert.deepEqual(visibleNotes(insight("a", 1, ["You already called this: YES 70%.", "n1", "n2", "n3"], existing)), ["n1", "n2"]);
+test("tiles show at most two notes", () => {
   assert.deepEqual(visibleNotes(insight("a", 1, ["n1", "n2", "n3"])), ["n1", "n2"]);
   assert.deepEqual(visibleNotes(undefined), []);
 });

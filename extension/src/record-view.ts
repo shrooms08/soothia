@@ -1,6 +1,6 @@
 // The My record tab: what the user has called, how it went, and the proof on Sui.
 import { button, el, externalLink, icon } from "./dom";
-import type { ApiError, ApiPath, ApiResponse, RecallProof, RecallRecord, RecallRecordPick } from "./messages";
+import type { ApiError, ApiPath, ApiResponse, RecallCalled, RecallProof, RecallRecord, RecallRecordPick } from "./messages";
 import { pickLean, proofText, recordHeadline, shortId, skipReasonText } from "./recall-logic";
 
 export interface RecordHost {
@@ -61,6 +61,43 @@ function teamTable(entities: RecallRecord["summary"]["entities"]): HTMLElement {
   return table;
 }
 
+type ApiHost = Pick<RecordHost, "api" | "layout">;
+
+/** The Proof link and the line that shows its result. */
+export function proofLink(pickId: string, host: ApiHost): { link: HTMLButtonElement; result: HTMLElement } {
+  const result = el("span", "note proof-result");
+  const link = button("Proof", "link", () => {
+    void (async () => {
+      link.disabled = true;
+      result.textContent = "Checking on Sui\u2026";
+      host.layout();
+      const response = await host.api<RecallProof>("/recall/proof", { pickId });
+      link.disabled = false;
+      if (!response.ok || !response.body) {
+        result.textContent = "Couldn't check the proof just now.";
+        host.layout();
+        return;
+      }
+      const { text, good } = proofText(response.body as RecallProof);
+      result.textContent = text;
+      result.classList.toggle("good", good);
+      host.layout();
+    })();
+  });
+  return { link, result };
+}
+
+/** "Your call: Arsenal win · 60%" with its Proof link, for a tile. */
+export function calledRow(called: RecallCalled, host: ApiHost): HTMLElement {
+  const row = el("div", "called-row");
+  row.append(el("span", "called-badge", `Your call: ${called.side} \u00b7 ${called.confidence}%`));
+  if (called.committed) {
+    const { link, result } = proofLink(called.pickId, host);
+    row.append(link, result);
+  }
+  return row;
+}
+
 export function createRecordView(pane: HTMLElement, host: RecordHost): { render(): Promise<void> } {
   let seq = 0;
 
@@ -70,25 +107,7 @@ export function createRecordView(pane: HTMLElement, host: RecordHost): { render(
       row.append(el("span", "note", pick.commitSkipped ? `No Sui proof (${skipReasonText(pick.commitSkipped)})` : "No Sui proof"));
       return row;
     }
-    const result = el("span", "note proof-result");
-    const link = button("Proof", "link", () => {
-      void (async () => {
-        link.disabled = true;
-        result.textContent = "Checking on Sui…";
-        host.layout();
-        const response = await host.api<RecallProof>("/recall/proof", { pickId: pick.id });
-        link.disabled = false;
-        if (!response.ok || !response.body) {
-          result.textContent = "Couldn't check the proof just now.";
-          host.layout();
-          return;
-        }
-        const { text, good } = proofText(response.body as RecallProof);
-        result.textContent = text;
-        result.classList.toggle("good", good);
-        host.layout();
-      })();
-    });
+    const { link, result } = proofLink(pick.id, host);
     row.append(link, result, externalLink("Sui", pick.commit.explorerUrl, "link ext"));
     return row;
   }

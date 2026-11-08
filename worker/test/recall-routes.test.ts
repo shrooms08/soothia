@@ -4,7 +4,7 @@ import { test } from "node:test";
 import type { Env } from "../src/http";
 import { clearMemoryCache } from "../src/store";
 import type { PickRecord } from "../src/recall/records";
-import { entitiesFromQuestion, isDuplicatePick, isHostname, validatePickBody } from "../src/recall/routes";
+import { entitiesFromQuestion, isDuplicatePick, isHostname, parseClaims, validatePickBody } from "../src/recall/routes";
 import { groupSweepKeys, sweepRecall } from "../src/recall/sweep";
 
 const NOW = Date.parse("2026-11-08T12:00:00.000Z");
@@ -124,4 +124,12 @@ test("one user's failure keeps their entries and does not stop the next user", a
     return ["b"];
   });
   assert.deepEqual(deleted, ["rp:b"]);
+});
+
+test("insight claims may carry their match, and a malformed match is refused", () => {
+  const base = { id: "c1", question: "Q?", category: "sports" };
+  const fixture = { home: "A", away: "B", startISO: FUTURE };
+  assert.deepEqual(parseClaims([{ ...base, fixture }]), [{ ...base, fixture }]);
+  assert.deepEqual(parseClaims([base]), [base]);
+  assert.equal(parseClaims([{ ...base, fixture: { home: "A" } }]), null);
 });

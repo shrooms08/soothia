@@ -37,11 +37,11 @@ import {
   type RecallRecord,
 } from "./messages";
 import { readPage, type ReadInfo } from "./reader";
-import { createRecordView } from "./record-view";
+import { calledRow, createRecordView } from "./record-view";
 import {
   isQuietableSite,
+  calledFromPick,
   isRecallId,
-  leanLabel,
   mergeQuietSites,
   sortByRelevance,
   visibleNotes,
@@ -137,7 +137,12 @@ function savePosition(position: OrbPosition): void {
   chrome.storage.local.set({ [POSITION_KEY]: position }).catch(() => {});
 }
 
-function tileNode({ claim }: Tile, insight: RecallInsight | undefined, onCall: () => void): HTMLElement {
+function tileNode(
+  { claim }: Tile,
+  insight: RecallInsight | undefined,
+  onCall: () => void,
+  proofHost: Parameters<typeof calledRow>[1],
+): HTMLElement {
   const tile = el("div", "tile");
 
   const meta = el("div", "meta");
@@ -153,10 +158,13 @@ function tileNode({ claim }: Tile, insight: RecallInsight | undefined, onCall: (
     : el("p", "quote", `\u201C${claim.sourceQuote}\u201D`);
   tile.append(el("p", "question", claim.question), meta, source);
 
-  const recall = el("div", "tile-recall");
-  if (insight?.existing) recall.append(el("span", "called-badge", `You called this: ${leanLabel(insight.existing.pYes)}`));
-  recall.append(button("Call it", "button primary call-it", onCall));
-  tile.append(recall);
+  if (insight?.called) {
+    tile.append(calledRow(insight.called, proofHost));
+  } else {
+    const recall = el("div", "tile-recall");
+    recall.append(button("Call it", "button primary call-it", onCall));
+    tile.append(recall);
+  }
   const notes = visibleNotes(insight);
   if (notes.length > 0) {
     const list = el("div", "tile-notes");
@@ -542,7 +550,7 @@ async function mount(): Promise<void> {
     closeSheet();
     setOrb("found", tiles.length);
     body.replaceChildren(
-      ...tiles.map((tile) => tileNode(tile, insightsByClaim.get(tile.claim.id), () => openCall(tile))),
+      ...tiles.map((tile) => tileNode(tile, insightsByClaim.get(tile.claim.id), () => openCall(tile), { api, layout })),
     );
     layout();
   }
@@ -560,14 +568,19 @@ async function mount(): Promise<void> {
       layout,
       back: showTiles,
       locked: (pick) => {
-        const known = insightsByClaim.get(tile.claim.id);
-        insightsByClaim.set(tile.claim.id, {
-          claimId: tile.claim.id,
-          relevance: known?.relevance ?? 0,
-          notes: known?.notes ?? [],
-          nudge: known?.nudge ?? 0,
-          existing: { pYes: pick.pYes, at: pick.at },
-        });
+        // One call per match, so a fixture call settles every tile from that match.
+        const called = calledFromPick(pick);
+        const settled = tile.claim.fromFixture ? tiles.filter((item) => item.claim.fromFixture) : [tile];
+        for (const { claim } of settled) {
+          const known = insightsByClaim.get(claim.id);
+          insightsByClaim.set(claim.id, {
+            claimId: claim.id,
+            relevance: known?.relevance ?? 0,
+            notes: known?.notes ?? [],
+            nudge: known?.nudge ?? 0,
+            called,
+          });
+        }
       },
       celebrate: pulseOrb,
       sound,
@@ -603,7 +616,14 @@ async function mount(): Promise<void> {
   // Extra information only: any failure leaves the tiles exactly as they were.
   async function loadInsights(): Promise<void> {
     const seq = ++insightSeq;
-    const claims = tiles.slice(0, 3).map(({ claim }) => ({ id: claim.id, question: claim.question, category: claim.category }));
+    const claims = tiles.slice(0, 3).map(({ claim }) => ({
+      id: claim.id,
+      question: claim.question,
+      category: claim.category,
+      ...(claim.fromFixture && pageFixture
+        ? { fixture: { home: pageFixture.home, away: pageFixture.away, startISO: pageFixture.startISO } }
+        : {}),
+    }));
     if (claims.length === 0) return;
     const response = await api<RecallInsights>("/recall/insights", { claims });
     if (seq !== insightSeq || !response.ok || !response.body) return;

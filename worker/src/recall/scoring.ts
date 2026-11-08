@@ -2,6 +2,7 @@
 // Pure functions over records read from Walrus Memory; no I/O here, so the
 // whole learning loop is unit-tested without a relayer.
 
+import { teamKey } from "./espn";
 import {
   entityKey,
   type LessonRecord,
@@ -269,6 +270,59 @@ export interface ClaimInput {
   question: string;
   category: string;
   entities: string[];
+  /** The match on the page, when the claim was built from one. */
+  fixture?: { home: string; away: string; startISO: string };
+}
+
+/** The user's existing call on this claim's match or question. */
+export interface CalledMatch {
+  /** "Arsenal win", or "Arsenal doesn't win (Chelsea win or draw)". */
+  side: string;
+  /** How sure the user was of that side, in percent. */
+  confidence: number;
+  pickId: string;
+  committed: boolean;
+}
+
+/** What a call backs. YES on "Will A beat B" is "A win"; NO is "A doesn't win (B win or draw)". */
+export function leanSide(pick: Pick<PickRecord, "pYes" | "fixture">): string {
+  const yes = pick.pYes >= 0.5;
+  if (!pick.fixture) return yes ? "YES" : "NO";
+  const backed = pick.fixture[pick.fixture.subject];
+  const other = pick.fixture.subject === "home" ? pick.fixture.away : pick.fixture.home;
+  return yes ? `${backed} win` : `${backed} doesn't win (${other} win or draw)`;
+}
+
+function kickoffDay(startISO: string): string | null {
+  const ms = Date.parse(startISO);
+  return Number.isNaN(ms) ? null : new Date(ms).toISOString().slice(0, 10);
+}
+
+/** The same two teams on the same UTC day, whichever way round they are listed. */
+function sameMatch(a: { home: string; away: string; startISO: string }, b: { home: string; away: string; startISO: string }): boolean {
+  const day = kickoffDay(a.startISO);
+  if (day === null || day !== kickoffDay(b.startISO)) return false;
+  const [teamA, teamB] = [teamKey(a.home), teamKey(a.away)];
+  const [otherA, otherB] = [teamKey(b.home), teamKey(b.away)];
+  return (teamA === otherA && teamB === otherB) || (teamA === otherB && teamB === otherA);
+}
+
+function isSameCall(claim: Pick<ClaimInput, "question" | "fixture">, pick: PickRecord): boolean {
+  if (claim.fixture && pick.fixture && sameMatch(claim.fixture, pick.fixture)) return true;
+  return pick.question === claim.question;
+}
+
+/** Finds the user's call on a claim in their full pick list. A committed call wins over one that is not. */
+export function matchCalled(claim: Pick<ClaimInput, "question" | "fixture">, picks: PickRecord[]): CalledMatch | null {
+  const matching = picks.filter((pick) => isSameCall(claim, pick));
+  const pick = matching.find((candidate) => candidate.commit) ?? matching[0];
+  if (!pick) return null;
+  return {
+    side: leanSide(pick),
+    confidence: Math.round(Math.max(pick.pYes, 1 - pick.pYes) * 100),
+    pickId: pick.id,
+    committed: pick.commit !== null,
+  };
 }
 
 /** A semantically close earlier call, found by Walrus Memory recall. */
@@ -285,6 +339,8 @@ export interface ClaimInsight {
   notes: string[];
   /** The user's existing call on this exact question, if any. */
   existing: { pYes: number; at: string } | null;
+  /** The user's call on this match or question, if any. */
+  called: CalledMatch | null;
   /** Suggested shading in probability points for the next call (+ raises YES). */
   nudge: number;
 }
@@ -335,12 +391,8 @@ export function insightsFor(
     const keys = claim.entities.map(entityKey).filter(Boolean);
 
     const existing = picks.find((pick) => pick.question === claim.question) ?? null;
-    if (existing) {
-      notes.push(
-        `You already called this: ${existing.pYes >= 0.5 ? "YES" : "NO"} ${Math.round(Math.max(existing.pYes, 1 - existing.pYes) * 100)}%.`,
-      );
-      relevance += 5;
-    }
+    const called = matchCalled(claim, picks);
+    if (called) relevance += 5;
 
     // Entity lessons first: they are the most specific thing Soothia knows.
     for (const key of keys) {
@@ -361,7 +413,7 @@ export function insightsFor(
 
     // The closest earlier call that is not this exact question.
     const related = (memory.related.get(claim.id) ?? [])
-      .filter((hit) => hit.distance < RELATED_MAX_DISTANCE && hit.pick.question !== claim.question)
+      .filter((hit) => hit.distance < RELATED_MAX_DISTANCE && !isSameCall(claim, hit.pick))
       .sort((a, b) => a.distance - b.distance)[0];
     if (related && notes.length < 3) {
       notes.push(pickLine(related.pick, outcomes.get(related.pick.id)));
@@ -384,6 +436,7 @@ export function insightsFor(
       relevance,
       notes: notes.slice(0, 3),
       existing: existing ? { pYes: existing.pYes, at: existing.at } : null,
+      called,
       nudge: Math.max(-15, Math.min(15, nudge)),
     };
   });

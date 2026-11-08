@@ -170,16 +170,26 @@ interface Claim {
   id: string;
   question: string;
   category: string;
+  fixture?: { home: string; away: string; startISO: string };
 }
 
-function parseClaims(value: unknown): Claim[] | null {
+export function parseClaims(value: unknown): Claim[] | null {
   if (!Array.isArray(value)) return null;
   const claims: Claim[] = [];
   for (const raw of value.slice(0, MAX_INSIGHT_CLAIMS)) {
     const claim = raw as Partial<Claim> | null;
     if (typeof claim !== "object" || claim === null) return null;
     if (!shortString(claim.id, 100) || !shortString(claim.question, MAX_QUESTION) || !shortString(claim.category, 40)) return null;
-    claims.push({ id: claim.id, question: claim.question, category: claim.category });
+    const fixture = claim.fixture as Partial<NonNullable<Claim["fixture"]>> | null | undefined;
+    if (fixture !== undefined && fixture !== null) {
+      if (!shortString(fixture.home, 100) || !shortString(fixture.away, 100) || !shortString(fixture.startISO, 40)) return null;
+    }
+    claims.push({
+      id: claim.id,
+      question: claim.question,
+      category: claim.category,
+      ...(fixture ? { fixture: { home: fixture.home!, away: fixture.away!, startISO: fixture.startISO! } } : {}),
+    });
   }
   return claims;
 }

@@ -705,12 +705,14 @@ input[type="number"].input { font-family: var(--sth-font-mono); }
 
 /* ---------- Total Recall on tiles ---------- */
 .tile-recall { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.called-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
 .called-badge {
   padding: 5px 8px;
   border-radius: var(--sth-r-pill);
   background: var(--sth-raised-hover);
   color: var(--sth-link);
-  font: 500 11px/1 var(--sth-font-mono);
+  font: 500 11px/1.3 var(--sth-font-mono);
+  overflow-wrap: anywhere;
 }
 .call-it { margin-left: auto; }
 .call-slider-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
