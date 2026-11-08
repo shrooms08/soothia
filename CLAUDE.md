@@ -1,43 +1,46 @@
 # Soothia: standing rules
 
-Soothia is a Chrome MV3 extension (floating orb on every page) backed by a Cloudflare Worker proxy (`soothia-proxy`) in front of the Panta prediction-market API. The operator does not write code: write, run, and verify everything, and give exact numbered steps for anything only the operator can do.
+Soothia is a Chrome MV3 extension (a floating orb on every page) where people call matches and claims before they happen. Each call is remembered on Walrus Memory and its hash is committed on Sui. A Cloudflare Worker (`soothia-proxy`) holds the keys and serves the extension. The operator does not write code: write, run, and verify everything, and give exact numbered steps for anything only the operator can do.
 
 ## Rules
 
-1. **Mainnet only.** Panta runs on Solana mainnet. There is no devnet. Every transaction moves real USDC.
-2. **Never commit or print secrets.** No keys in git, logs, terminal output, chat, or error responses. `.env`, `.dev.vars`, and `.wrangler` stay gitignored. Never ask the operator to paste a key into chat; give them the file and line instead.
-3. **The Panta key and the Claude key live only in the Worker** (Wrangler secrets in production, `worker/.dev.vars` locally). They never go into the extension, which ships to users' browsers. The one exception is the root `.env`, which local scripts in `/scripts` read; it is gitignored.
-4. **Read the Panta docs before writing Panta code.** Start at https://docs.panta.market/llms.txt and open the relevant reference pages. Do not guess endpoint paths, parameter names, or response fields.
-5. **Trailing slashes on every Panta path.** Base URL is `https://live-api.panta.market/api/v1`; paths look like `/markets/` and `/categories/`.
-6. **Extension UI stays inside the shadow root.** One host element, closed shadow root, max z-index. Site CSS must not affect Soothia and Soothia must not affect the site. All styles live in `extension/src/styles.ts`.
-7. **One branch per phase** (`p0-skeleton`, `p1-...`). Never merge to `main` until the operator has run the SMOKE checklist and said it passed.
-8. **Keep test bets between $1 and $2.**
+1. **Mainnet only.** Sui mainnet and Walrus Memory mainnet. There is no testnet or staging setup. Every Sui transaction spends real SUI.
+2. **Never commit or print secrets.** No keys in git, logs, terminal output, chat, or error responses. `.dev.vars` and `.wrangler` stay gitignored. Never ask the operator to paste a key into chat; give them the file and line instead. Object ids, package ids and addresses are not secret.
+3. **Keys live only in the Worker** (Wrangler secrets in production, `worker/.dev.vars` locally, which the scripts in `worker/scripts` also read). They never go into the extension, which ships to users' browsers.
+4. **Check the source before writing Sui, Walrus Memory or Tatum code.** Read the docs or the installed SDK's types. Do not guess method names, parameters, or response fields.
+5. **Extension UI stays inside the shadow root.** One host element, closed shadow root, max z-index. Site CSS must not affect Soothia and Soothia must not affect the site. All styles live in `extension/src/styles.ts`.
+6. **One branch per phase.** Never merge to `main` until the operator has run the SMOKE checklist and said it passed.
+7. **Keep mainnet tests small.** Test stakes stay at the minimum. Test calls use a throwaway recall id, never the operator's real record.
+8. **Never deploy unless the operator says so.**
 
-## Layout
+## Architecture
 
-- `extension/`: MV3 extension, TypeScript, Vite. Build output in `extension/dist`. `WORKER_URL` (https://api.soothia.fun) and `SITE_URL` (https://soothia.fun) are the constants in `extension/src/config.ts`.
-- `worker/`: Cloudflare Worker `soothia-proxy`, TypeScript, Wrangler. Served at https://api.soothia.fun (custom domain) and the original https://soothia-proxy.heylana.workers.dev; both stay live.
-- `scripts/`: Node + TypeScript scripts run with `tsx`.
-- `site/`: the landing site Worker `soothia`, served at https://soothia.fun (www redirects there) and https://soothia.heylana.workers.dev. Never rename the heylana workers.dev subdomain.
-- `docs/`: generated reports such as `catalog-check.md`.
+- **Extension** (`extension/`): MV3, TypeScript, Vite. Build output in `extension/dist`. `WORKER_URL` (https://api.soothia.fun) is in `extension/src/config.ts`. Tabs are This page and My record.
+- **Worker** (`worker/`): Cloudflare Worker `soothia-proxy`, served at https://api.soothia.fun and https://soothia-proxy.heylana.workers.dev; both stay live. Routes: `POST /detect` (prose through Claude, or the page's fixture), `/recall/*`, `GET /stats`, `GET /health`. Never rename the heylana workers.dev subdomain.
+- **Walrus Memory** (`worker/src/recall/memory.ts`): the source of truth for picks, outcomes, lessons and preferences. Writes are asynchronous and the store is append-only.
+- **Sui through Tatum** (`worker/src/recall/tatumGrpc.ts`, `sui.ts`): reads and commits go through Tatum's gRPC gateway with a fetch-only transport, so they also run in Workers. Do not add `@grpc/grpc-js`.
+- **Move packages** (`move/`): `soothia_recall` commits a pick's hash; `soothia_stake` is the parimutuel SUI staking pool.
+- **Results** (`worker/src/recall/espn.ts`): football results from ESPN for six leagues. A cron sweep settles open picks every 15 minutes.
+- **Site** (`site/`): the landing site Worker `soothia`, served at https://soothia.fun (www redirects there) and https://soothia.heylana.workers.dev.
+- **Scripts**: `worker/scripts/recall` and `worker/scripts/stake` are operator CLIs run with `npx tsx`; `scripts/` holds packaging and asset scripts.
 
-## Panta notes (from the docs)
+## Notes
 
-- Auth header is `X-Api-Key`. Keys in query strings are rejected.
-- `GET /markets/` takes `category`, `status` (the market phase: `primary`, `secondary`, `resolved`, `cancelled`), `cursor`, and `limit` (max 50). It returns `{ items, nextCursor }`.
-- The docs say list rows have null prices and `GET /markets/{marketId}/` fills `yesPrice` and `noPrice`. Observed on 2026-10-05: list rows did carry prices, some list rows had a blank `title` that the detail endpoint filled, and detail calls made in a quick burst sometimes came back with blank titles and null prices. Merge list and detail data instead of trusting either alone.
-- `GET /categories/` returned 8 slugs, but live markets use others too (`stocks`, `commodities`, `pop-culture`, `macroeconomics`, `business`, `gaming`, `space-universe`). Do not treat the categories list as complete.
-- Creating a market costs 50 USDC (from the live quote). Full rules are in `docs/panta-create-rules.md`.
-- The question, resolution rule, and sources are stored in the create transaction, which must fit in 1232 bytes. Panta does not check this. The Worker refuses built create transactions over 1150 bytes and shrinks the text to fit, always keeping one authoritative source (CoinGecko, the league site or ESPN, or Reuters) (`worker/src/pantaRules.ts`, `worker/src/resolution.ts`).
-- Market page: `https://www.panta.market/market/<marketId>`.
-- Catalog reads are rate limited to about 120 requests per 60 seconds. Honor `Retry-After` on 429.
+- `canonicalPick` in `worker/src/recall/records.ts` defines the hash already committed on Sui. Never change its fields or their order, including the legacy `marketId` and `marketYes`, or existing proofs stop verifying.
+- An updated pick keeps its original `at`, so use `mergePicks`, not `latestBy`, to pick a version.
+- Tatum's Sui JSON-RPC URL returns 404. Its gRPC gateway labels replies `application/grpc`, which is why the custom transport exists. The current plan allows 3 requests a second.
+- `/recall/pick` spends the commit wallet's SUI, so commits pass through `worker/src/recall/commitGuard.ts`. The CLI does not.
+- KV allows 1,000 writes a day on the free tier. Every KV write goes through `kvPut`.
+- An anchor shows a call was made after a checkpoint. Only a Sui commit shows it was made before kickoff.
 
 ## Commands
 
-- Extension: `cd extension && npm install && npm run build` (also `npm run typecheck`)
-- Worker: `cd worker && npm install && npm run dev` (local), `npm run deploy` (production), `npm run typecheck`, `npm test`
-- Extension tests: `cd extension && npm test`
-- Category images: `cd scripts && npm run make-category-images` (writes `worker/public/img`)
-- Catalog check: `cd scripts && npm install && npm run catalog-check`
-- Site Worker tests (escaping, security headers): `cd scripts && npm test`
-- `GET /debug/*` on soothia-proxy needs the `X-Soothia-Admin` header equal to the `ADMIN_TOKEN` secret; otherwise 404. `/detect`, `/match`, and the public bet-link routes are limited per IP (`worker/src/ratelimit.ts`).
+- Everything, from the root: `npm test`, `npm run typecheck`
+- Extension: `cd extension && npm install && npm run build` (also `npm run typecheck`, `npm test`)
+- Extension zip: `npm run package-extension --prefix scripts` (writes `site/soothia-extension.zip`)
+- Worker: `cd worker && npm install && npm run dev` (local), `npm run deploy` (production), `npm run typecheck`, `npm test`, `npm run build` (dry-run bundle)
+- Move: `cd move/<package> && sui move test`
+- Recall CLI: `cd worker && npx tsx scripts/recall/<lock|list|resolve|commit-existing|verify>.ts`
+- Stake CLI: `cd worker && npx tsx scripts/stake/<publish|smoke>.ts`
+- Site Worker tests (security headers, redirect): `cd scripts && npm test`
+- `GET /debug/*` on soothia-proxy needs the `X-Soothia-Admin` header equal to the `ADMIN_TOKEN` secret; otherwise 404. `/detect` and `/recall/*` are limited per IP (`worker/src/ratelimit.ts`).
