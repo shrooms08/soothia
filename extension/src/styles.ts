@@ -347,7 +347,7 @@ export const STYLES = `
 
 .tabs {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr 1fr 1fr;
   gap: 4px;
   flex: none;
   margin: 0 16px 12px;
@@ -994,8 +994,43 @@ input[type="number"].input { font-family: var(--sth-font-mono); }
   color: var(--sth-link);
   font: 500 11px/1 var(--sth-font-mono);
 }
+.call-it { margin-left: auto; }
+.call-slider-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.call-value { color: var(--sth-text); font: 500 15px/1 var(--sth-font-mono); }
+.call-slider { width: 100%; margin: 0; accent-color: var(--sth-orb-edge); cursor: pointer; }
+.call-nudge { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
+.call-nudge[hidden], .call-nudge .link[hidden] { display: none; }
 .tile-notes { display: flex; flex-direction: column; gap: 4px; }
 .tile-note { margin: 0; color: var(--sth-text-3); font: 400 12px/1.45 var(--sth-font-sans); overflow-wrap: anywhere; }
+
+/* ---------- My record ---------- */
+.record-headline { margin: 0; color: var(--sth-text); font: 400 17px/1.4 var(--sth-font-serif); }
+.record-section { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+.record-section h3 { margin: 0; }
+.cal-list { display: flex; flex-direction: column; gap: 12px; }
+.cal-bucket { display: flex; flex-direction: column; gap: 5px; }
+.cal-label { margin: 0; color: var(--sth-text-2); font: 400 12px/1 var(--sth-font-mono); }
+.cal-bar { display: grid; grid-template-columns: 56px 1fr 36px; align-items: center; gap: 8px; }
+.cal-name { color: var(--sth-text-3); font: 400 11px/1 var(--sth-font-sans); }
+.cal-track { display: block; height: 6px; border-radius: var(--sth-r-pill); background: var(--sth-raised-hover); overflow: hidden; }
+.cal-fill { display: block; height: 100%; border-radius: var(--sth-r-pill); }
+.cal-fill.claimed { background: var(--sth-orb-mid); }
+.cal-fill.landed { background: var(--sth-yes); }
+.cal-value { color: var(--sth-text-2); font: 400 11px/1 var(--sth-font-mono); text-align: right; }
+.record-table { width: 100%; border-collapse: collapse; color: var(--sth-text); font: 400 13px/1.3 var(--sth-font-sans); }
+.record-table th { padding: 4px 0; color: var(--sth-text-3); font: 500 11px/1 var(--sth-font-sans); text-align: right; }
+.record-table td { padding: 5px 0; border-top: 1px solid var(--sth-hairline-soft); text-align: right; }
+.record-table th:first-child, .record-table td:first-child { text-align: left; overflow-wrap: anywhere; }
+.lesson-text { margin: 0; color: var(--sth-text); font: 400 14px/1.45 var(--sth-font-serif); }
+.record-call { gap: 8px; }
+.record-match { margin: 0; color: var(--sth-text); font: 400 15px/1.35 var(--sth-font-serif); overflow-wrap: anywhere; }
+.record-proof { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+.proof-result { flex: 1 1 auto; }
+.proof-result.good { color: var(--sth-yes); }
+.record-footer { margin-top: 8px; overflow-wrap: anywhere; }
+.quiet-list { display: flex; flex-direction: column; gap: 4px; }
+.quiet-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.quiet-site { color: var(--sth-text); font: 400 13px/1 var(--sth-font-mono); overflow-wrap: anywhere; }
 .tile.market .question { font-size: 16px; }
 .tile.market .actions { margin-top: 8px; gap: 14px; }
 .tile.market .actions .link { margin-right: auto; }

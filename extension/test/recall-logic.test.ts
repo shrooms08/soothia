@@ -12,9 +12,11 @@ import {
   leanLabel,
   mergeQuietSites,
   overconfidencePoints,
+  pickLean,
   proofText,
   pYesFor,
   QUIET_PENDING_MS,
+  recordHeadline,
   shortId,
   skipReasonText,
   sortByRelevance,
@@ -133,6 +135,18 @@ test("the lean reads as the side and its confidence", () => {
   assert.equal(leanLabel(0.7), "YES 70%");
   assert.equal(leanLabel(0.35), "NO 65%");
   assert.equal(leanLabel(0.5), "YES 50%");
+});
+
+test("a match call names the team the question backs", () => {
+  assert.equal(pickLean({ pYes: 0.35, fixture: { home: "Napoli", away: "Lazio", subject: "home" } }), "Napoli to win: NO 65%");
+  assert.equal(pickLean({ pYes: 0.6, fixture: { home: "Napoli", away: "Lazio", subject: "away" } }), "Lazio to win: YES 60%");
+  assert.equal(pickLean({ pYes: 0.6, fixture: null }), "YES 60%");
+});
+
+test("the headline leaves out what is not known yet", () => {
+  const base = { picks: 1, open: 1, resolved: 0, hits: 0, brier: null, marketBrier: null, vsMarketCalls: 0, calibration: [], entities: [] };
+  assert.equal(recordHeadline(base), "1 call · 0 right");
+  assert.equal(recordHeadline({ ...base, picks: 4, resolved: 4, hits: 3, brier: 0.2 }), "4 calls · 3 right · 75% hit rate · Brier 0.200");
 });
 
 test("tiles show two notes and skip the one the badge repeats", () => {

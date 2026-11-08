@@ -43,12 +43,16 @@ import {
   type WalletInfo,
   type WalletRpcOutcome,
   type PageContext,
+  type FixtureSignal,
   type RecallInsight,
   type RecallInsights,
+  type RecallRecord,
 } from "./messages";
 import { readPage, type ReadInfo } from "./reader";
+import { createRecordView } from "./record-view";
 import { isRecallId, leanLabel, sortByRelevance, visibleNotes } from "./recall-logic";
 import { openBetSheet } from "./bet-sheet";
+import { openCallSheet } from "./call-sheet";
 import { openSheet, type CreateDebug, type PendingCreate, type Sheet } from "./sheet";
 import { checkSignedTransaction } from "./tx-check";
 import { describeFixture, findFixture } from "./fixture";
@@ -189,6 +193,7 @@ function tileNode(
   onMake: () => void,
   onBet: (target: BuyTarget) => void,
   insight: RecallInsight | undefined,
+  onCall: () => void,
 ): HTMLElement {
   const tile = el("div", "tile");
 
@@ -245,7 +250,8 @@ function tileNode(
 
   const recall = el("div", "tile-recall");
   if (insight?.existing) recall.append(el("span", "called-badge", `You called this: ${leanLabel(insight.existing.pYes)}`));
-  if (recall.childElementCount > 0) tile.append(recall);
+  recall.append(button("Call it", "button small call-it", onCall));
+  tile.append(recall);
   const notes = visibleNotes(insight);
   if (notes.length > 0) {
     const list = el("div", "tile-notes");
@@ -322,20 +328,36 @@ async function mount(): Promise<void> {
   // Two views: the claims on this page, and the wallet's bets.
   const betsPane = el("div", "body");
   betsPane.hidden = true;
+  const recordPane = el("div", "body");
+  recordPane.hidden = true;
+  const recordView = createRecordView(recordPane, {
+    api,
+    layout,
+    state: stateBlock,
+    quietSites: () => [],
+    unquiet: async () => false,
+  });
   const tabs = el("div", "tabs");
   tabs.setAttribute("role", "tablist");
   const claimsTab = button("This page", "tab selected", () => showTab("claims"));
   const betsTab = button("My bets", "tab", () => showTab("bets"));
-  for (const tab of [claimsTab, betsTab]) tab.setAttribute("role", "tab");
-  tabs.append(claimsTab, betsTab);
-  function showTab(which: "claims" | "bets"): void {
+  const recordTab = button("My record", "tab", () => showTab("record"));
+  for (const tab of [claimsTab, betsTab, recordTab]) tab.setAttribute("role", "tab");
+  tabs.append(claimsTab, betsTab, recordTab);
+  function showTab(which: "claims" | "bets" | "record"): void {
     body.hidden = which !== "claims";
     betsPane.hidden = which !== "bets";
-    claimsTab.classList.toggle("selected", which === "claims");
-    betsTab.classList.toggle("selected", which === "bets");
-    claimsTab.setAttribute("aria-selected", String(which === "claims"));
-    betsTab.setAttribute("aria-selected", String(which === "bets"));
+    recordPane.hidden = which !== "record";
+    for (const [name, tab] of [
+      ["claims", claimsTab],
+      ["bets", betsTab],
+      ["record", recordTab],
+    ] as const) {
+      tab.classList.toggle("selected", which === name);
+      tab.setAttribute("aria-selected", String(which === name));
+    }
     if (which === "bets") void renderBets();
+    if (which === "record") void safe("record", recordView.render);
     layout();
   }
   const debug = el("details", "debug");
@@ -453,7 +475,7 @@ async function mount(): Promise<void> {
   }
   armSounds(shadow);
   armSounds(window);
-  card.append(head, tabs, body, betsPane, debug);
+  card.append(head, tabs, body, betsPane, recordPane, debug);
 
   // Typing in the sheet must not trigger the page's keyboard shortcuts (X
   // has many). Escape still closes the card: that listener runs in capture.
@@ -659,10 +681,64 @@ async function mount(): Promise<void> {
     setOrb("found", tiles.length);
     body.replaceChildren(
       ...tiles.map((tile) =>
-        tileNode(tile, liveMarkets.get(tile.claim.id), () => review(tile), openBet, insightsByClaim.get(tile.claim.id)),
+        tileNode(
+          tile,
+          liveMarkets.get(tile.claim.id),
+          () => review(tile),
+          openBet,
+          insightsByClaim.get(tile.claim.id),
+          () => openCall(tile),
+        ),
       ),
     );
     layout();
+  }
+
+  function openCall(tile: Tile): void {
+    closeSheet();
+    showTab("claims");
+    sheet = openCallSheet({
+      tile,
+      page: { site: hereSite(), url: watchedUrl },
+      fixture: pageFixture,
+      shrink: recallShrink,
+      calibrationBias,
+      api,
+      layout,
+      back: showTiles,
+      locked: (pick) => {
+        const known = insightsByClaim.get(tile.claim.id);
+        insightsByClaim.set(tile.claim.id, {
+          claimId: tile.claim.id,
+          relevance: known?.relevance ?? 0,
+          notes: known?.notes ?? [],
+          nudge: known?.nudge ?? 0,
+          existing: { pYes: pick.pYes, at: pick.at },
+        });
+      },
+      celebrate: pulseOrb,
+      sound,
+    });
+    body.classList.add("has-sheet");
+    body.replaceChildren(sheet.node);
+    layout();
+  }
+
+  // The match on this page, from the last scan.
+  let pageFixture: FixtureSignal | null = null;
+  let calibrationBiasCache: number | null | undefined;
+
+  function hereSite(): string {
+    return location.hostname.replace(/^www\./, "").toLowerCase();
+  }
+
+  async function calibrationBias(): Promise<number | null> {
+    if (calibrationBiasCache !== undefined) return calibrationBiasCache;
+    const response = await api<RecallRecord>("/recall/record", {});
+    if (!response.ok || !response.body) return null;
+    const lesson = (response.body as RecallRecord).lessons.find((item) => item.key === "calibration");
+    calibrationBiasCache = lesson?.bias ?? null;
+    return calibrationBiasCache;
   }
 
   // ---- Total Recall insights ----
@@ -1188,6 +1264,8 @@ async function mount(): Promise<void> {
   function onRecallIdentityChanged(): void {
     insightsByClaim = new Map();
     recallShrink = 1;
+    calibrationBiasCache = undefined;
+    if (!recordPane.hidden) void safe("record", recordView.render);
     if (tiles.length > 0) {
       if (!sheet) showTiles();
       void safe("insights", loadInsights);
@@ -1364,6 +1442,7 @@ async function mount(): Promise<void> {
     }
     // Event mode: a sports fixture page has match info instead of prose.
     const fixture = read.kind === "skip" ? null : (safe("fixture", () => findFixture(document, Date.now())) ?? null);
+    pageFixture = fixture;
     if (read.kind !== "page" && !fixture) {
       setScan({ read: read.info, state: `skipped (${read.reason})`, detect: null, path: "none" });
       render({ kind: "skipped" });

@@ -405,7 +405,7 @@ export interface RecallRecordPick {
   at: string;
   question: string;
   pYes: number;
-  fixture: { home: string; away: string } | null;
+  fixture: { home: string; away: string; subject: "home" | "away" } | null;
   status: "open" | "right" | "wrong";
   detail: string | null;
   brier: number | null;

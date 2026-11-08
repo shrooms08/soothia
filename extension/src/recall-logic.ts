@@ -8,6 +8,8 @@ import type {
   RecallInsight,
   RecallPickBody,
   RecallProof,
+  RecallRecord,
+  RecallRecordPick,
   Tile,
 } from "./messages";
 
@@ -95,6 +97,23 @@ export function callBody(
 /** "YES 70%" or "NO 65%". */
 export function leanLabel(pYes: number): string {
   return pYes >= 0.5 ? `YES ${Math.round(pYes * 100)}%` : `NO ${Math.round((1 - pYes) * 100)}%`;
+}
+
+/** A call's lean, naming the team when "YES" alone would be unclear. */
+export function pickLean(pick: Pick<RecallRecordPick, "pYes" | "fixture">): string {
+  if (!pick.fixture) return leanLabel(pick.pYes);
+  return `${pick.fixture[pick.fixture.subject]} to win: ${leanLabel(pick.pYes)}`;
+}
+
+/** The record tab's one-line summary. */
+export function recordHeadline(summary: RecallRecord["summary"]): string {
+  const parts = [`${summary.picks} ${summary.picks === 1 ? "call" : "calls"}`, `${summary.hits} right`];
+  if (summary.resolved > 0) parts.push(`${Math.round((summary.hits / summary.resolved) * 100)}% hit rate`);
+  if (summary.brier !== null) {
+    const market = summary.vsMarketCalls > 0 && summary.marketBrier !== null ? ` vs market ${summary.marketBrier.toFixed(3)}` : "";
+    parts.push(`Brier ${summary.brier.toFixed(3)}${market}`);
+  }
+  return parts.join(" · ");
 }
 
 /** Up to two notes for a tile. The badge already says "you called this". */
