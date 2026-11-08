@@ -191,7 +191,15 @@ async function main(): Promise<void> {
       .map(normalizeId),
   );
   if (keyLooksLikeId(key) && knownAccounts.has(normalizeId(key))) {
-    printVerdict("D) MEMWAL_ACCOUNT_ID and MEMWAL_KEY are swapped: the value on the MEMWAL_KEY line is a real MemWal account id.");
+    const accountLine = accountRaw.replace(/^0x/, "").toLowerCase();
+    const accountLineIsPublicKey = added.some(
+      (event) => normalizeId(String(event.json.account_id)) === normalizeId(key) && toHex(event.json.public_key) === accountLine,
+    );
+    printVerdict(
+      accountLineIsPublicKey
+        ? "D) MEMWAL_KEY holds the account id and MEMWAL_ACCOUNT_ID holds the delegate PUBLIC key. The delegate private key is not in the file."
+        : "D) MEMWAL_KEY holds a MemWal account id. That value belongs on the MEMWAL_ACCOUNT_ID line.",
+    );
     return;
   }
 
