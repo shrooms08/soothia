@@ -24,6 +24,7 @@ const MAX_CHECKS_PER_RUN = 5;
 const MAX_TRANSACTIONS_PER_RUN = 2;
 const LOG_MAX = 50;
 const DAY_MS = 86_400_000;
+const NO_RESULT_VOID_MS = 3 * DAY_MS;
 
 export interface PoolIndexEntry {
   poolId: string;
@@ -70,14 +71,16 @@ export type Settlement = { action: "wait" } | { action: "void"; reason: string }
 /** What to do with an open pool past its resolve time. YES means the subject team won. */
 export function decideSettlement(subject: Subject, search: FixtureSearch, closeMs: number, nowMs: number): Settlement {
   const dayPassed = nowMs >= closeMs + DAY_MS;
+  const overdue = nowMs >= closeMs + NO_RESULT_VOID_MS;
   const { located } = search;
   if (!located) {
-    // An empty answer from ESPN is not evidence that the match is gone.
-    return dayPassed && search.eventsSeen > 0 ? { action: "void", reason: "not_found" } : { action: "wait" };
+    // An empty answer from ESPN is not evidence that the match is gone, until it has gone on for days.
+    if (dayPassed && search.eventsSeen > 0) return { action: "void", reason: "not_found" };
+    return overdue ? { action: "void", reason: "no_result" } : { action: "wait" };
   }
   if (located.notPlayed) return dayPassed ? { action: "void", reason: "not_played" } : { action: "wait" };
   const result = resolutionOf(located.event);
-  if (result.status !== "final") return { action: "wait" };
+  if (result.status !== "final") return overdue ? { action: "void", reason: "no_result" } : { action: "wait" };
   const subjectOnEspn = located.reversed ? flipSubject(subject) : subject;
   return { action: "resolve", outcomeYes: result.winner === subjectOnEspn, evidence: result.detail };
 }

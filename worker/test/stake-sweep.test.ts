@@ -196,12 +196,42 @@ test("a missing fixture waits a day, then voids", async () => {
   assert.equal(late.data.has(`stakepool:${POOL}`), false);
 });
 
-test("an empty answer from ESPN never voids a pool", async () => {
+const SEVENTY_TWO_HOURS = 72 * 3_600_000;
+
+test("an empty answer from ESPN waits until 72 hours after kickoff", async () => {
+  const early = harness();
+  early.index();
+  await early.run(new Date(KICKOFF_MS + SEVENTY_TWO_HOURS - 1), boardWith());
+  assert.deepEqual(early.calls, []);
+  assert.ok(early.data.has(`stakepool:${POOL}`));
+
+  const late = harness();
+  late.index();
+  const result = await late.run(new Date(KICKOFF_MS + SEVENTY_TWO_HOURS), boardWith());
+  assert.deepEqual(late.calls, [`void ${POOL}`]);
+  assert.equal(result.actions[0].detail, "no_result");
+});
+
+test("a match ESPN never marks final is voided at 72 hours, not before", async () => {
+  const stuck = event(1, 0, { completed: false, state: "in", statusName: "STATUS_IN_PROGRESS" });
+  const early = harness();
+  early.index();
+  await early.run(new Date(KICKOFF_MS + SEVENTY_TWO_HOURS - 1), boardWith(stuck));
+  assert.deepEqual(early.calls, []);
+
+  const late = harness();
+  late.index();
+  const result = await late.run(new Date(KICKOFF_MS + SEVENTY_TWO_HOURS), boardWith(stuck));
+  assert.deepEqual(late.calls, [`void ${POOL}`]);
+  assert.equal(result.actions[0].detail, "no_result");
+  assert.equal(late.data.has(`stakepool:${POOL}`), false);
+});
+
+test("a result that arrives after 72 hours still resolves the pool", async () => {
   const h = harness();
   h.index();
-  await h.run(new Date(KICKOFF_MS + 5 * 86_400_000), boardWith());
-  assert.deepEqual(h.calls, []);
-  assert.ok(h.data.has(`stakepool:${POOL}`));
+  await h.run(new Date(KICKOFF_MS + SEVENTY_TWO_HOURS + 1));
+  assert.equal(h.calls[0].startsWith("resolve"), true);
 });
 
 test("ESPN being down never voids a pool", async () => {

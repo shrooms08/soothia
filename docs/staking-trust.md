@@ -71,6 +71,8 @@ If a pool is still open 7 days after it closed, because nobody resolved it, **an
 
 The AdminCap can change this waiting period, and the change applies to existing pools too.
 
+Before that, Soothia's own sweep voids a pool if the match is missing or was not played a day after kickoff, or if ESPN has still not marked it final after 72 hours.
+
 ## The fee lock
 
 The fee starts at 1%. It is copied into each pool when the pool is created, so changing it later does not affect pools that already exist. The two delays are locked the same way. The fee can never be set above 5%.
