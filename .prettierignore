@@ -4,21 +4,14 @@ dist/
 .wrangler/
 package-lock.json
 
-# Built bundles and binary assets on the site
-site/mwa.js
-site/share.js
-site/share-tx.js
-site/wallets.js
+# Binary assets on the site
 site/fonts/
 site/img/
-site/screenshots/
 site/soothia-extension.zip
 
 # Shipped as-is
 extension/public/
-worker/public/
 design/applied/
-docs/catalog-check.md
 
 # Test fixtures are captured page markup; their whitespace is part of the test.
 extension/test/fixtures/

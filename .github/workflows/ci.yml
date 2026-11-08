@@ -40,7 +40,7 @@ jobs:
       - name: Format check
         run: npm run format:check
 
-      # Unit tests only: nothing here reaches the network, Panta, or a wallet.
+      # Unit tests only: nothing here reaches the network.
       - name: Test
         run: npm test
 

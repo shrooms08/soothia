@@ -15,7 +15,7 @@ for (const width of [1440, 375]) {
   await page.goto(url, { waitUntil: "networkidle" });
   await page.waitForTimeout(3400);
   await page.screenshot({ path: `${out}${width}-hero.png` });
-  for (const id of ["how", "proof", "panta", "demo", "install"]) {
+  for (const id of ["how", "proof", "leaderboard", "demo", "install"]) {
     await page.locator(`#${id}`).scrollIntoViewIfNeeded();
     await page.waitForTimeout(900);
     await page.locator(`#${id}`).screenshot({ path: `${out}${width}-${id}.png` });

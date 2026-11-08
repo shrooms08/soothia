@@ -44,9 +44,9 @@
       .then(function (s) {
         if (
           !s ||
-          typeof s.marketsCreated !== "number" ||
-          typeof s.volumeUsdc !== "number" ||
-          typeof s.uniqueWallets !== "number"
+          typeof s.totalCalls !== "number" ||
+          typeof s.provenCalls !== "number" ||
+          typeof s.users !== "number"
         )
           return;
         strip.hidden = false;
@@ -56,11 +56,9 @@
           if (shown) return;
           shown = true;
           nodes.forEach(function (n) {
-            var end = s[n.getAttribute("data-stat")],
-              prefix = n.getAttribute("data-prefix") || "";
-            var money = prefix === "$";
+            var end = s[n.getAttribute("data-stat")];
             var fmt = function (v) {
-              return prefix + (money ? v.toFixed(2) : Math.round(v));
+              return String(Math.round(v));
             };
             var label = n.nextElementSibling;
             if (label && label.hasAttribute("data-one"))
@@ -96,7 +94,7 @@
       .catch(function () {});
   }
 
-  // The night sky is drawn by sky.js (shared with the share page).
+  // The night sky is drawn by sky.js.
 
   // Section reveals, once.
   var toReveal = document.querySelectorAll(".reveal");

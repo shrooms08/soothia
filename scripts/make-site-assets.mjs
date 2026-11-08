@@ -28,7 +28,7 @@ p{margin:0;font:400 26px/1.4 Inter,sans-serif;color:#A9A5BD}
 .brand{font:400 22px/1 Lora,serif;color:#CFCAF6;letter-spacing:.02em}
 </style></head><body>
 <div class="orb"><div class="orb-body"></div><div class="glint">${STAR}</div><div class="s" style="left:-70px;top:-10px;width:40px;height:40px">${STAR}</div><div class="s" style="left:-100px;top:90px;width:26px;height:26px">${STAR}</div><div class="s" style="left:20px;top:-90px;width:30px;height:30px">${STAR}</div><div class="s" style="left:230px;top:200px;width:22px;height:22px;opacity:.7">${STAR}</div></div>
-<div class="text"><div class="brand">Soothia</div><h1>See the odds on everything you read.</h1><p>Claims on X, news and sports pages become live prediction markets on Solana.</p></div>
+<div class="text"><div class="brand">Soothia</div><h1>Call any match before kickoff.</h1><p>Proven on Sui, remembered on Walrus.</p></div>
 </body></html>`);
 await page.evaluate(() => document.fonts.ready);
 await page.screenshot({ path: `${img}og-image.png` });

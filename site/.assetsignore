@@ -1,5 +1,3 @@
 wrangler.toml
 .assetsignore
-screenshots/
 worker.js
-src/

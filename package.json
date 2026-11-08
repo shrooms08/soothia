@@ -1,11 +1,11 @@
 {
   "name": "soothia",
   "private": true,
-  "description": "Turn any take into a market. Chrome extension, API Worker, and landing site for Panta prediction markets.",
+  "description": "Call any match before kickoff. Chrome extension, API Worker, and landing site for Total Recall on Sui and Walrus.",
   "license": "MIT",
   "type": "module",
   "scripts": {
-    "typecheck": "npm run typecheck --prefix extension && npm run typecheck --prefix worker && npm run typecheck --prefix scripts",
+    "typecheck": "npm run typecheck --prefix extension && npm run typecheck --prefix worker",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
