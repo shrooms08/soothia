@@ -188,7 +188,7 @@ function sameTeam(name: string, team: EventTeam): boolean {
   return wanted !== "" && (teamKey(team.name) === wanted || teamKey(team.short) === wanted);
 }
 
-function resolutionOf(event: ScoreboardEvent): Resolution {
+export function resolutionOf(event: ScoreboardEvent): Resolution {
   const { home, away } = event;
   if (!event.completed || NOT_PLAYED.test(event.statusName) || home.score === null || away.score === null)
     return { status: "pending" };
@@ -209,6 +209,45 @@ export async function resolveFixture(query: FixtureQuery, fetcher: ScoreboardFet
   // A failed league might be the one holding this fixture, so "not found" would be a guess.
   if (boards.some((board) => board.status === "rejected")) throw new Error("espn_unavailable");
   return { status: "not_found" };
+}
+
+export interface LocatedFixture {
+  event: ScoreboardEvent;
+  league: string;
+  /** ESPN lists the teams the other way round from the query. */
+  reversed: boolean;
+  /** Postponed, cancelled, abandoned, suspended or forfeited. */
+  notPlayed: boolean;
+}
+
+export interface FixtureSearch {
+  located: LocatedFixture | null;
+  /** How many events ESPN returned. Zero means an empty answer, not a missing match. */
+  eventsSeen: number;
+}
+
+/** Finds a fixture whichever way round it is listed. Throws if ESPN could not be checked. */
+export async function locateFixture(query: FixtureQuery, fetcher: ScoreboardFetcher = fetchScoreboard): Promise<FixtureSearch> {
+  const startMs = Date.parse(query.startISO);
+  if (Number.isNaN(startMs)) return { located: null, eventsSeen: 0 };
+  const days = [yyyymmdd(new Date(startMs)), yyyymmdd(new Date(startMs + DAY_MS))];
+  const searches = (query.league ? [query.league] : [...LEAGUES]).flatMap((league) => days.map((day) => ({ league, day })));
+  const boards = await Promise.allSettled(searches.map(({ league, day }) => fetcher(league, day)));
+
+  let eventsSeen = 0;
+  let found: LocatedFixture | null = null;
+  boards.forEach((board, index) => {
+    if (board.status === "rejected") return;
+    eventsSeen += board.value.events.length;
+    for (const event of board.value.events) {
+      const direct = sameTeam(query.home, event.home) && sameTeam(query.away, event.away);
+      const reversed = sameTeam(query.home, event.away) && sameTeam(query.away, event.home);
+      if (found || (!direct && !reversed)) continue;
+      found = { event, league: searches[index].league, reversed: !direct, notPlayed: NOT_PLAYED.test(event.statusName) };
+    }
+  });
+  if (!found && boards.some((board) => board.status === "rejected")) throw new Error("espn_unavailable");
+  return { located: found, eventsSeen };
 }
 
 /** How a "Will <subject> beat ..." question settles. A draw is NO for either side. */

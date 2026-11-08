@@ -17,6 +17,7 @@ export interface Limit {
 export const LIMITS = {
   detect: { limit: 60, windowSec: 60 },
   recall: { limit: 60, windowSec: 60 },
+  stake: { limit: 30, windowSec: 60 },
 } satisfies Record<string, Limit>;
 
 export function clientIp(request: Request): string {
