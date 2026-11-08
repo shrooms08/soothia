@@ -7,17 +7,11 @@ workers_dev = true
 routes = [
   { pattern = "api.soothia.fun", custom_domain = true },
 ]
-# @solana/web3.js (used only to assemble a transaction from instructions) needs Buffer.
+# The Sui and Walrus Memory SDKs expect some Node built-ins.
 compatibility_flags = ["nodejs_compat"]
 
-# Static files: the category placeholder images at /img/<category>.png.
-[assets]
-directory = "./public"
-
 # Secrets (never put values here):
-#   PANTA_API_KEY: local in .dev.vars, deployed via `npx wrangler secret put PANTA_API_KEY`
 #   ANTHROPIC_API_KEY: local in .dev.vars, deployed via `npx wrangler secret put ANTHROPIC_API_KEY`
-#   HELIUS_RPC_URL: Solana mainnet RPC URL (it contains an API key), same two places
 #   ADMIN_TOKEN: gates GET /debug/* (header X-Soothia-Admin); `openssl rand -hex 32 | npx wrangler secret put ADMIN_TOKEN`
 #   MEMWAL_ACCOUNT_ID: Walrus Memory account object id on Sui
 #   MEMWAL_KEY: Walrus Memory delegate private key; pays for Sui commits unless SUI_COMMIT_KEY is set
@@ -26,7 +20,7 @@ directory = "./public"
 #   SUI_COMMIT_KEY: optional, a separate private key that pays for Sui commits
 #   SOOTHIA_RECALL_PACKAGE: published soothia_recall package id (not secret)
 
-# Detect results, the open-market list, and per-install daily counters.
+# Open picks for the sweep, spending caps and public stats.
 [[kv_namespaces]]
 binding = "SOOTHIA_CACHE"
 id = "603952ecd4ea42f3b372051b7fe789ff"
@@ -35,6 +29,6 @@ id = "603952ecd4ea42f3b372051b7fe789ff"
 [vars]
 RECALL_OWNER_KEYS = "ffe06f0d02e4440a"
 
-# Reconcile sweep: finishes submit -> verify -> report for bets whose client never called back.
+# The Total Recall sweep settles open picks.
 [triggers]
 crons = ["*/5 * * * *"]

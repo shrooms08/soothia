@@ -6,10 +6,7 @@
 import type { RecallEnv } from "./recall/env";
 
 export interface Env extends RecallEnv {
-  PANTA_API_KEY: string;
   ANTHROPIC_API_KEY: string;
-  /** Solana mainnet RPC URL. Contains an API key: never log it or return it. */
-  HELIUS_RPC_URL: string;
   /** Gates /debug/* (header X-Soothia-Admin). Unset means those routes do not exist. */
   ADMIN_TOKEN?: string;
   /** Comma-separated Total Recall user keys with the higher daily commit cap. Not secret. */

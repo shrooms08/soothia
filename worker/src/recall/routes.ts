@@ -3,6 +3,7 @@
 // with the CLI, and otherwise by the install id.
 
 import { installId, isAdmin, json, readJsonObject, type Env } from "../http";
+import { recordNewCall } from "../stats";
 import { kvPut } from "../store";
 import { checkCommitGuard } from "./commitGuard";
 import { memwalBackend, memwalHealth, RecallStore, userKeyFor } from "./memory";
@@ -46,13 +47,11 @@ export type PickValidation = { ok: true; input: PickInput } | { ok: false; field
 /** Checks a POST /recall/pick body. */
 export function validatePickBody(body: Record<string, unknown>, nowMs: number): PickValidation {
   const fail = (field: string): PickValidation => ({ ok: false, field });
-  const { question, category, pYes, endTime, fixture, marketId, marketYes, source } = body;
+  const { question, category, pYes, endTime, fixture, source } = body;
   if (!shortString(question, MAX_QUESTION)) return fail("question");
   if (!shortString(category, 40)) return fail("category");
   if (typeof pYes !== "number" || !Number.isFinite(pYes) || pYes < 0.01 || pYes > 0.99) return fail("pYes");
   if (typeof endTime !== "string" || !(Date.parse(endTime) > nowMs)) return fail("endTime");
-  if (marketId !== undefined && !shortString(marketId, 100)) return fail("marketId");
-  if (marketYes !== undefined && marketYes !== null && (typeof marketYes !== "number" || !(marketYes >= 0 && marketYes <= 1))) return fail("marketYes");
 
   const rawSource = source as { site?: unknown; url?: unknown } | null | undefined;
   if (typeof rawSource !== "object" || rawSource === null || !shortString(rawSource.site, 100) || !isWebUrl(rawSource.url)) return fail("source");
@@ -79,12 +78,11 @@ export function validatePickBody(body: Record<string, unknown>, nowMs: number): 
       question: question.trim(),
       category,
       pYes,
-      marketYes: typeof marketYes === "number" ? marketYes : null,
+      marketYes: null,
       entities: parsedFixture ? [parsedFixture.home, parsedFixture.away] : entitiesFromQuestion(question.trim()),
       endTime,
       source: { site: rawSource.site, url: rawSource.url },
       ...(parsedFixture ? { fixture: parsedFixture } : {}),
-      ...(typeof marketId === "string" ? { marketId } : {}),
     },
   };
 }
@@ -141,7 +139,6 @@ async function record(request: Request, env: Env, userKey: string): Promise<Resp
         endTime: pick.endTime,
         source: pick.source,
         fixture: pick.fixture ?? null,
-        marketId: pick.marketId ?? null,
         status: outcome ? (outcome.hit ? "right" : "wrong") : "open",
         detail: outcome?.detail ?? null,
         brier: outcome?.brier ?? null,
@@ -226,6 +223,7 @@ export async function savePick(input: PickInput, env: Env, userKey: string, stor
   const pick = await buildPick(input, env, { guard: () => checkCommitGuard(env, userKey) });
   await store.write("pick", pick);
   await kvPut(env, `${SWEEP_PREFIX}${pick.id}`, JSON.stringify({ userKey }), { metadata: { userKey } });
+  await recordNewCall(env, userKey, Boolean(pick.commit && pick.fixture));
   return pick;
 }
 
@@ -243,7 +241,7 @@ async function resolveRoute(request: Request, env: Env): Promise<Response> {
   if (!isAdmin(request, env)) return json(request, { error: "not_found" }, 404);
   const recallId = (await readJsonObject(request))?.recallId;
   if (typeof recallId !== "string" || !UUID.test(recallId)) return json(request, { error: "invalid_recall_id" }, 400);
-  const result = await resolveUser(storeFor(env, await userKeyFor(recallId), false), new Date(), env);
+  const result = await resolveUser(storeFor(env, await userKeyFor(recallId), false), new Date());
   return json(request, result);
 }
 

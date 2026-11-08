@@ -178,7 +178,7 @@ const CANONICAL = new Map(
   ALIAS_GROUPS.flatMap(([full, aliases]) => aliases.map((alias) => [entityKey(alias), entityKey(full)] as const)),
 );
 
-function teamKey(name: string): string {
+export function teamKey(name: string): string {
   const key = entityKey(name);
   return CANONICAL.get(key) ?? key;
 }

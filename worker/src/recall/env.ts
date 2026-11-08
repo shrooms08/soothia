@@ -1,5 +1,5 @@
 // Total Recall: the settings this feature reads. Kept apart from the Worker's
-// shared Env so the recall code can run from local scripts without KV or Panta.
+// shared Env so the recall code can run from local scripts without KV.
 // Values come from worker/.dev.vars locally. Never log MEMWAL_KEY,
 // SUI_COMMIT_KEY or TATUM_API_KEY.
 

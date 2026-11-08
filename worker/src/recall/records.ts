@@ -38,7 +38,7 @@ export interface PickRecord {
   endTime: string;
   source: { site: string; url: string };
   fixture?: PickFixture;
-  /** Panta market the claim matched, when it resolves through Panta. */
+  /** Legacy, never set now. Kept because canonicalPick hashes it, so existing commits still verify. */
   marketId?: string;
   /** Anchor: the call was made after this Sui mainnet checkpoint. Says nothing about kickoff. */
   anchor?: { checkpoint: string; timestampMs: number; via: "tatum-sui-mainnet" };

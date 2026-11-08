@@ -16,7 +16,6 @@ export interface PickInput {
   endTime: string;
   source: { site: string; url: string };
   fixture?: PickFixture;
-  marketId?: string;
 }
 
 export interface BuildPickOptions {
@@ -92,7 +91,6 @@ export async function buildPick(input: PickInput, env: RecallEnv, options: Build
     endTime: input.endTime,
     source: input.source,
     ...(input.fixture ? { fixture: input.fixture } : {}),
-    ...(input.marketId ? { marketId: input.marketId } : {}),
     ...(anchor ? { anchor: { ...anchor, via: "tatum-sui-mainnet" as const } } : {}),
   };
   const hash = await sha256Hex(canonicalPick(unsigned));

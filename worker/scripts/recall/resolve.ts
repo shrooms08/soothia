@@ -2,7 +2,6 @@
 // to Walrus Memory, then writes any lesson that changed.
 // Run: cd worker && npx tsx scripts/recall/resolve.ts
 
-import type { Env } from "../../src/http";
 import { resolveUser } from "../../src/recall/resolve";
 import { loadEnvOrExit, openStore, readLocalPicks, safeError, scrub } from "./shared";
 
@@ -10,11 +9,9 @@ const env = loadEnvOrExit();
 
 async function main(): Promise<number> {
   const store = await openStore(env);
-  // CLI picks are all fixtures, so the Panta catalog (which needs KV) is never read.
-  const result = await resolveUser(store, new Date(), env as unknown as Env, {
+  const result = await resolveUser(store, new Date(), {
     extraPicks: readLocalPicks(),
     log: (line) => console.log(scrub(line, env)),
-    catalog: async () => [],
   });
 
   console.log(`\nResolved this run: ${result.resolved}. Still pending: ${result.pending}. Not found: ${result.notFound}. Failed: ${result.failed}.`);

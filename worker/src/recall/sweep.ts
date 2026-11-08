@@ -2,6 +2,7 @@
 // metadata names its user, so one list call finds who has picks to settle.
 
 import type { Env } from "../http";
+import { countPicks, rebuildStats, refreshUserCounts } from "../stats";
 import { cacheGet, cachePut } from "../store";
 import { memwalBackend, memwalConfigured, RecallStore } from "./memory";
 import { resolveUser } from "./resolve";
@@ -32,7 +33,9 @@ export type ResolveForUser = (userKey: string) => Promise<string[]>;
 
 async function defaultResolve(env: Env, userKey: string): Promise<string[]> {
   const store = new RecallStore(memwalBackend(env), userKey, false);
-  return (await resolveUser(store, new Date(), env, { maxOutcomes: SWEEP_MAX_OUTCOMES })).closedIds;
+  const result = await resolveUser(store, new Date(), { maxOutcomes: SWEEP_MAX_OUTCOMES });
+  await refreshUserCounts(env, userKey, countPicks(result.picks));
+  return result.closedIds;
 }
 
 /** Settles one page of open picks, then removes the entries that now have outcomes. */
@@ -60,5 +63,6 @@ export async function sweepRecall(env: Env, resolveFor?: ResolveForUser): Promis
       console.warn(`Soothia: recall sweep failed: ${String((error as Error)?.message ?? error).slice(0, 160)}`);
     }
   }
+  if (!resolveFor && groups.size > 0) await rebuildStats(env).catch(() => undefined);
   return { users: groups.size, closed };
 }

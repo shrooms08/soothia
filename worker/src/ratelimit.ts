@@ -1,5 +1,5 @@
-// Per-IP request limits for the routes that cost money upstream (Claude, Panta
-// quotes, RPC sends). Install ids are self-declared, so they cannot be the only
+// Per-IP request limits for the routes that cost money upstream (Claude, Walrus
+// Memory, Sui commits). Install ids are self-declared, so they cannot be the only
 // cap. Counters live in the edge cache and memory (store.ts), never in KV: a
 // determined caller can exceed a limit across colos, which is fine; this stops
 // accidental loops and casual abuse, not a distributed attack.
@@ -16,10 +16,6 @@ export interface Limit {
 /** One minute windows; generous for a person, tight for a loop. */
 export const LIMITS = {
   detect: { limit: 60, windowSec: 60 },
-  match: { limit: 60, windowSec: 60 },
-  actionBuild: { limit: 30, windowSec: 60 },
-  txSend: { limit: 30, windowSec: 60 },
-  quote: { limit: 120, windowSec: 60 },
   recall: { limit: 60, windowSec: 60 },
 } satisfies Record<string, Limit>;
 

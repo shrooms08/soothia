@@ -1,22 +1,12 @@
 // Total Recall: scores a user's open picks and writes outcomes and lessons.
 // Shared by the CLI (scripts/recall/resolve.ts), POST /recall/resolve and the
-// cron sweep. Football fixtures settle from ESPN; other picks that matched a
-// Panta market settle from the catalog's resolvedOutcome.
+// cron sweep. Football fixtures settle from ESPN; other picks stay open.
 
-import { getCatalog } from "../catalog";
-import type { Env } from "../http";
 import { fetchScoreboard, resolveFixture, sideForWinner, type ParsedScoreboard, type ScoreboardFetcher } from "./espn";
 import type { RecallStore } from "./memory";
 import { mergePicks } from "./picks";
-import type { LessonRecord, OutcomeRecord, PickRecord, Side } from "./records";
+import type { LessonRecord, OutcomeRecord, PickRecord } from "./records";
 import { deriveLessons, newLessons, scoreOutcome, summarize } from "./scoring";
-
-const CATALOG_ORIGIN = "https://api.soothia.fun";
-
-interface CatalogOutcome {
-  id: string;
-  resolvedOutcome: Side | null;
-}
 
 export interface ResolveOptions {
   /** Picks known outside Walrus, such as the CLI's local backup. */
@@ -25,7 +15,6 @@ export interface ResolveOptions {
   /** Most new outcomes to write in one run; the rest wait for the next. */
   maxOutcomes?: number;
   fetcher?: ScoreboardFetcher;
-  catalog?: () => Promise<CatalogOutcome[]>;
 }
 
 export interface ResolveResult {
@@ -41,6 +30,8 @@ export interface ResolveResult {
   failed: number;
   /** Every pick id that now has an outcome. */
   closedIds: string[];
+  /** Every pick this user has, one record each. */
+  picks: PickRecord[];
 }
 
 function memoized(fetcher: ScoreboardFetcher): ScoreboardFetcher {
@@ -59,11 +50,9 @@ function memoized(fetcher: ScoreboardFetcher): ScoreboardFetcher {
 
 const message = (error: unknown): string => String((error as Error)?.message ?? error);
 
-export async function resolveUser(store: RecallStore, now: Date, env: Env, options: ResolveOptions = {}): Promise<ResolveResult> {
+export async function resolveUser(store: RecallStore, now: Date, options: ResolveOptions = {}): Promise<ResolveResult> {
   const log = options.log ?? (() => undefined);
   const fetcher = memoized(options.fetcher ?? fetchScoreboard);
-  const loadCatalog = options.catalog ?? (() => getCatalog(env, CATALOG_ORIGIN));
-  let catalog: Map<string, CatalogOutcome> | null = null;
 
   // Walrus can lag behind a write, so any extra copies fill the gaps.
   let walrusPicks: PickRecord[] = [];
@@ -89,40 +78,25 @@ export async function resolveUser(store: RecallStore, now: Date, env: Env, optio
   let failed = 0;
 
   for (const pick of picks) {
-    if (done.has(pick.id)) continue;
+    if (done.has(pick.id) || !pick.fixture) continue;
     if (written.length >= limit) {
       pending += 1;
       continue;
     }
-    const label = pick.fixture ? `${pick.fixture.home} vs ${pick.fixture.away}` : pick.question;
+    const label = `${pick.fixture.home} vs ${pick.fixture.away}`;
     try {
-      let side: Side;
-      let detail: string;
-      if (pick.fixture) {
-        const result = await resolveFixture(pick.fixture, fetcher);
-        if (result.status === "pending") {
-          pending += 1;
-          continue;
-        }
-        if (result.status === "not_found") {
-          notFound += 1;
-          log(`Not found on ESPN: ${label}`);
-          continue;
-        }
-        side = sideForWinner(pick.fixture.subject, result.winner);
-        detail = result.detail;
-      } else if (pick.marketId) {
-        catalog ??= new Map((await loadCatalog()).map((item) => [item.id, item]));
-        const resolvedOutcome = catalog.get(pick.marketId)?.resolvedOutcome;
-        if (!resolvedOutcome) {
-          pending += 1;
-          continue;
-        }
-        side = resolvedOutcome;
-        detail = `Panta market resolved ${resolvedOutcome}`;
-      } else {
+      const result = await resolveFixture(pick.fixture, fetcher);
+      if (result.status === "pending") {
+        pending += 1;
         continue;
       }
+      if (result.status === "not_found") {
+        notFound += 1;
+        log(`Not found on ESPN: ${label}`);
+        continue;
+      }
+      const side = sideForWinner(pick.fixture.subject, result.winner);
+      const detail = result.detail;
       const outcome = scoreOutcome(pick, side, detail, now.toISOString());
       const { jobId } = await store.write("outcome", outcome);
       written.push(outcome);
@@ -157,5 +131,6 @@ export async function resolveUser(store: RecallStore, now: Date, env: Env, optio
     notFound,
     failed,
     closedIds: outcomes.map((outcome) => outcome.pickId),
+    picks,
   };
 }
