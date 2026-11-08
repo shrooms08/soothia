@@ -266,6 +266,18 @@ function describeStake(fixture: NonNullable<PickRecord["fixture"]>): string {
   return `${team} win vs ${opponent} on ${new Date(Date.parse(fixture.startISO)).toISOString().slice(0, 10)}`;
 }
 
+/** Remembers which address is this user's. Best effort: the stake is already recorded. */
+async function linkWallet(context: Context, userKey: string, address: string): Promise<void> {
+  const key = `walletlink:${userKey}`;
+  try {
+    if ((await context.env.SOOTHIA_CACHE.get(key)) === address) return;
+    await context.store(userKey).write("pref", { kind: "wallet_link", at: new Date(context.nowMs).toISOString(), address });
+    await kvPut(context.env, key, address);
+  } catch (error) {
+    console.warn(`Soothia: wallet link failed: ${String((error as Error)?.message ?? error).slice(0, 160)}`);
+  }
+}
+
 async function confirmRoute(context: Context, userKey: string): Promise<Response> {
   const { env, chain } = context;
   const body = (await readJsonObject(context.request)) ?? refuse(400, "invalid_body");
@@ -325,6 +337,7 @@ async function confirmRoute(context: Context, userKey: string): Promise<Response
     await writePoolIndex(env, indexEntry(poolId, identity.questionHash, pick), { phase: "open", dueMs: Number(pool.closeMs + pool.minResolveDelayMs) });
   }
   await forgetPool(identity.questionHash);
+  await linkWallet(context, userKey, sender);
   return json(context.request, { ok: true, duplicate: false, indexed, stake });
 }
 

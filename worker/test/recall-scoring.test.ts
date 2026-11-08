@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { LessonRecord, OutcomeRecord, PickRecord, Side } from "../src/recall/records";
-import { brier, deriveLessons, insightsFor, leanSide, matchCalled, newLessons, scoreOutcome } from "../src/recall/scoring";
+import { brier, deriveLessons, insightsFor, leanSide, matchCalled, newLessons, quietSites, scoreOutcome } from "../src/recall/scoring";
 
 const AT = "2026-11-08T18:00:00.000Z";
 
@@ -132,4 +132,14 @@ test("insights report the call and drop the generic note about the same match", 
     related: new Map([["c1", [{ pick: other, distance: 0.1 }]]]),
   });
   assert.ok(withOther.notes.some((note) => note.includes("you called")));
+});
+
+test("a wallet link among the preferences does not disturb quiet sites", () => {
+  assert.deepEqual(
+    quietSites([
+      { kind: "wallet_link", at: "2026-11-08T10:00:00.000Z", address: "0xabc" },
+      { kind: "quiet_site", at: "2026-11-08T11:00:00.000Z", site: "Example.com" },
+    ]),
+    ["example.com"],
+  );
 });

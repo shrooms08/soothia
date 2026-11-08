@@ -9,6 +9,7 @@ import {
   type OutcomeRecord,
   type PickRecord,
   type PrefRecord,
+  type SitePref,
   type Side,
 } from "./records";
 
@@ -259,7 +260,8 @@ export function newLessons(previous: LessonRecord[], fresh: LessonRecord[]): Les
 
 /** Sites the user asked Soothia to stay quiet on, newest preference per site winning. */
 export function quietSites(prefs: PrefRecord[]): string[] {
-  return [...latestBy(prefs, (pref) => pref.site.toLowerCase()).values()]
+  const sitePrefs = prefs.filter((pref): pref is SitePref => pref.kind !== "wallet_link");
+  return [...latestBy(sitePrefs, (pref) => pref.site.toLowerCase()).values()]
     .filter((pref) => pref.kind === "quiet_site")
     .map((pref) => pref.site.toLowerCase())
     .sort();

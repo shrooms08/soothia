@@ -88,11 +88,20 @@ export interface LessonRecord {
 
 export type PrefKind = "quiet_site" | "unquiet_site";
 
-export interface PrefRecord {
+export interface SitePref {
   kind: PrefKind;
   at: string;
   site: string;
 }
+
+/** Which Sui address belongs to this user. Written once, after their first confirmed stake. */
+export interface WalletLinkPref {
+  kind: "wallet_link";
+  at: string;
+  address: string;
+}
+
+export type PrefRecord = SitePref | WalletLinkPref;
 
 /** SUI staked behind a call, confirmed from a Staked event on chain. */
 export interface StakeRecord {
@@ -151,6 +160,7 @@ export function sentenceFor<K extends RecordKind>(kind: K, record: RecordByKind[
       return `Lesson about my calls: ${(record as LessonRecord).text}`;
     case "pref": {
       const pref = record as PrefRecord;
+      if (pref.kind === "wallet_link") return `My Sui wallet is ${pref.address}.`;
       return pref.kind === "quiet_site"
         ? `Preference: stay quiet on ${pref.site}.`
         : `Preference: show calls on ${pref.site} again.`;

@@ -17,7 +17,7 @@ function outcomeLine(outcome: OutcomeRecord): string {
 }
 
 const lessonLine = (lesson: LessonRecord): string => `${lesson.key} (${lesson.n} calls): ${lesson.text}`;
-const prefLine = (pref: PrefRecord): string => `${pref.kind} ${pref.site}`;
+const prefLine = (pref: PrefRecord): string => `${pref.kind} ${"site" in pref ? pref.site : pref.address}`;
 
 async function show(store: RecallStore, kind: RecordKind): Promise<number> {
   const lines =

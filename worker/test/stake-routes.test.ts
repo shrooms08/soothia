@@ -5,7 +5,7 @@ import type { Env } from "../src/http";
 import worker from "../src/index";
 import type { ParsedScoreboard, ScoreboardEvent, ScoreboardFetcher } from "../src/recall/espn";
 import type { RecallStore } from "../src/recall/memory";
-import type { PickRecord, StakeRecord } from "../src/recall/records";
+import type { PickRecord, PrefRecord, StakeRecord } from "../src/recall/records";
 import { clearMemoryCache } from "../src/store";
 import type { StakeChain, StakedEvent, StakeSettings, StakeTransaction } from "../src/stake/chain";
 import { poolIdentity } from "../src/stake/identity";
@@ -127,6 +127,7 @@ interface Harness {
   created: { hash: string; closeMs: bigint }[];
   built: { sender: string; budget: number }[];
   written: StakeRecord[];
+  prefs: PrefRecord[];
   data: Map<string, { value: string; metadata?: unknown }>;
 }
 
@@ -149,6 +150,7 @@ function harness(options: Options = {}): Harness {
   const created: Harness["created"] = [];
   const built: Harness["built"] = [];
   const written: StakeRecord[] = [];
+  const prefs: PrefRecord[] = [];
   const { kv, data } = fakeKv(options.kvFail);
   const poolId = options.poolId === undefined ? null : options.poolId;
   const chain: StakeChain = {
@@ -177,8 +179,9 @@ function harness(options: Options = {}): Harness {
   };
   const store = {
     list: async (kind: string) => (kind === "pick" ? (options.picks ?? [pick()]) : []),
-    write: async (_kind: string, record: StakeRecord) => {
-      written.push(record);
+    write: async (kind: string, record: StakeRecord) => {
+      if (kind === "stake") written.push(record);
+      else prefs.push(record as unknown as PrefRecord);
       return { jobId: "j" };
     },
   } as unknown as RecallStore;
@@ -189,6 +192,7 @@ function harness(options: Options = {}): Harness {
     created,
     built,
     written,
+    prefs,
     data,
   };
 }
@@ -502,6 +506,46 @@ test("an existing pool index is left alone", async () => {
   h.data.set(`stakepool:${POOL}`, { value: "{}", metadata: { phase: "open", dueMs: 1 } });
   await confirm(h);
   assert.equal(h.data.get(`stakepool:${POOL}`)?.value, "{}");
+});
+
+test("the first confirmed stake links the wallet to the user, once", async () => {
+  const h = confirmable([staked()]);
+  await confirm(h);
+  await confirm(h, { digest: DIGEST.replace("8", "9") });
+  assert.equal(h.prefs.length, 1);
+  assert.equal(h.prefs[0].kind, "wallet_link");
+  assert.equal((h.prefs[0] as { address: string }).address, SENDER);
+  assert.equal([...h.data.keys()].filter((key) => key.startsWith("walletlink:")).length, 1);
+});
+
+test("a confirmation seen before does not link again", async () => {
+  const h = confirmable([staked()]);
+  await confirm(h);
+  await confirm(h);
+  assert.equal(h.prefs.length, 1);
+});
+
+test("a different address links too", async () => {
+  const h = confirmable([staked()]);
+  await confirm(h);
+  (h.deps.chain as StakeChain).readStakeTransaction = async () => ({ succeeded: true, staked: [staked({ staker: OTHER_POOL, sender: OTHER_POOL })] });
+  await confirm(h, { digest: DIGEST.replace("8", "9") });
+  assert.equal(h.prefs.length, 2);
+});
+
+test("a wallet link that fails does not fail the stake", async () => {
+  const h = confirmable([staked()]);
+  const store = h.deps.store as unknown as { write: (kind: string, record: unknown) => Promise<unknown> };
+  const original = store.write;
+  store.write = async (kind, record) => {
+    if (kind === "pref") throw new Error("walrus down");
+    return original(kind, record);
+  };
+  const { status, body } = await confirm(h);
+  assert.equal(status, 200);
+  assert.equal(body.duplicate, false);
+  assert.equal(h.written.length, 1);
+  assert.equal([...h.data.keys()].some((key) => key.startsWith("walletlink:")), false);
 });
 
 test("confirm rejects anything that does not match the pick", async () => {

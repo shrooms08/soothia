@@ -72,6 +72,12 @@ test("a record does not decode as a different kind, and plain text does not deco
   assert.equal(decodeRecord("pick", "just a sentence"), null);
 });
 
+test("a wallet link survives a round trip and reads as a sentence", () => {
+  const link: PrefRecord = { kind: "wallet_link", at: pick.at, address: `0x${"ab".repeat(32)}` };
+  assert.deepEqual(decodeRecord("pref", encodeRecord("pref", link)), link);
+  assert.equal(sentenceFor("pref", link), `My Sui wallet is 0x${"ab".repeat(32)}.`);
+});
+
 test("a stake reads as a sentence, in exact SUI", () => {
   assert.equal(sentenceFor("stake", stake), "Staked 1 SUI on Arsenal win vs Hull City on 2026-11-08.");
   assert.equal(sentenceFor("stake", { ...stake, side: "NO", amountMist: "250000000" }), "Staked 0.25 SUI against Arsenal win vs Hull City on 2026-11-08.");
