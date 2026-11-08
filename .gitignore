@@ -22,3 +22,6 @@ design/tools/.orb-frames/
 
 # Total Recall local backups
 .recall-local
+
+# Move build output
+move/soothia_recall/build/

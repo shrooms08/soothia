@@ -1,5 +1,4 @@
-// Total Recall: Sui through Tatum. Every on-chain read and write in this
-// feature goes through Tatum's Sui mainnet RPC gateway:
+// Total Recall: Sui through Tatum's gRPC gateway, fetch only, so it runs in Workers:
 //
 //  - commitPick: before the event, the SHA-256 of a pick is committed in a Sui
 //    transaction that calls soothia_recall::recall::commit (move/soothia_recall),
@@ -10,50 +9,18 @@
 //  - memoryAccount: reads the Walrus Memory account object, so the record page
 //    can show who owns the memory on Sui.
 
-import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
+import { bcs } from "@mysten/sui/bcs";
 import { decodeSuiPrivateKey } from "@mysten/sui/cryptography";
-import { JsonRpcHTTPTransport, SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
+import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
 import { Transaction } from "@mysten/sui/transactions";
 import type { RecallEnv } from "./env";
 import { tatumSuiClient } from "./tatumGrpc";
 
-export const TATUM_SUI_MAINNET = "https://sui-mainnet.gateway.tatum.io";
+const COMMIT_GAS_BUDGET = 5_000_000;
+const COMMIT_SETTLE_MS = 30_000;
 
 export function tatumConfigured(env: RecallEnv): boolean {
   return Boolean(env.TATUM_API_KEY?.trim());
-}
-
-/** One raw JSON-RPC call to Sui mainnet through Tatum. */
-export async function tatumRpc<T>(env: RecallEnv, method: string, params: unknown[] = []): Promise<T> {
-  const response = await fetch(env.TATUM_SUI_URL?.trim() || TATUM_SUI_MAINNET, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Accept: "application/json",
-      "x-api-key": env.TATUM_API_KEY.trim(),
-    },
-    body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-    signal: AbortSignal.timeout(15_000),
-  });
-  if (!response.ok) throw new Error(`tatum_http_${response.status}`);
-  const body = (await response.json()) as { result?: T; error?: { message?: string } };
-  if (body.error) throw new Error(`tatum_rpc: ${String(body.error.message ?? "error").slice(0, 120)}`);
-  return body.result as T;
-}
-
-let cachedClient: SuiJsonRpcClient | null = null;
-
-/** The Sui SDK client, with every request sent to Tatum's gateway. */
-function suiClient(env: RecallEnv): SuiJsonRpcClient {
-  if (cachedClient) return cachedClient;
-  cachedClient = new SuiJsonRpcClient({
-    network: "mainnet",
-    transport: new JsonRpcHTTPTransport({
-      url: env.TATUM_SUI_URL?.trim() || TATUM_SUI_MAINNET,
-      rpc: { headers: { "x-api-key": env.TATUM_API_KEY.trim() } },
-    }),
-  });
-  return cachedClient;
 }
 
 /** The key that pays for commits: SUI_COMMIT_KEY, else the Walrus Memory delegate key. */
@@ -64,9 +31,7 @@ export function commitKeypair(env: RecallEnv): Ed25519Keypair | null {
     if (raw.startsWith("suiprivkey")) return Ed25519Keypair.fromSecretKey(decodeSuiPrivateKey(raw).secretKey);
     const hex = raw.replace(/^0x/, "");
     if (!/^[0-9a-f]{64}$/i.test(hex)) return null;
-    const bytes = new Uint8Array(32);
-    for (let i = 0; i < 32; i++) bytes[i] = parseInt(hex.slice(i * 2, i * 2 + 2), 16);
-    return Ed25519Keypair.fromSecretKey(bytes);
+    return Ed25519Keypair.fromSecretKey(hexToBytes(hex));
   } catch {
     return null;
   }
@@ -83,28 +48,57 @@ export function hexToBytes(hex: string): Uint8Array {
   return out;
 }
 
+export function bytesToHex(bytes: Iterable<number>): string {
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
 /** Commits a pick's hash on Sui mainnet. Returns the transaction digest. */
 export async function commitPick(env: RecallEnv, hashHex: string, pickId: string): Promise<string> {
   const signer = commitKeypair(env);
-  if (!signer || !env.SOOTHIA_RECALL_PACKAGE?.trim()) throw new Error("commit_not_configured");
+  const packageId = env.SOOTHIA_RECALL_PACKAGE?.trim();
+  if (!signer || !packageId || !tatumConfigured(env)) throw new Error("commit_not_configured");
   const tx = new Transaction();
   tx.setSender(signer.toSuiAddress());
-  tx.setGasBudget(5_000_000);
+  tx.setGasBudget(COMMIT_GAS_BUDGET);
   tx.moveCall({
-    target: `${env.SOOTHIA_RECALL_PACKAGE.trim()}::recall::commit`,
+    target: `${packageId}::recall::commit`,
     arguments: [
       tx.pure.vector("u8", Array.from(hexToBytes(hashHex))),
       tx.pure.vector("u8", Array.from(new TextEncoder().encode(pickId))),
     ],
   });
-  const result = await suiClient(env).signAndExecuteTransaction({
-    transaction: tx,
-    signer,
-    options: { showEffects: true },
-  });
-  if (result.effects?.status?.status && result.effects.status.status !== "success")
-    throw new Error(`commit_failed: ${result.effects.status.error ?? "unknown"}`);
-  return result.digest;
+  const client = tatumSuiClient(env.TATUM_API_KEY.trim());
+  const result = await client.core.signAndExecuteTransaction({ transaction: tx, signer });
+  if (result.$kind === "FailedTransaction")
+    throw new Error(`commit_failed: ${JSON.stringify(result.FailedTransaction.status.error).slice(0, 200)}`);
+  // The commit already happened; this only lets the gas coin settle before the next one.
+  await client.core.waitForTransaction({ result, timeout: COMMIT_SETTLE_MS }).catch(() => undefined);
+  return result.Transaction.digest;
+}
+
+const PickCommittedEvent = bcs.struct("PickCommitted", {
+  hash: bcs.vector(bcs.u8()),
+  pick_id: bcs.vector(bcs.u8()),
+  committer: bcs.Address,
+});
+
+/** Decodes a PickCommitted event's BCS: hash as hex, pick id as text. */
+export function decodePickCommitted(data: Uint8Array): { hash: string; pickId: string; committer: string } {
+  const event = PickCommittedEvent.parse(data);
+  return {
+    hash: bytesToHex(event.hash),
+    pickId: new TextDecoder().decode(new Uint8Array(event.pick_id)),
+    committer: event.committer,
+  };
+}
+
+/** A PickCommitted event's bytes, for tests. */
+export function encodePickCommitted(hashHex: string, pickId: string, committer: string): Uint8Array {
+  return PickCommittedEvent.serialize({
+    hash: Array.from(hexToBytes(hashHex)),
+    pick_id: Array.from(new TextEncoder().encode(pickId)),
+    committer,
+  }).toBytes();
 }
 
 export interface CommitProof {
@@ -120,61 +114,46 @@ export interface CommitProof {
   problem?: string;
 }
 
-interface TxBlock {
-  digest: string;
-  timestampMs?: string;
-  checkpoint?: string;
-  transaction?: { data?: { sender?: string } };
-  events?: { type: string; parsedJson?: { hash?: number[] | string; pick_id?: number[] | string } }[];
-  effects?: { status?: { status?: string } };
-}
-
-function bytesFromEvent(value: number[] | string | undefined): string | null {
-  if (Array.isArray(value)) return value.map((byte) => byte.toString(16).padStart(2, "0")).join("");
-  if (typeof value === "string") {
-    // Some RPCs render vector<u8> as base64.
-    try {
-      const binary = atob(value);
-      return [...binary].map((char) => char.charCodeAt(0).toString(16).padStart(2, "0")).join("");
-    } catch {
-      return null;
-    }
-  }
-  return null;
-}
-
 /** Reads a commit back through Tatum and checks it carries the expected hash. */
 export async function verifyCommit(env: RecallEnv, digest: string, expectedHash: string): Promise<CommitProof> {
   const explorerUrl = `https://suivision.xyz/txblock/${digest}`;
+  const unproven = (problem: string): CommitProof => ({
+    digest,
+    verified: false,
+    timestampMs: null,
+    checkpoint: null,
+    sender: null,
+    hash: null,
+    explorerUrl,
+    problem,
+  });
+  if (!tatumConfigured(env)) return unproven("tatum_not_configured");
   try {
-    const tx = await tatumRpc<TxBlock>(env, "sui_getTransactionBlock", [
+    const result = await tatumSuiClient(env.TATUM_API_KEY.trim()).core.getTransaction({
       digest,
-      { showInput: true, showEvents: true, showEffects: true },
-    ]);
-    const event = tx.events?.find((candidate) => candidate.type.endsWith("::recall::PickCommitted"));
-    const hash = bytesFromEvent(event?.parsedJson?.hash);
-    const ok = tx.effects?.status?.status === "success" && hash === expectedHash.toLowerCase();
+      include: { events: true },
+    });
+    const tx = result.Transaction ?? result.FailedTransaction;
+    // Only our package's event counts: anyone can publish a module with the same name.
+    const packageId = env.SOOTHIA_RECALL_PACKAGE?.trim().toLowerCase();
+    const event = tx.events.find((candidate) => {
+      if (!candidate.eventType.endsWith("::recall::PickCommitted")) return false;
+      return !packageId || candidate.packageId.toLowerCase() === packageId;
+    });
+    const decoded = event ? decodePickCommitted(event.bcs) : null;
+    const ok = result.$kind === "Transaction" && decoded?.hash === expectedHash.toLowerCase();
     return {
       digest,
       verified: ok,
-      timestampMs: tx.timestampMs ? Number(tx.timestampMs) : null,
-      checkpoint: tx.checkpoint ?? null,
-      sender: tx.transaction?.data?.sender ?? null,
-      hash,
+      timestampMs: tx.timestampMs,
+      checkpoint: tx.checkpoint,
+      sender: decoded?.committer ?? null,
+      hash: decoded?.hash ?? null,
       explorerUrl,
-      ...(ok ? {} : { problem: event ? "hash_mismatch" : "no_commit_event" }),
+      ...(ok ? {} : { problem: decoded ? "hash_mismatch" : "no_commit_event" }),
     };
   } catch (error) {
-    return {
-      digest,
-      verified: false,
-      timestampMs: null,
-      checkpoint: null,
-      sender: null,
-      hash: null,
-      explorerUrl,
-      problem: String((error as Error)?.message ?? "unavailable").slice(0, 120),
-    };
+    return unproven(String((error as Error)?.message ?? "unavailable").slice(0, 120));
   }
 }
 

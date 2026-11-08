@@ -12,8 +12,6 @@ export interface RecallEnv {
   MEMWAL_SERVER_URL?: string;
   /** Empty means no Sui anchor or commit. */
   TATUM_API_KEY: string;
-  /** Overrides Tatum's Sui mainnet gateway. */
-  TATUM_SUI_URL?: string;
   /** Pays for hash commits; falls back to MEMWAL_KEY. */
   SUI_COMMIT_KEY?: string;
   /** Published soothia_recall package id. */

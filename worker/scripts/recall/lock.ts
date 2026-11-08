@@ -4,18 +4,8 @@
 
 import { createInterface } from "node:readline/promises";
 import { upcomingFixtures, type Fixture } from "../../src/recall/espn";
-import { latestCheckpoint } from "../../src/recall/sui";
-import {
-  appendLocalPick,
-  buildPick,
-  dayLabel,
-  fixtureKey,
-  loadEnvOrExit,
-  openStore,
-  readLocalPicks,
-  safeError,
-  timeIn,
-} from "./shared";
+import { buildPick, dayLabel, fixturePickInput } from "../../src/recall/picks";
+import { appendLocalPick, fixtureKey, loadEnvOrExit, openStore, readLocalPicks, safeError, scrub, timeIn } from "./shared";
 
 const MIN_LEAD_MS = 10 * 60_000;
 const DAY_MS = 86_400_000;
@@ -81,24 +71,20 @@ async function main(): Promise<number> {
       continue;
     }
 
-    let anchor: Awaited<ReturnType<typeof latestCheckpoint>> = null;
-    try {
-      anchor = await latestCheckpoint(env);
-    } catch (error) {
-      console.log(`Warning: no Sui anchor for this call: ${safeError(error, env)}`);
-    }
-
-    const pick = buildPick(fixture, percent, anchor, new Date());
+    const pick = await buildPick(fixturePickInput(fixture, percent), env, {
+      warn: (message) => console.log(`Warning: ${scrub(message, env)}`),
+    });
     appendLocalPick(pick);
     const lean = `${fixture.home} ${percent}%`;
-    const checkpoint = anchor ? anchor.checkpoint : "none";
+    const checkpoint = pick.anchor?.checkpoint ?? "none";
+    const commit = pick.commit?.digest ?? "none";
     try {
       const { jobId } = await store.write("pick", pick).catch(async () => {
         await new Promise((resolve) => setTimeout(resolve, 2_000));
         return store.write("pick", pick);
       });
       saved += 1;
-      console.log(`Locked ${pick.id}: ${lean} | job ${jobId} | anchor: after checkpoint ${checkpoint}`);
+      console.log(`Locked ${pick.id}: ${lean} | job ${jobId} | anchor: after checkpoint ${checkpoint} | commit ${commit}`);
     } catch (error) {
       failed += 1;
       console.log(`NOT saved to Walrus (kept in the local backup): ${lean}\n  ${safeError(error, env)}`);

@@ -22,6 +22,8 @@ import {
 export const TATUM_SUI_GRPC = "https://sui-mainnet-grpc.gateway.tatum.io";
 
 const REQUEST_TIMEOUT_MS = 15_000;
+const MAX_RATE_LIMIT_RETRIES = 5;
+const RATE_LIMIT_WAIT_MS = 500;
 const TRAILER_FLAG = 0x80;
 const COMPRESSED_FLAG = 0x01;
 
@@ -64,12 +66,19 @@ export class TatumGrpcTransport implements RpcTransport {
   }
 
   private async call<I extends object, O extends object>(method: MethodInfo<I, O>, input: I, options: RpcOptions): Promise<O> {
-    const response = await this.fetcher(`${this.baseUrl}/${method.service.typeName}/${method.name}`, {
-      method: "POST",
-      headers: { "content-type": "application/grpc-web+proto", "x-grpc-web": "1", "x-api-key": this.apiKey },
-      body: encodeFrame(method.I.toBinary(input, options.binaryOptions)),
-      signal: options.abort ?? AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-    });
+    const body = encodeFrame(method.I.toBinary(input, options.binaryOptions));
+    let response: Response;
+    // A 429 means the gateway rejected the call unprocessed, so resending is safe.
+    for (let attempt = 0; ; attempt++) {
+      response = await this.fetcher(`${this.baseUrl}/${method.service.typeName}/${method.name}`, {
+        method: "POST",
+        headers: { "content-type": "application/grpc-web+proto", "x-grpc-web": "1", "x-api-key": this.apiKey },
+        body,
+        signal: options.abort ?? AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      });
+      if (response.status !== 429 || attempt >= MAX_RATE_LIMIT_RETRIES) break;
+      await new Promise((resolve) => setTimeout(resolve, RATE_LIMIT_WAIT_MS * (attempt + 1)));
+    }
     if (!response.ok) throw new RpcError(`tatum_grpc_http_${response.status}`, "UNKNOWN");
     const status = response.headers.get("grpc-status");
     if (status && status !== "0") {
