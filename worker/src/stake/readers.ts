@@ -1,0 +1,148 @@
+// Soothia staking: reads pools, positions and events through Tatum's gRPC gateway.
+// Objects are parsed from BCS, in the field order of pool.move, because the SDK
+// warns that JSON shapes vary between APIs.
+
+import { bcs } from "@mysten/sui/bcs";
+import type { SuiGrpcClient } from "@mysten/sui/grpc";
+import { bytesToHex } from "../recall/sui";
+
+const BalanceBcs = bcs.struct("Balance", { value: bcs.u64() });
+const TableBcs = bcs.struct("Table", { id: bcs.Address, size: bcs.u64() });
+
+export const PoolBcs = bcs.struct("Pool", {
+  id: bcs.Address,
+  question_hash: bcs.vector(bcs.u8()),
+  close_ms: bcs.u64(),
+  yes: BalanceBcs,
+  no: BalanceBcs,
+  positions: TableBcs,
+  status: bcs.u8(),
+  outcome: bcs.bool(),
+  fee_taken: bcs.u64(),
+  yes_total: bcs.u64(),
+  no_total: bcs.u64(),
+});
+
+export const ConfigBcs = bcs.struct("Config", {
+  id: bcs.Address,
+  treasury: bcs.Address,
+  fee_bps: bcs.u64(),
+  min_stake: bcs.u64(),
+  max_stake_per_user: bcs.u64(),
+  max_pool: bcs.u64(),
+  refund_after_ms: bcs.u64(),
+  registry: TableBcs,
+});
+
+export const PositionBcs = bcs.struct("Position", { side: bcs.bool(), amount: bcs.u64(), claimed: bcs.bool() });
+
+export const PoolCreatedBcs = bcs.struct("PoolCreated", {
+  pool: bcs.Address,
+  question_hash: bcs.vector(bcs.u8()),
+  close_ms: bcs.u64(),
+});
+
+export const ResolvedBcs = bcs.struct("Resolved", {
+  pool: bcs.Address,
+  outcome_yes: bcs.bool(),
+  yes_total: bcs.u64(),
+  no_total: bcs.u64(),
+  fee: bcs.u64(),
+});
+
+export const ClaimedBcs = bcs.struct("Claimed", { pool: bcs.Address, claimer: bcs.Address, amount: bcs.u64() });
+
+export interface StakePool {
+  id: string;
+  questionHash: string;
+  closeMs: bigint;
+  yes: bigint;
+  no: bigint;
+  positionsTableId: string;
+  stakers: bigint;
+  status: "open" | "resolved" | "void";
+  outcomeYes: boolean;
+  feeTaken: bigint;
+  yesTotal: bigint;
+  noTotal: bigint;
+}
+
+export interface StakeConfig {
+  id: string;
+  treasury: string;
+  feeBps: bigint;
+  minStake: bigint;
+  maxStakePerUser: bigint;
+  maxPool: bigint;
+  refundAfterMs: bigint;
+}
+
+export interface StakePosition {
+  side: boolean;
+  amount: bigint;
+  claimed: boolean;
+}
+
+const STATUSES = ["open", "resolved", "void"] as const;
+
+export function parsePool(data: Uint8Array): StakePool {
+  const raw = PoolBcs.parse(data);
+  const status = STATUSES[raw.status];
+  if (!status) throw new Error(`unknown pool status ${raw.status}`);
+  return {
+    id: raw.id,
+    questionHash: bytesToHex(raw.question_hash),
+    closeMs: BigInt(raw.close_ms),
+    yes: BigInt(raw.yes.value),
+    no: BigInt(raw.no.value),
+    positionsTableId: raw.positions.id,
+    stakers: BigInt(raw.positions.size),
+    status,
+    outcomeYes: raw.outcome,
+    feeTaken: BigInt(raw.fee_taken),
+    yesTotal: BigInt(raw.yes_total),
+    noTotal: BigInt(raw.no_total),
+  };
+}
+
+export function parseConfig(data: Uint8Array): StakeConfig {
+  const raw = ConfigBcs.parse(data);
+  return {
+    id: raw.id,
+    treasury: raw.treasury,
+    feeBps: BigInt(raw.fee_bps),
+    minStake: BigInt(raw.min_stake),
+    maxStakePerUser: BigInt(raw.max_stake_per_user),
+    maxPool: BigInt(raw.max_pool),
+    refundAfterMs: BigInt(raw.refund_after_ms),
+  };
+}
+
+export function parsePosition(data: Uint8Array): StakePosition {
+  const raw = PositionBcs.parse(data);
+  return { side: raw.side, amount: BigInt(raw.amount), claimed: raw.claimed };
+}
+
+export async function readPool(client: SuiGrpcClient, poolId: string): Promise<StakePool> {
+  const { object } = await client.core.getObject({ objectId: poolId, include: { content: true } });
+  return parsePool(object.content);
+}
+
+export async function readConfig(client: SuiGrpcClient, configId: string): Promise<StakeConfig> {
+  const { object } = await client.core.getObject({ objectId: configId, include: { content: true } });
+  return parseConfig(object.content);
+}
+
+/** The position of `owner` in a pool, or null when they have not staked. */
+export async function readPosition(client: SuiGrpcClient, pool: Pick<StakePool, "positionsTableId">, owner: string): Promise<StakePosition | null> {
+  try {
+    const { dynamicField } = await client.core.getDynamicField({
+      parentId: pool.positionsTableId,
+      name: { type: "address", bcs: bcs.Address.serialize(owner).toBytes() },
+    });
+    return parsePosition(dynamicField.value.bcs);
+  } catch (error) {
+    if (/not.?found|does not exist/i.test(String((error as Error)?.message ?? error))) return null;
+    throw error;
+  }
+}

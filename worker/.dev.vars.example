@@ -18,5 +18,10 @@ SUI_COMMIT_KEY=
 SOOTHIA_RECALL_PACKAGE=
 # Comma-separated user keys with the higher daily commit cap. Not secret. Production sets it in wrangler.toml.
 RECALL_OWNER_KEYS=
+# Soothia staking object ids. Not secret. Set by scripts/stake/publish.ts.
+STAKE_PACKAGE=
+STAKE_CONFIG=
+STAKE_ADMIN_CAP=
+STAKE_RESOLVER_CAP=
 # Local CLI only: which record the scripts in scripts/recall read and write (a UUID).
 RECALL_INSTALL_ID=
