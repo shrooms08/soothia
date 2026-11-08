@@ -33,7 +33,7 @@ id = "603952ecd4ea42f3b372051b7fe789ff"
 
 # Not secret. RECALL_OWNER_KEYS: comma-separated Total Recall user keys with the higher daily commit cap.
 [vars]
-RECALL_OWNER_KEYS = ""
+RECALL_OWNER_KEYS = "ffe06f0d02e4440a"
 
 # Reconcile sweep: finishes submit -> verify -> report for bets whose client never called back.
 [triggers]
