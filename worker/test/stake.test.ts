@@ -158,7 +158,7 @@ test("the config and a position read back from their bytes", () => {
     challenge_ms: 6n,
     registry: { id: ADDRESS, size: 0n },
   }).toBytes();
-  assert.deepEqual(parseConfig(config), { id: ADDRESS, treasury: OTHER, feeBps: 100n, minStake: 1n, maxStakePerUser: 2n, maxPool: 3n, refundAfterMs: 4n, minResolveDelayMs: 5n, challengeMs: 6n });
+  assert.deepEqual(parseConfig(config), { id: ADDRESS, treasury: OTHER, feeBps: 100n, minStake: 1n, maxStakePerUser: 2n, maxPool: 3n, refundAfterMs: 4n, minResolveDelayMs: 5n, challengeMs: 6n, registryTableId: ADDRESS });
   assert.deepEqual(parsePosition(PositionBcs.serialize({ side: true, amount: 9n, claimed: false }).toBytes()), { side: true, amount: 9n, claimed: false });
 });
 

@@ -71,6 +71,13 @@ export function buildResolve(
   return tx;
 }
 
+/** Voids an open pool, so every staker can take their stake back. */
+export function buildVoid(ids: Pick<StakeIds, "packageId">, input: { resolverCap: string; poolId: string }): Transaction {
+  const tx = new Transaction();
+  tx.moveCall({ target: target(ids, "void"), arguments: [tx.object(input.resolverCap), tx.object(input.poolId)] });
+  return tx;
+}
+
 export function buildClaim(ids: Pick<StakeIds, "packageId">, input: { poolId: string }): Transaction {
   const tx = new Transaction();
   tx.moveCall({ target: target(ids, "claim"), arguments: [tx.object(input.poolId), tx.object.clock()] });

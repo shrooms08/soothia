@@ -50,3 +50,47 @@ export function claimAmount(
   const winningTotal = pool.outcomeYes ? pool.yesTotal : pool.noTotal;
   return winnerPayout(position.amount, pool.yesTotal + pool.noTotal - pool.feeAmount, winningTotal);
 }
+
+export type PoolTotalsInput = Pick<SettledPool, "status" | "yesTotal" | "noTotal"> & { yes: bigint; no: bigint };
+
+/**
+ * Each side's stake. The contract only fills yes_total and no_total at resolve, and
+ * merges the balances after the challenge window, so neither source is right alone.
+ */
+export function poolTotals(pool: PoolTotalsInput): { yes: bigint; no: bigint } {
+  if (pool.status !== "open" && pool.yesTotal + pool.noTotal > 0n) return { yes: pool.yesTotal, no: pool.noTotal };
+  return { yes: pool.yes, no: pool.no };
+}
+
+/** What each unit staked would return if this side won, after the fee; null with no stake on it. */
+export function multiplierAfterFee(yes: bigint, no: bigint, sideTotal: bigint, feeBps: bigint): number | null {
+  if (sideTotal <= 0n) return null;
+  const total = yes + no;
+  return Number(((total - feeOn(total, feeBps)) * 10_000n) / sideTotal) / 10_000;
+}
+
+export type StakePoolView = PoolTotalsInput & SettledPool & { feeBps: bigint; closeMs: bigint };
+export type StakePositionView = { side: boolean; amount: bigint; claimed: boolean };
+
+/** The payout this position is heading for. Ignores the claim window and whether it was already claimed. */
+export function estimatedPayout(pool: StakePoolView, position: StakePositionView): bigint {
+  if (pool.status === "void") return position.amount;
+  const { yes, no } = poolTotals(pool);
+  if (pool.status === "resolved") {
+    if (position.side !== pool.outcomeYes) return 0n;
+    return winnerPayout(position.amount, yes + no - pool.feeAmount, pool.outcomeYes ? yes : no);
+  }
+  const sideTotal = position.side ? yes : no;
+  if (sideTotal === 0n) return 0n;
+  return winnerPayout(position.amount, yes + no - feeOn(yes + no, pool.feeBps), sideTotal);
+}
+
+export type PositionStatus = "open" | "awaiting_result" | "challenge_window" | "claimable" | "lost" | "refundable" | "claimed";
+
+export function positionStatus(pool: StakePoolView, position: StakePositionView, nowMs: bigint): PositionStatus {
+  if (position.claimed) return "claimed";
+  if (pool.status === "void") return "refundable";
+  if (pool.status === "open") return nowMs < pool.closeMs ? "open" : "awaiting_result";
+  if (inChallengeWindow(pool, nowMs)) return "challenge_window";
+  return position.side === pool.outcomeYes ? "claimable" : "lost";
+}

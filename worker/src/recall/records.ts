@@ -6,8 +6,8 @@
 // Each install gets its own set of namespaces, one per kind, so "all my picks"
 // is a single recall against one namespace rather than a filter over everyone.
 
-export type RecordKind = "pick" | "outcome" | "lesson" | "pref";
-export const RECORD_KINDS: readonly RecordKind[] = ["pick", "outcome", "lesson", "pref"];
+export type RecordKind = "pick" | "outcome" | "lesson" | "pref" | "stake";
+export const RECORD_KINDS: readonly RecordKind[] = ["pick", "outcome", "lesson", "pref", "stake"];
 
 export type Side = "YES" | "NO";
 
@@ -94,17 +94,42 @@ export interface PrefRecord {
   site: string;
 }
 
+/** SUI staked behind a call, confirmed from a Staked event on chain. */
+export interface StakeRecord {
+  pickId: string;
+  poolId: string;
+  questionHash: string;
+  side: Side;
+  /** MIST, as a decimal string. */
+  amountMist: string;
+  digest: string;
+  at: string;
+  sender: string;
+  /** What YES means in words: "Arsenal win vs Newcastle United on 2026-11-21". */
+  about: string;
+}
+
 export interface RecordByKind {
   pick: PickRecord;
   outcome: OutcomeRecord;
   lesson: LessonRecord;
   pref: PrefRecord;
+  stake: StakeRecord;
 }
 
-const TAG = /⟦soothia:(pick|outcome|lesson|pref):v1 (\{[\s\S]*\})⟧\s*$/;
+const TAG = /⟦soothia:(pick|outcome|lesson|pref|stake):v1 (\{[\s\S]*\})⟧\s*$/;
 
 function pct(p: number): string {
   return `${Math.round(p * 100)}%`;
+}
+
+const MIST_PER_SUI = 1_000_000_000n;
+
+/** "1", "0.25": whole MIST, so no rounding. */
+function suiAmount(mist: string): string {
+  const value = BigInt(mist);
+  const fraction = (value % MIST_PER_SUI).toString().padStart(9, "0").replace(/0+$/, "");
+  return `${value / MIST_PER_SUI}${fraction ? `.${fraction}` : ""}`;
 }
 
 /** The sentence Walrus Memory embeds for a record. Readable on its own. */
@@ -129,6 +154,10 @@ export function sentenceFor<K extends RecordKind>(kind: K, record: RecordByKind[
       return pref.kind === "quiet_site"
         ? `Preference: stay quiet on ${pref.site}.`
         : `Preference: show calls on ${pref.site} again.`;
+    }
+    case "stake": {
+      const stake = record as StakeRecord;
+      return `Staked ${suiAmount(stake.amountMist)} SUI ${stake.side === "YES" ? "on" : "against"} ${stake.about}.`;
     }
     default:
       return "";

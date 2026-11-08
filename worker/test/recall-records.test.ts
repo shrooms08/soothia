@@ -9,6 +9,8 @@ import {
   type OutcomeRecord,
   type PickRecord,
   type PrefRecord,
+  sentenceFor,
+  type StakeRecord,
 } from "../src/recall/records";
 
 const pick: PickRecord = {
@@ -45,17 +47,35 @@ const outcome: OutcomeRecord = {
 
 const lesson: LessonRecord = { key: "calibration", at: pick.at, text: "Shade your calls toward 50%.", n: 4, bias: 0.2 };
 const pref: PrefRecord = { kind: "quiet_site", at: pick.at, site: "example.com" };
+const stake: StakeRecord = {
+  pickId: pick.id,
+  poolId: `0x${"ab".repeat(32)}`,
+  questionHash: "11".repeat(32),
+  side: "YES",
+  amountMist: "1000000000",
+  digest: "8teWqYrBWopnhq2Wy22BQq1uvzepDoUzDzdRA6oE8iY",
+  at: pick.at,
+  sender: `0x${"cd".repeat(32)}`,
+  about: "Arsenal win vs Hull City on 2026-11-08",
+};
 
 test("every record kind survives an encode and decode round trip", () => {
   assert.deepEqual(decodeRecord("pick", encodeRecord("pick", pick)), pick);
   assert.deepEqual(decodeRecord("outcome", encodeRecord("outcome", outcome)), outcome);
   assert.deepEqual(decodeRecord("lesson", encodeRecord("lesson", lesson)), lesson);
   assert.deepEqual(decodeRecord("pref", encodeRecord("pref", pref)), pref);
+  assert.deepEqual(decodeRecord("stake", encodeRecord("stake", stake)), stake);
 });
 
 test("a record does not decode as a different kind, and plain text does not decode", () => {
   assert.equal(decodeRecord("outcome", encodeRecord("pick", pick)), null);
   assert.equal(decodeRecord("pick", "just a sentence"), null);
+});
+
+test("a stake reads as a sentence, in exact SUI", () => {
+  assert.equal(sentenceFor("stake", stake), "Staked 1 SUI on Arsenal win vs Hull City on 2026-11-08.");
+  assert.equal(sentenceFor("stake", { ...stake, side: "NO", amountMist: "250000000" }), "Staked 0.25 SUI against Arsenal win vs Hull City on 2026-11-08.");
+  assert.equal(sentenceFor("stake", { ...stake, amountMist: "1000000001" }), "Staked 1.000000001 SUI on Arsenal win vs Hull City on 2026-11-08.");
 });
 
 test("canonicalPick ignores field order and is unchanged by hash and commit", () => {

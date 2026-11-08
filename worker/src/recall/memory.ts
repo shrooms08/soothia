@@ -84,6 +84,7 @@ const LIST_QUERY: Record<RecordKind, string> = {
   outcome: "How my call resolved",
   lesson: "Lesson about my calls",
   pref: "Preference for where Soothia shows calls",
+  stake: "Staked SUI on my call",
 };
 const LIST_LIMIT = 100;
 const READ_CACHE_SEC = 45;
@@ -152,12 +153,13 @@ export class RecallStore {
   }
 
   async listAll(): Promise<{ [K in RecordKind]: RecordByKind[K][] }> {
-    const [pick, outcome, lesson, pref] = await Promise.all(RECORD_KINDS.map((kind) => this.list(kind)));
+    const [pick, outcome, lesson, pref, stake] = await Promise.all(RECORD_KINDS.map((kind) => this.list(kind)));
     return {
       pick: pick as RecordByKind["pick"][],
       outcome: outcome as RecordByKind["outcome"][],
       lesson: lesson as RecordByKind["lesson"][],
       pref: pref as RecordByKind["pref"][],
+      stake: stake as RecordByKind["stake"][],
     };
   }
 }

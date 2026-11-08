@@ -13,6 +13,7 @@ import { resolveUser } from "./resolve";
 import { insightsFor, latestBy, quietSites, shrinkFactor, summarize, type RelatedHit } from "./scoring";
 import { commitConfigured, latestCheckpoint, memoryAccount, tatumConfigured, verifyCommit } from "./sui";
 import { SWEEP_PREFIX } from "./sweep";
+import { stakeSummaries } from "../stake/positions";
 
 const RECALL_API_VERSION = 1;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -95,10 +96,10 @@ export function isDuplicatePick(existing: PickRecord[], input: PickInput): boole
   );
 }
 
-const storeFor = (env: Env, userKey: string, cache = true): RecallStore => new RecallStore(memwalBackend(env), userKey, cache);
+export const storeFor = (env: Env, userKey: string, cache = true): RecallStore => new RecallStore(memwalBackend(env), userKey, cache);
 
 /** The user's memory key, or a Response explaining why there is none. */
-async function identify(request: Request): Promise<string | Response> {
+export async function identify(request: Request): Promise<string | Response> {
   const install = installId(request);
   if (!install) return json(request, { error: "missing_install" }, 400);
   const recallId = request.headers.get("X-Soothia-Recall");
@@ -124,6 +125,7 @@ async function record(request: Request, env: Env, userKey: string): Promise<Resp
   const memory = await storeFor(env, userKey).listAll();
   const picks = mergePicks(memory.pick);
   const outcomes = latestBy(memory.outcome, (outcome) => outcome.pickId);
+  const stakes = await stakeSummaries(env, memory.stake, Date.now());
   const view = [...picks]
     .sort((a, b) => b.at.localeCompare(a.at))
     .map((pick) => {
@@ -145,6 +147,7 @@ async function record(request: Request, env: Env, userKey: string): Promise<Resp
         anchor: pick.anchor ?? null,
         commit: pick.commit ? { ...pick.commit, explorerUrl: `https://suivision.xyz/txblock/${pick.commit.digest}` } : null,
         commitSkipped: pick.commit ? null : (pick.commitSkipped ?? null),
+        stake: stakes.get(pick.id) ?? null,
       };
     });
   return json(request, {

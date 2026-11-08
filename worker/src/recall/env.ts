@@ -18,4 +18,8 @@ export interface RecallEnv {
   SUI_COMMIT_KEY?: string;
   /** Published soothia_recall package id. */
   SOOTHIA_RECALL_PACKAGE?: string;
+  /** Published soothia_stake package, its shared Config and the ResolverCap. Not secret. */
+  STAKE_PACKAGE?: string;
+  STAKE_CONFIG?: string;
+  STAKE_RESOLVER_CAP?: string;
 }

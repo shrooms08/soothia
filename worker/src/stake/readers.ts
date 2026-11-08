@@ -50,6 +50,14 @@ export const PoolCreatedBcs = bcs.struct("PoolCreated", {
   close_ms: bcs.u64(),
 });
 
+export const StakedBcs = bcs.struct("Staked", {
+  pool: bcs.Address,
+  staker: bcs.Address,
+  side: bcs.bool(),
+  amount: bcs.u64(),
+  pick_hash: bcs.vector(bcs.u8()),
+});
+
 export const ResolvedBcs = bcs.struct("Resolved", {
   pool: bcs.Address,
   outcome_yes: bcs.bool(),
@@ -95,6 +103,7 @@ export interface StakeConfig {
   refundAfterMs: bigint;
   minResolveDelayMs: bigint;
   challengeMs: bigint;
+  registryTableId: string;
 }
 
 export interface StakePosition {
@@ -143,6 +152,7 @@ export function parseConfig(data: Uint8Array): StakeConfig {
     refundAfterMs: BigInt(raw.refund_after_ms),
     minResolveDelayMs: BigInt(raw.min_resolve_delay_ms),
     challengeMs: BigInt(raw.challenge_ms),
+    registryTableId: raw.registry.id,
   };
 }
 
@@ -151,8 +161,10 @@ export function parsePosition(data: Uint8Array): StakePosition {
   return { side: raw.side, amount: BigInt(raw.amount), claimed: raw.claimed };
 }
 
-export async function readPool(client: SuiGrpcClient, poolId: string): Promise<StakePool> {
+/** Reads a pool. With `packageId`, refuses any object that is not that package's Pool. */
+export async function readPool(client: SuiGrpcClient, poolId: string, packageId?: string): Promise<StakePool> {
   const { object } = await client.core.getObject({ objectId: poolId, include: { content: true } });
+  if (packageId && object.type !== `${packageId}::pool::Pool`) throw new Error("not_a_stake_pool");
   return parsePool(object.content);
 }
 
