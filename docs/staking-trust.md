@@ -63,7 +63,7 @@ To overturn:
 
 Do this before the window ends. After it ends an overturn is refused, and winners can claim.
 
-Soothia does not watch for wrong results for you yet. If nobody checks during the 6 hours, a wrong result stands.
+`GET /stake/admin/pending` on the Worker lists every pool in its window, with the evidence and the time left, but nothing alerts you. If nobody checks during the 6 hours, a wrong result stands.
 
 ## The 7-day refund
 
