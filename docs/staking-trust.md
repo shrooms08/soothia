@@ -55,11 +55,10 @@ An overturn is all or nothing: it refunds the pool. It cannot change the winner 
 
 To overturn:
 
-1. Find the pool's object id.
-2. Open your Slush wallet, on the account that holds the AdminCap.
-3. Use a Sui transaction tool that can call a contract function, and connect Slush. Suiscan's and SuiVision's contract pages may offer this.
-4. Call `overturn` in the `pool` module of the staking package, with the AdminCap, the pool, and the clock object `0x6`.
-5. Approve it in Slush. You need a little SUI in that wallet for gas.
+1. Open your Slush wallet, on the account that holds the AdminCap.
+2. Go to https://api.soothia.fun/admin, enter the admin token and connect that wallet.
+3. Find the pool under Challenge windows and press Overturn.
+4. Approve it in Slush. You need a little SUI in that wallet for gas.
 
 Do this before the window ends. After it ends an overturn is refused, and winners can claim.
 

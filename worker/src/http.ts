@@ -12,6 +12,8 @@ export interface Env extends RecallEnv {
   /** Comma-separated Total Recall user keys with the higher daily commit cap. Not secret. */
   RECALL_OWNER_KEYS?: string;
   SOOTHIA_CACHE: KVNamespace;
+  /** The admin page's static files (worker/public). */
+  ASSETS?: Fetcher;
 }
 
 function allowedOrigin(request: Request): string | null {

@@ -21,6 +21,18 @@ compatibility_flags = ["nodejs_compat"]
 #   SOOTHIA_RECALL_PACKAGE: published soothia_recall package id (not secret)
 #   RESOLVER_KEY: private key holding the staking ResolverCap; `npx wrangler secret put RESOLVER_KEY`
 
+# Bundles the admin page into public/ before every dev, deploy and dry-run.
+[build]
+command = "node scripts/build-admin.mjs"
+
+# The static admin page, served only through /admin in src/index.ts.
+[assets]
+directory = "./public"
+binding = "ASSETS"
+run_worker_first = true
+html_handling = "none"
+not_found_handling = "none"
+
 # Open picks for the sweep, spending caps and public stats.
 [[kv_namespaces]]
 binding = "SOOTHIA_CACHE"
@@ -33,6 +45,8 @@ RECALL_OWNER_KEYS = "ffe06f0d02e4440a"
 STAKE_PACKAGE = "0xf9507a1cb35b01c191614a67bf5ca3f22c7c3a7745fdc7ddea67369686a6720f"
 STAKE_CONFIG = "0x7ba41f413b54f1f04b592694ad3304caa87df7cf9f1afda98b42c45362d2b3be"
 STAKE_RESOLVER_CAP = "0x8a8bc9de0047bd4d99fabb7e5c655c3f1d407c743ad1711f2a638861b81bae4e"
+# Only its id, to read who owns it. The AdminCap stays in the Slush wallet.
+STAKE_ADMIN_CAP = "0x6bb33f67cec908f6d38c53de4b6fe3e047392e08d6e7b2ec670462b22edb2cbf"
 
 # Two sweeps share this schedule: open picks at :00, :15, :30, :45, and staking pools five minutes later.
 [triggers]

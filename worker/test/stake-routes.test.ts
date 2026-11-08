@@ -10,7 +10,8 @@ import { clearMemoryCache } from "../src/store";
 import type { StakeChain, StakedEvent, StakeSettings, StakeTransaction } from "../src/stake/chain";
 import { poolIdentity } from "../src/stake/identity";
 import type { StakeConfig, StakePool, StakePosition } from "../src/stake/readers";
-import { POOL_CREATE_DAILY_CAP, RESOLVER_MIN_BALANCE_MIST, stakeRoute, type StakeDeps } from "../src/stake/routes";
+import { POOL_CREATE_DAILY_CAP, RESOLVER_MIN_BALANCE_MIST } from "../src/stake/context";
+import { stakeRoute, type StakeDeps } from "../src/stake/routes";
 
 const SUI = 1_000_000_000n;
 const NOW = Date.parse("2026-11-20T12:00:00.000Z");
@@ -168,6 +169,10 @@ function harness(options: Options = {}): Harness {
     resolvePool: async () => DIGEST,
     voidPool: async () => DIGEST,
     collectFee: async () => DIGEST,
+    objectOwner: async () => null,
+    gasWalletAddress: () => null,
+    stakeFromGasWallet: async () => DIGEST,
+    claimFromGasWallet: async () => ({ digest: DIGEST, amount: 0n }),
     ...options.chain,
   };
   const store = {
@@ -374,6 +379,20 @@ test("the daily pool cap stops creation", async () => {
   assert.equal(status, 429);
   assert.equal(body.error, "pool_cap_reached");
   assert.equal(h.created.length, 0);
+});
+
+test("while a drill has the delays shortened, no real pool can be created", async () => {
+  const h = harness({ chain: { readConfig: async () => ({ ...CONFIG, minResolveDelayMs: 0n, challengeMs: 900_000n }) } });
+  const { status, body } = await build(h);
+  assert.equal(status, 503);
+  assert.equal(body.error, "staking_paused");
+  assert.equal(h.created.length, 0);
+  assert.equal(h.data.size, 0);
+});
+
+test("while the delays are shortened, staking in an existing pool still works", async () => {
+  const h = harness({ poolId: POOL, chain: { readConfig: async () => ({ ...CONFIG, minResolveDelayMs: 0n, challengeMs: 900_000n }) } });
+  assert.equal((await build(h)).status, 200);
 });
 
 test("a resolver transaction already running means try again", async () => {

@@ -41,6 +41,29 @@ async function limited(
   return json(request, { error: "rate_limited" }, 429, { "Retry-After": String(retryAfter) });
 }
 
+// connect-src stays open because a wallet's injected code may call its own servers from this page.
+const ADMIN_CSP = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https: wss:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+const ADMIN_FILES: Record<string, string> = {
+  "/admin": "/admin/index.html",
+  "/admin/admin.js": "/admin/admin.js",
+  "/admin/admin.css": "/admin/admin.css",
+};
+
+/** The static admin page. It holds no secrets: the token is typed in, and every action is checked by the routes. */
+async function adminPage(request: Request, env: Env, path: string): Promise<Response> {
+  const file = ADMIN_FILES[path];
+  if (!file || !env.ASSETS) return json(request, { error: "not_found" }, 404);
+  if (request.method !== "GET") return json(request, { error: "method_not_allowed" }, 405);
+  const asset = await env.ASSETS.fetch(new URL(file, request.url).toString());
+  const headers = new Headers(asset.headers);
+  headers.set("Content-Security-Policy", ADMIN_CSP);
+  headers.set("X-Robots-Tag", "noindex, nofollow");
+  headers.set("Referrer-Policy", "no-referrer");
+  headers.set("X-Content-Type-Options", "nosniff");
+  headers.set("Cache-Control", "no-store");
+  return new Response(asset.body, { status: asset.status, headers });
+}
+
 async function route(request: Request, env: Env): Promise<Response> {
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: corsHeaders(request) });
@@ -52,6 +75,8 @@ async function route(request: Request, env: Env): Promise<Response> {
   if (path.startsWith("/recall/")) {
     return (await limited(request, "recall", LIMITS.recall)) ?? recallRoute(request, env, path);
   }
+
+  if (path === "/admin" || path.startsWith("/admin/")) return adminPage(request, env, path);
 
   if (path.startsWith("/stake/")) {
     return (await limited(request, "stake", LIMITS.stake)) ?? stakeRoute(request, env, path);

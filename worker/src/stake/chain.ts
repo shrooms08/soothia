@@ -1,17 +1,19 @@
 // Soothia staking: everything the Worker asks of Sui, through Tatum's gRPC gateway.
 // The routes and the sweep depend on this interface, so tests can fake the chain.
-// RESOLVER_KEY signs here and nowhere else in the Worker.
+// RESOLVER_KEY signs here and nowhere else in the Worker. The commit wallet also signs
+// here, only for the two drill steps that need a staker.
 
 import { bcs } from "@mysten/sui/bcs";
+import type { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
 import type { Transaction } from "@mysten/sui/transactions";
 import { toBase64 } from "@mysten/sui/utils";
 import type { RecallEnv } from "../recall/env";
-import { bytesToHex, hexToBytes, resolverKeypair, tatumConfigured } from "../recall/sui";
+import { bytesToHex, commitKeypair, hexToBytes, resolverKeypair, tatumConfigured } from "../recall/sui";
 import { tatumSuiClient } from "../recall/tatumGrpc";
-import { PoolCreatedBcs, readConfig, readPool, readPosition, StakedBcs, type StakeConfig, type StakePool, type StakePosition } from "./readers";
-import { buildCollectFee, buildCreatePool, buildResolve, buildVoid, type StakeIds } from "./transactions";
+import { ClaimedBcs, PoolCreatedBcs, readConfig, readPool, readPosition, StakedBcs, type StakeConfig, type StakePool, type StakePosition } from "./readers";
+import { buildClaim, buildCollectFee, buildCreatePool, buildResolve, buildStake, buildVoid, type StakeIds } from "./transactions";
 
-const RESOLVER_GAS_BUDGET = 20_000_000;
+const WORKER_GAS_BUDGET = 20_000_000;
 const SETTLE_MS = 30_000;
 
 export interface StakedEvent {
@@ -44,6 +46,11 @@ export interface StakeChain {
   resolvePool(poolId: string, outcomeYes: boolean, evidence: string): Promise<string>;
   voidPool(poolId: string): Promise<string>;
   collectFee(poolId: string): Promise<string>;
+  /** The address that owns an object, or null for a shared or wrapped one. */
+  objectOwner(objectId: string): Promise<string | null>;
+  gasWalletAddress(): string | null;
+  stakeFromGasWallet(poolId: string, amount: bigint, pickHash: string): Promise<string>;
+  claimFromGasWallet(poolId: string): Promise<{ digest: string; amount: bigint }>;
 }
 
 export interface StakeSettings extends StakeIds {
@@ -65,19 +72,21 @@ export function tatumStakeChain(env: RecallEnv, settings: StakeSettings): StakeC
   const client = tatumSuiClient(env.TATUM_API_KEY.trim());
   const stakedType = `${settings.packageId}::pool::Staked`;
 
-  async function asResolver(tx: Transaction) {
-    const signer = resolverKeypair(env);
-    if (!signer) throw new Error("resolver_not_configured");
+  async function signAndSend(signer: Ed25519Keypair | null, tx: Transaction, missing: string) {
+    if (!signer) throw new Error(missing);
     tx.setSender(signer.toSuiAddress());
-    tx.setGasBudget(RESOLVER_GAS_BUDGET);
+    tx.setGasBudget(WORKER_GAS_BUDGET);
     const result = await client.core.signAndExecuteTransaction({ transaction: tx, signer, include: { events: true } });
     if (result.$kind === "FailedTransaction") {
-      throw new Error(`resolver_tx_failed: ${JSON.stringify(result.FailedTransaction.status.error).slice(0, 200)}`);
+      throw new Error(`tx_failed: ${JSON.stringify(result.FailedTransaction.status.error).slice(0, 200)}`);
     }
     // Lets the gas coin and the cap settle before the next transaction reads them.
     await client.core.waitForTransaction({ result, timeout: SETTLE_MS }).catch(() => undefined);
     return result.Transaction;
   }
+
+  const asResolver = (tx: Transaction) => signAndSend(resolverKeypair(env), tx, "resolver_not_configured");
+  const asGasWallet = (tx: Transaction) => signAndSend(commitKeypair(env), tx, "gas_wallet_not_configured");
 
   return {
     readConfig: () => readConfig(client, settings.configId),
@@ -153,6 +162,24 @@ export function tatumStakeChain(env: RecallEnv, settings: StakeSettings): StakeC
 
     async collectFee(poolId) {
       return (await asResolver(buildCollectFee(settings, { poolId }))).digest;
+    },
+
+    async objectOwner(objectId) {
+      const { object } = await client.core.getObject({ objectId });
+      return object.owner.$kind === "AddressOwner" ? object.owner.AddressOwner : null;
+    },
+
+    gasWalletAddress: () => commitKeypair(env)?.toSuiAddress() ?? null,
+
+    async stakeFromGasWallet(poolId, amount, pickHash) {
+      return (await asGasWallet(buildStake(settings, { poolId, side: true, amount, pickHash }))).digest;
+    },
+
+    async claimFromGasWallet(poolId) {
+      const result = await asGasWallet(buildClaim(settings, { poolId }));
+      const claimed = result.events.find((event) => event.eventType === `${settings.packageId}::pool::Claimed`);
+      if (!claimed) throw new Error(`claimed without an event: ${result.digest}`);
+      return { digest: result.digest, amount: BigInt(ClaimedBcs.parse(claimed.bcs).amount) };
     },
   };
 }

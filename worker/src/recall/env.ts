@@ -22,4 +22,6 @@ export interface RecallEnv {
   STAKE_PACKAGE?: string;
   STAKE_CONFIG?: string;
   STAKE_RESOLVER_CAP?: string;
+  /** The AdminCap's id, so its owner can be read. The cap itself stays in the operator's wallet. */
+  STAKE_ADMIN_CAP?: string;
 }

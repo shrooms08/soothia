@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Soothia admin</title>
+    <link rel="stylesheet" href="/admin/admin.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Soothia admin</h1>
+
+      <section>
+        <h2>1. Admin token</h2>
+        <p class="hint">Kept in this tab only, and cleared when the tab closes.</p>
+        <div class="row">
+          <input id="token" type="password" autocomplete="off" spellcheck="false" placeholder="ADMIN_TOKEN" aria-label="Admin token" />
+          <button id="save-token" type="button">Use token</button>
+        </div>
+        <p id="token-status" class="status" role="status"></p>
+      </section>
+
+      <section>
+        <h2>2. Wallet</h2>
+        <div class="row" id="wallet-actions">
+          <button id="connect" type="button">Connect Sui wallet</button>
+        </div>
+        <p id="wallet-status" class="status" role="status"></p>
+        <p id="config-status" class="status"></p>
+      </section>
+
+      <section>
+        <h2>3. Challenge windows</h2>
+        <div class="row"><button id="refresh" type="button">Refresh</button></div>
+        <p id="pending-status" class="status" role="status"></p>
+        <div id="pending"></div>
+      </section>
+
+      <div id="drill-root"></div>
+    </main>
+    <script src="/admin/admin.js"></script>
+  </body>
+</html>

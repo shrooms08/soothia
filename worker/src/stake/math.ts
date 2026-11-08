@@ -4,6 +4,10 @@
 
 const BPS_DENOMINATOR = 10_000n;
 
+/** The delays real pools must be created with. */
+export const PROD_MIN_RESOLVE_DELAY_MS = 8_100_000n;
+export const PROD_CHALLENGE_MS = 21_600_000n;
+
 export function feeOn(total: bigint, feeBps: bigint): bigint {
   return (total * feeBps) / BPS_DENOMINATOR;
 }

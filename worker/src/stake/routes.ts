@@ -8,30 +8,26 @@ import type { RecallStore } from "../recall/memory";
 import { mergePicks } from "../recall/picks";
 import type { PickRecord, Side, StakeRecord } from "../recall/records";
 import { identify, storeFor } from "../recall/routes";
-import { resolverKeypair } from "../recall/sui";
 import { cacheGet, cachePut, kvPut } from "../store";
+import { ADMIN_ROUTES } from "./admin";
 import { stakeSettings, tatumStakeChain, type StakeChain, type StakeSettings } from "./chain";
+import { abortCodeOf, clearPoolCreation, parseAddress, refuse, StakeRefusal, type Context } from "./context";
 import { flipSubject, poolIdentity, type PoolFixture, type PoolIdentity, type Subject } from "./identity";
-import { claimOpensAtMs, inChallengeWindow, multiplierAfterFee, poolTotals } from "./math";
+import { claimOpensAtMs, inChallengeWindow, multiplierAfterFee, poolTotals, PROD_CHALLENGE_MS, PROD_MIN_RESOLVE_DELAY_MS } from "./math";
 import { viewPosition } from "./positions";
 import type { StakeConfig, StakePool } from "./readers";
-import { acquireResolverLock, poolIndexKey, releaseResolverLock, STAKE_LOG_KEY, STAKE_POOL_PREFIX, writePoolIndex, type PoolIndexEntry, type PoolIndexMeta } from "./sweep";
+import { poolIndexKey, releaseResolverLock, STAKE_LOG_KEY, STAKE_POOL_PREFIX, writePoolIndex, type PoolIndexEntry, type PoolIndexMeta } from "./sweep";
 import { buildClaim, buildStake } from "./transactions";
 
 const STAKE_GAS_BUDGET = 20_000_000;
 const CLAIM_GAS_BUDGET = 20_000_000;
 const MIN_KICKOFF_LEAD_MS = 120_000;
 const POOL_CACHE_SEC = 15;
-export const POOL_CREATE_DAILY_CAP = 30;
-const POOL_CAP_TTL_SEC = 2 * 86_400;
-/** 0.05 SUI: pool creation stops here, so the rest still pays to resolve existing pools. */
-export const RESOLVER_MIN_BALANCE_MIST = 50_000_000n;
 // Each position takes two reads, and one request has a limited number of outbound calls.
 const MAX_POSITIONS = 20;
 const MAX_PENDING = 20;
 const STAKE_ADDRESS_PREFIX = "stakeaddr:";
 
-const ADDRESS = /^0x[0-9a-f]{64}$/i;
 const DIGEST = /^[1-9A-HJ-NP-Za-km-z]{43,44}$/;
 const AMOUNT = /^[1-9][0-9]{0,18}$/;
 
@@ -43,26 +39,7 @@ export interface StakeDeps {
   now?: () => number;
 }
 
-class StakeRefusal extends Error {
-  constructor(
-    readonly status: number,
-    readonly code: string,
-    readonly extra: Record<string, unknown> = {},
-  ) {
-    super(code);
-  }
-}
-
-const refuse = (status: number, code: string, extra: Record<string, unknown> = {}): never => {
-  throw new StakeRefusal(status, code, extra);
-};
-
 const shortString = (value: unknown, max: number): value is string => typeof value === "string" && value.trim().length > 0 && value.length <= max;
-
-function parseAddress(value: unknown, code: string): string {
-  if (typeof value !== "string" || !ADDRESS.test(value)) refuse(400, code);
-  return (value as string).toLowerCase();
-}
 
 function parseAmount(value: unknown): bigint {
   const text = typeof value === "number" && Number.isSafeInteger(value) ? String(value) : value;
@@ -93,16 +70,6 @@ const poolCacheKey = (questionHash: string): string => `stake:pool:${questionHas
 
 /** Forgets a cached pool view, because a stake or a new pool has changed it. */
 const forgetPool = (questionHash: string): Promise<void> => cachePut(poolCacheKey(questionHash), null, 1);
-
-interface Context {
-  request: Request;
-  env: Env;
-  chain: StakeChain;
-  settings: StakeSettings;
-  fetcher: ScoreboardFetcher;
-  nowMs: number;
-  store: (userKey: string) => RecallStore;
-}
 
 async function poolRoute(context: Context): Promise<Response> {
   const body = (await readJsonObject(context.request)) ?? refuse(400, "invalid_body");
@@ -170,19 +137,6 @@ function checkStakeLimits(config: StakeConfig, pool: StakePool | null, held: { s
   if ((pool ? pool.yes + pool.no : 0n) + amount > config.maxPool) refuse(409, "pool_full", { maxPoolMist: config.maxPool.toString() });
 }
 
-/** Uses up one of today's pool creations. Refuses when KV cannot say it is safe. */
-async function reservePoolCreation(env: Env, nowMs: number): Promise<void> {
-  const key = `stakecap:${new Date(nowMs).toISOString().slice(0, 10)}:pools`;
-  let used: number;
-  try {
-    used = Number(await env.SOOTHIA_CACHE.get(key)) || 0;
-  } catch {
-    return refuse(503, "kv_unavailable");
-  }
-  if (used >= POOL_CREATE_DAILY_CAP) refuse(429, "pool_cap_reached");
-  if (!(await kvPut(env, key, String(used + 1), { expirationTtl: POOL_CAP_TTL_SEC }))) refuse(503, "kv_unavailable");
-}
-
 /**
  * The real fixture from ESPN. A pick's kickoff comes from the page the user was on,
  * and a pool closes at kickoff: a pool with a late close could be staked on after the
@@ -218,12 +172,10 @@ async function createPool(
   config: StakeConfig,
 ): Promise<string> {
   const { env, chain } = context;
-  const resolver = resolverKeypair(env);
-  if (!resolver) return refuse(503, "resolver_not_configured");
+  // Pools copy the delays when created. While a drill has them shortened, a real pool must wait.
+  if (config.minResolveDelayMs !== PROD_MIN_RESOLVE_DELAY_MS || config.challengeMs !== PROD_CHALLENGE_MS) refuse(503, "staking_paused");
   const located = await verifiedFixture(context, pick.fixture);
-  if ((await chain.balanceOf(resolver.toSuiAddress())) < RESOLVER_MIN_BALANCE_MIST) refuse(503, "resolver_low_balance");
-  await reservePoolCreation(env, context.nowMs);
-  if (!(await acquireResolverLock(env))) refuse(503, "resolver_busy");
+  await clearPoolCreation(context);
 
   const closeMs = BigInt(Date.parse(located.event.startISO));
   let poolId: string;
@@ -240,10 +192,6 @@ async function createPool(
   await writePoolIndex(env, indexEntry(poolId, identity.questionHash, pick, located), { phase: "open", dueMs: Number(closeMs + config.minResolveDelayMs) });
   await forgetPool(identity.questionHash);
   return poolId;
-}
-
-function abortCodeOf(error: unknown): string | null {
-  return /abort code: (\d+)/i.exec(String((error as Error)?.message ?? error))?.[1] ?? null;
 }
 
 async function buildRoute(context: Context, userKey: string): Promise<Response> {
@@ -459,8 +407,9 @@ const USER_ROUTES = ["POST /stake/pool", "POST /stake/build", "POST /stake/confi
 export async function stakeRoute(request: Request, env: Env, path: string, deps: StakeDeps = {}): Promise<Response> {
   try {
     const route = `${request.method} ${path}`;
-    const admin = route === "GET /stake/admin/pending";
-    // Without the admin header this path does not exist.
+    const adminRoute = route === "GET /stake/admin/pending" ? adminPendingRoute : ADMIN_ROUTES[route];
+    const admin = adminRoute !== undefined;
+    // Without the admin header these paths do not exist.
     if (admin ? !isAdmin(request, env) : !USER_ROUTES.includes(route)) return json(request, { error: "not_found" }, 404);
 
     const user = admin ? "" : await identify(request);
@@ -478,6 +427,8 @@ export async function stakeRoute(request: Request, env: Env, path: string, deps:
       store: (userKey) => deps.store ?? storeFor(env, userKey),
     };
 
+    if (adminRoute) return await adminRoute(context);
+
     switch (route) {
       case "POST /stake/pool":
         return await poolRoute(context);
@@ -487,10 +438,8 @@ export async function stakeRoute(request: Request, env: Env, path: string, deps:
         return await confirmRoute(context, user);
       case "GET /stake/positions":
         return await positionsRoute(context);
-      case "POST /stake/claim/build":
-        return await claimBuildRoute(context);
       default:
-        return await adminPendingRoute(context);
+        return await claimBuildRoute(context);
     }
   } catch (error) {
     if (error instanceof StakeRefusal) return json(request, { error: error.code, ...error.extra }, error.status);

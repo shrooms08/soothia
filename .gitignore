@@ -23,5 +23,8 @@ design/tools/.orb-frames/
 # Total Recall local backups
 .recall-local
 
+# Admin page bundle, built by worker/scripts/build-admin.mjs
+worker/public
+
 # Move build output
 move/*/build/
