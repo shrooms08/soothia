@@ -562,6 +562,7 @@ test("positions list the match, side, status and estimated payout", async () => 
         amountMist: "1000000000",
         estimatedPayoutMist: "1485000000",
         claimOpensAtMs: null,
+        result: null,
       },
     ],
     truncated: false,

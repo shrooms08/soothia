@@ -230,6 +230,10 @@ export function stakeErrorText(status: number, body: StakeErrorBody | null): { t
       return { text: "ESPN doesn't list this match for that day, so it can't have a pool.", retry: false };
     case "pick_not_found":
       return { text: "Soothia can't find this call on your record yet. Try again in a minute.", retry: true };
+    case "not_claimable":
+      return { text: "This can't be claimed yet.", retry: false };
+    case "no_position":
+      return { text: "This wallet has no stake in that pool.", retry: false };
     case "pick_not_committed":
       return { text: "This call has no proof on Sui, so it can't be backed.", retry: false };
     default:
@@ -238,8 +242,8 @@ export function stakeErrorText(status: number, body: StakeErrorBody | null): { t
 }
 
 /** A wallet or bridge failure in plain words. */
-export function walletErrorText(message: string): { text: string; retry: boolean } {
-  if (/reject|denied|declined|cancel/i.test(message)) return { text: "You cancelled in your wallet. Nothing was staked.", retry: true };
+export function walletErrorText(message: string, nothingHappened = "Nothing was staked."): { text: string; retry: boolean } {
+  if (/reject|denied|declined|cancel/i.test(message)) return { text: `You cancelled in your wallet. ${nothingHappened}`, retry: true };
   if (/insufficient|not enough|no valid gas|gas (coin|balance)/i.test(message)) return { text: "Your wallet doesn't have enough SUI to cover this and gas.", retry: true };
   if (/did not respond in time/i.test(message)) return { text: "Your wallet didn't answer in time. If you approved it, check your wallet before trying again.", retry: true };
   if (/^Transaction refused\./.test(message)) return { text: `${message} Nothing was sent to your wallet.`, retry: false };

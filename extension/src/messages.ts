@@ -203,6 +203,18 @@ export interface RecallRecordPick {
   brier: number | null;
   commit: { digest: string; explorerUrl: string } | null;
   commitSkipped: CommitSkipReason | null;
+  /** Missing on a Worker older than this extension. */
+  stake?: RecallPickStake | null;
+}
+
+export interface RecallPickStake {
+  poolId: string;
+  side: "YES" | "NO";
+  amountMist: string;
+  status: "open" | "awaiting_result" | "challenge_window" | "claimable" | "lost" | "refundable" | "claimed" | null;
+  payoutMist: string | null;
+  claimOpensAtMs: number | null;
+  digests: string[];
 }
 
 export interface RecallRecord {

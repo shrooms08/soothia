@@ -1,7 +1,20 @@
 // The My record tab: what the user has called, how it went, and the proof on Sui.
 import { button, el, externalLink, icon } from "./dom";
 import type { ApiError, ApiPath, ApiResponse, RecallCalled, RecallProof, RecallRecord, RecallRecordPick } from "./messages";
-import { pickLean, proofText, recordHeadline, shortId, skipReasonText } from "./recall-logic";
+import { leanSide, pickLean, proofText, recordHeadline, shortId, skipReasonText } from "./recall-logic";
+import {
+  formatSui,
+  isClaimable,
+  positionStatusText,
+  signedSui,
+  stakeErrorText,
+  walletErrorText,
+  walletSummary,
+  type StakeErrorBody,
+  type StakePositionView,
+} from "./stake-logic";
+import type { WalletAccess } from "./wallet-access";
+import type { ConnectedWallet } from "./wallet-protocol";
 
 export interface RecordHost {
   api<T>(path: ApiPath, body: unknown): Promise<ApiResponse<T | ApiError>>;
@@ -10,7 +23,11 @@ export interface RecordHost {
   quietSites(): string[];
   /** Asks Soothia to show calls on a site again. False when that failed. */
   unquiet(site: string): Promise<boolean>;
+  /** Missing where the record is shown without a wallet. */
+  wallet?: WalletAccess;
 }
+
+const when = (ms: number): string => new Date(ms).toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" });
 
 const EMPTY_TEXT = "No calls yet. Open a match page and tap Call it.";
 
@@ -63,6 +80,25 @@ function teamTable(entities: RecallRecord["summary"]["entities"]): HTMLElement {
 
 type ApiHost = Pick<RecordHost, "api" | "layout">;
 
+function walletStats(wallet: ConnectedWallet, positions: StakePositionView[]): HTMLElement {
+  const summary = walletSummary(positions);
+  const stat = (label: string, value: string): HTMLElement => {
+    const node = el("span", "wallet-stat");
+    node.append(el("b", "", value), label);
+    return node;
+  };
+  const grid = el("div", "wallet-stats");
+  grid.append(
+    stat("staked", `${formatSui(summary.stakedMist, 4)} SUI`),
+    stat("won", `${formatSui(summary.wonMist, 4)} SUI`),
+    stat("lost", `${formatSui(summary.lostMist, 4)} SUI`),
+    stat("profit or loss", summary.profitMist === null ? "\u2014" : signedSui(summary.profitMist)),
+    stat("ROI", summary.roiPercent === null ? "\u2014" : `${summary.roiPercent.toFixed(1)}%`),
+    stat("best multiplier", summary.bestMultiplier === null ? "\u2014" : `${summary.bestMultiplier.toFixed(2)}x`),
+  );
+  return section(`Wallet ${shortId(wallet.address)}`, grid);
+}
+
 /** The Proof link and the line that shows its result. */
 export function proofLink(pickId: string, host: ApiHost): { link: HTMLButtonElement; result: HTMLElement } {
   const result = el("span", "note proof-result");
@@ -98,6 +134,11 @@ export function calledRow(called: RecallCalled, host: ApiHost): HTMLElement {
   return row;
 }
 
+function stakeFromRecord(pick: RecallRecordPick): Pick<StakePositionView, "amountMist" | "estimatedPayoutMist" | "claimOpensAtMs"> & { status: StakePositionView["status"] | null } {
+  const stake = pick.stake as NonNullable<RecallRecordPick["stake"]>;
+  return { amountMist: stake.amountMist, status: stake.status, estimatedPayoutMist: stake.payoutMist ?? "0", claimOpensAtMs: stake.claimOpensAtMs };
+}
+
 export function createRecordView(pane: HTMLElement, host: RecordHost): { render(): Promise<void> } {
   let seq = 0;
 
@@ -112,7 +153,57 @@ export function createRecordView(pane: HTMLElement, host: RecordHost): { render(
     return row;
   }
 
-  function callRow(pick: RecallRecordPick): HTMLElement {
+  /** Claims from the connected wallet. The checker sees the bytes before the wallet does. */
+  async function claim(position: StakePositionView, wallet: ConnectedWallet, control: HTMLButtonElement, note: HTMLElement): Promise<void> {
+    const report = (text: string, bad = false): void => {
+      note.textContent = text;
+      note.classList.toggle("bad", bad);
+      host.layout();
+    };
+    control.disabled = true;
+    report("Preparing your claim\u2026");
+    const built = await host.api<{ txBytes: string }>("/stake/claim/build", { poolId: position.poolId, sender: wallet.address });
+    if (!built.ok || !built.body) {
+      const { text, retry } = stakeErrorText(built.status, built.body as StakeErrorBody | null);
+      report(text, true);
+      control.disabled = !retry;
+      return;
+    }
+    report("Waiting for your wallet\u2026");
+    try {
+      const { digest } = await host.wallet!.sign(wallet, (built.body as { txBytes: string }).txBytes, { kind: "claim", poolId: position.poolId });
+      control.hidden = true;
+      report(`Claimed ${formatSui(position.estimatedPayoutMist, 4)} SUI. Proof: `);
+      note.append(externalLink(`${digest.slice(0, 8)}\u2026`, `https://suivision.xyz/txblock/${encodeURIComponent(digest)}`, "link ext"));
+      host.layout();
+    } catch (error) {
+      const { text, retry } = walletErrorText(String((error as Error)?.message ?? error), "Nothing was claimed.");
+      report(text, true);
+      control.disabled = !retry;
+    }
+  }
+
+  function stakeControl(pick: RecallRecordPick, position: StakePositionView | undefined, wallet: ConnectedWallet | null): HTMLElement | null {
+    const known = position ?? (pick.stake ? stakeFromRecord(pick) : null);
+    if (!known) return null;
+    const block = el("div", "stake-block");
+    const summaryText = `Staked ${formatSui(known.amountMist, 4)} SUI on ${leanSide(pick)}`;
+    const status = known.status ? ` \u00b7 ${positionStatusText({ ...known, status: known.status }, when)}` : "";
+    block.append(el("span", "stake-text", `${summaryText}${status}`));
+    const note = el("p", "stake-claim-note");
+    if (isClaimable(known.status)) {
+      if (position && wallet && host.wallet) {
+        const control: HTMLButtonElement = button("Claim", "button small", () => void claim(position, wallet, control, note));
+        block.append(control);
+      } else {
+        note.textContent = "Connect your wallet in settings to claim.";
+      }
+    }
+    block.append(note);
+    return block;
+  }
+
+  function callRow(pick: RecallRecordPick, positions: Map<string, StakePositionView>, wallet: ConnectedWallet | null): HTMLElement {
     const row = el("div", "tile record-call");
     const title = pick.fixture ? `${pick.fixture.home} vs ${pick.fixture.away}` : pick.question;
     const status = el(
@@ -124,6 +215,8 @@ export function createRecordView(pane: HTMLElement, host: RecordHost): { render(
     line.append(status, el("span", "position-text", pickLean(pick)));
     row.append(el("p", "record-match", title), line);
     if (pick.detail) row.append(el("p", "note", pick.detail));
+    const stake = stakeControl(pick, positions.get(pick.id), wallet);
+    if (stake) row.append(stake);
     row.append(proofControl(pick));
     return row;
   }
@@ -171,6 +264,13 @@ export function createRecordView(pane: HTMLElement, host: RecordHost): { render(
     return row;
   }
 
+  async function loadPositions(): Promise<{ wallet: ConnectedWallet | null; positions: StakePositionView[] }> {
+    const wallet = (await host.wallet?.current().catch(() => null)) ?? null;
+    if (!wallet) return { wallet: null, positions: [] };
+    const response = await host.api<{ positions: StakePositionView[] }>("/stake/positions", { address: wallet.address });
+    return { wallet, positions: response.ok && response.body ? (response.body as { positions: StakePositionView[] }).positions : [] };
+  }
+
   async function render(): Promise<void> {
     const current = ++seq;
     pane.replaceChildren(host.state("watching", "Loading your record…"));
@@ -189,6 +289,9 @@ export function createRecordView(pane: HTMLElement, host: RecordHost): { render(
       host.layout();
       return;
     }
+    const { wallet, positions } = await loadPositions();
+    if (current !== seq) return;
+    const byPick = new Map(positions.map((position) => [position.pickId, position]));
     const record = response.body as RecallRecord;
     if (record.picks.length === 0) {
       pane.replaceChildren(host.state("empty", EMPTY_TEXT), ...quietSection(), ...accountFooter(record.account));
@@ -198,6 +301,7 @@ export function createRecordView(pane: HTMLElement, host: RecordHost): { render(
     const { summary } = record;
     pane.replaceChildren(
       refreshRow(),
+      ...(wallet ? [walletStats(wallet, positions)] : []),
       el("p", "record-headline", recordHeadline(summary)),
       ...(summary.calibration.length > 0 ? [section("Calibration", calibration(summary.calibration))] : []),
       ...(summary.entities.length > 0 ? [section("Teams", teamTable(summary.entities))] : []),
@@ -213,7 +317,7 @@ export function createRecordView(pane: HTMLElement, host: RecordHost): { render(
             ),
           ]
         : []),
-      section("Calls", ...record.picks.map(callRow)),
+      section("Calls", ...record.picks.map((pick) => callRow(pick, byPick, wallet))),
       ...quietSection(),
       ...accountFooter(record.account),
     );

@@ -200,3 +200,166 @@ test("a called tile with no commit has no Proof link", () => {
   assert.equal(row.querySelector("button"), null);
   assert.equal(row.textContent, "Your call: YES \u00b7 80%");
 });
+
+// ---- staking on the record ----
+
+const STAKER = `0x${"aa".repeat(32)}`;
+const POOL = `0x${"bb".repeat(32)}`;
+const CONNECTED = { address: STAKER, walletId: "slush", walletName: "Slush" };
+const D = "8teWqYrBWopnhq2Wy22BQq1uvzepDoUzDzdRA6oE8iY";
+
+const stakePick = (overrides: Partial<RecallRecord["picks"][number]> = {}): RecallRecord["picks"][number] => ({
+  id: "p_1",
+  at: "2026-11-08T12:00:00.000Z",
+  question: "Will Arsenal beat Chelsea?",
+  pYes: 0.7,
+  fixture: { home: "Arsenal", away: "Chelsea", subject: "home" },
+  status: "open",
+  detail: null,
+  brier: null,
+  commit: { digest: "D1", explorerUrl: "https://suivision.xyz/txblock/D1" },
+  commitSkipped: null,
+  ...overrides,
+});
+
+const position = (overrides: Record<string, unknown> = {}) => ({
+  poolId: POOL,
+  pickId: "p_1",
+  match: { home: "Arsenal", away: "Chelsea", startISO: "x", subject: "home" },
+  side: "YES",
+  status: "open",
+  amountMist: "500000000",
+  estimatedPayoutMist: "700000000",
+  claimOpensAtMs: null,
+  result: null,
+  ...overrides,
+});
+
+interface StakeHarnessOptions {
+  picks?: RecallRecord["picks"];
+  positions?: unknown[];
+  wallet?: typeof CONNECTED | null;
+  claimBuild?: ApiResponse<unknown>;
+  sign?: () => Promise<{ digest: string }>;
+}
+
+async function stakeRecord(options: StakeHarnessOptions = {}) {
+  const pane = window.document.createElement("div");
+  const asked: [string, unknown][] = [];
+  const signed: unknown[] = [];
+  const record: RecallRecord = { ...full, picks: options.picks ?? [stakePick()], lessons: [], account: null };
+  const host: RecordHost = {
+    layout: () => undefined,
+    state: (_kind, text) => {
+      const node = window.document.createElement("p");
+      node.textContent = text;
+      return node;
+    },
+    quietSites: () => [],
+    unquiet: async () => true,
+    wallet: {
+      current: async () => (options.wallet === undefined ? CONNECTED : options.wallet),
+      connect: async () => null,
+      sign: async (_wallet, txBytes, expected) => {
+        signed.push([txBytes, expected]);
+        return options.sign ? options.sign() : { digest: D };
+      },
+    },
+    api: (async (path: string, body: unknown) => {
+      asked.push([path, body]);
+      if (path === "/recall/record") return { ok: true, status: 200, body: record };
+      if (path === "/stake/positions") return { ok: true, status: 200, body: { positions: options.positions ?? [] } };
+      if (path === "/stake/claim/build") return options.claimBuild ?? { ok: true, status: 200, body: { txBytes: "BYTES" } };
+      return { ok: false, status: 404, body: null };
+    }) as RecordHost["api"],
+  };
+  await createRecordView(pane, host).render();
+  const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+  const claim = () => [...pane.querySelectorAll("button")].find((node) => node.textContent === "Claim");
+  return { pane, asked, signed, tick, claim, line: () => pane.querySelector(".stake-text")?.textContent, note: () => pane.querySelector(".stake-claim-note")?.textContent };
+}
+
+test("a staked call shows amount, side and status", async () => {
+  const r = await stakeRecord({ positions: [position()] });
+  assert.equal(r.line(), "Staked 0.5 SUI on Arsenal win \u00b7 Open");
+  assert.equal(r.claim(), undefined);
+});
+
+test("every status on the record reads in words", async () => {
+  const cases: [Record<string, unknown>, RegExp][] = [
+    [{ status: "awaiting_result" }, /Awaiting result/],
+    [{ status: "challenge_window", claimOpensAtMs: 1_794_200_000_000 }, /In challenge window until /],
+    [{ status: "claimable", result: "won" }, /Won 0\.7 SUI/],
+    [{ status: "lost", result: "lost", estimatedPayoutMist: "0" }, /Lost/],
+    [{ status: "refundable", result: "refunded", estimatedPayoutMist: "500000000" }, /Refund of 0\.5 SUI ready/],
+    [{ status: "claimed", result: "refunded", estimatedPayoutMist: "500000000" }, /Refunded 0\.5 SUI/],
+    [{ status: "claimed", result: "won" }, /Claimed 0\.7 SUI/],
+  ];
+  for (const [overrides, pattern] of cases) assert.match((await stakeRecord({ positions: [position(overrides)] })).line()!, pattern);
+});
+
+test("Claim builds, checks through the wallet, and shows the payout and digest", async () => {
+  const r = await stakeRecord({ positions: [position({ status: "claimable", result: "won" })] });
+  r.claim()!.click();
+  await r.tick();
+  await r.tick();
+  assert.deepEqual(r.asked.find(([path]) => path === "/stake/claim/build")?.[1], { poolId: POOL, sender: STAKER });
+  assert.deepEqual(r.signed, [["BYTES", { kind: "claim", poolId: POOL }]]);
+  assert.match(r.note()!, /Claimed 0\.7 SUI\. Proof:/);
+  assert.equal(r.pane.querySelector<HTMLAnchorElement>(".stake-claim-note a")?.href, `https://suivision.xyz/txblock/${D}`);
+  assert.equal(r.claim()!.hidden, true);
+});
+
+test("a refund is claimed the same way", async () => {
+  const r = await stakeRecord({ positions: [position({ status: "refundable", result: "refunded" })] });
+  assert.ok(r.claim());
+});
+
+test("cancelling a claim says nothing was claimed, and it can be retried", async () => {
+  const r = await stakeRecord({
+    positions: [position({ status: "claimable", result: "won" })],
+    sign: async () => {
+      throw new Error("User rejected");
+    },
+  });
+  r.claim()!.click();
+  await r.tick();
+  await r.tick();
+  assert.equal(r.note(), "You cancelled in your wallet. Nothing was claimed.");
+  assert.equal(r.claim()!.disabled, false);
+});
+
+test("a claim the Worker refuses never reaches the wallet", async () => {
+  const r = await stakeRecord({ positions: [position({ status: "claimable", result: "won" })], claimBuild: { ok: false, status: 409, body: { error: "not_claimable" } } });
+  r.claim()!.click();
+  await r.tick();
+  await r.tick();
+  assert.equal(r.note(), "This can't be claimed yet.");
+  assert.equal(r.signed.length, 0);
+});
+
+test("with no wallet connected the record still shows the stake, without a Claim button", async () => {
+  const stake = { poolId: POOL, side: "YES" as const, amountMist: "500000000", status: "claimable" as const, payoutMist: "700000000", claimOpensAtMs: null, digests: [D] };
+  const r = await stakeRecord({ wallet: null, picks: [stakePick({ stake })] });
+  assert.match(r.line()!, /Staked 0\.5 SUI on Arsenal win/);
+  assert.equal(r.claim(), undefined);
+  assert.equal(r.note(), "Connect your wallet in settings to claim.");
+  assert.equal(r.asked.some(([path]) => path === "/stake/positions"), false);
+  assert.equal(r.pane.querySelector(".wallet-stats"), null);
+});
+
+test("a connected wallet gets a summary at the top", async () => {
+  const r = await stakeRecord({
+    positions: [
+      position({ status: "claimed", result: "won", amountMist: "1000000000", estimatedPayoutMist: "1500000000" }),
+      position({ pickId: "p_2", status: "lost", result: "lost", amountMist: "500000000", estimatedPayoutMist: "0" }),
+    ],
+  });
+  const text = r.pane.querySelector(".wallet-stats")?.textContent ?? "";
+  for (const part of ["1.5 SUIstaked", "1.5 SUIwon", "0.5 SUIlost", "+0 SUIprofit or loss", "0.0%ROI", "1.50xbest multiplier"]) assert.ok(text.includes(part), part);
+  assert.ok(r.pane.firstElementChild?.nextElementSibling?.querySelector(".wallet-stats"));
+});
+
+test("a call with no stake shows no stake line", async () => {
+  assert.equal((await stakeRecord()).line(), undefined);
+});

@@ -98,3 +98,12 @@ export function positionStatus(pool: StakePoolView, position: StakePositionView,
   if (inChallengeWindow(pool, nowMs)) return "challenge_window";
   return position.side === pool.outcomeYes ? "claimable" : "lost";
 }
+
+export type PositionResult = "won" | "lost" | "refunded" | null;
+
+/** How a position ended. Null until the result is final: an overturn can still change it in the window. */
+export function positionResult(pool: StakePoolView, position: StakePositionView, nowMs: bigint): PositionResult {
+  if (pool.status === "void") return "refunded";
+  if (pool.status !== "resolved" || inChallengeWindow(pool, nowMs)) return null;
+  return position.side === pool.outcomeYes ? "won" : "lost";
+}

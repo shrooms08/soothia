@@ -4,7 +4,7 @@ import { test } from "node:test";
 import type { RecallEnv } from "../src/recall/env";
 import type { StakeRecord } from "../src/recall/records";
 import type { StakeChain } from "../src/stake/chain";
-import { estimatedPayout, multiplierAfterFee, poolTotals, positionStatus } from "../src/stake/math";
+import { estimatedPayout, multiplierAfterFee, poolTotals, positionResult, positionStatus } from "../src/stake/math";
 import { groupStakes, stakeSummaries, viewPosition } from "../src/stake/positions";
 import type { StakePool, StakePosition } from "../src/stake/readers";
 
@@ -62,6 +62,15 @@ test("every position status", () => {
   assert.equal(positionStatus(pool({ status: "void" }), noStake, OPENS), "refundable");
   assert.equal(positionStatus(resolved(), { ...yesStake, claimed: true }, OPENS), "claimed");
   assert.equal(positionStatus(pool({ status: "void" }), { ...noStake, claimed: true }, OPENS), "claimed");
+});
+
+test("a result is final only after the challenge window", () => {
+  assert.equal(positionResult(pool(), yesStake, CLOSE), null);
+  assert.equal(positionResult(resolved(), yesStake, OPENS - 1n), null);
+  assert.equal(positionResult(resolved(), yesStake, OPENS), "won");
+  assert.equal(positionResult(resolved(), noStake, OPENS), "lost");
+  assert.equal(positionResult(resolved(), { ...yesStake, claimed: true }, OPENS), "won");
+  assert.equal(positionResult(pool({ status: "void" }), noStake, OPENS), "refunded");
 });
 
 test("estimated payouts match the contract's sums", () => {

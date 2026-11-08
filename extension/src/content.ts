@@ -253,6 +253,9 @@ async function mount(): Promise<void> {
   const recordView = createRecordView(recordPane, {
     api,
     layout,
+    get wallet() {
+      return walletAccess;
+    },
     state: stateBlock,
     quietSites: () => quietSites,
     unquiet: async (site) => {

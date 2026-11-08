@@ -4,7 +4,7 @@
 import type { RecallEnv } from "../recall/env";
 import type { StakeRecord } from "../recall/records";
 import { stakeSettings, tatumStakeChain, type StakeChain } from "./chain";
-import { claimOpensAtMs, estimatedPayout, positionStatus, type PositionStatus } from "./math";
+import { claimOpensAtMs, estimatedPayout, positionResult, positionStatus, type PositionResult, type PositionStatus } from "./math";
 import type { StakePool, StakePosition } from "./readers";
 
 /** Each pick needs two reads, and the plan allows 3 a second. */
@@ -15,6 +15,7 @@ export interface PositionView {
   amountMist: string;
   estimatedPayoutMist: string;
   claimOpensAtMs: number | null;
+  result: PositionResult;
 }
 
 export function viewPosition(pool: StakePool, position: StakePosition, nowMs: number): PositionView {
@@ -24,6 +25,7 @@ export function viewPosition(pool: StakePool, position: StakePosition, nowMs: nu
     amountMist: position.amount.toString(),
     estimatedPayoutMist: estimatedPayout(pool, position).toString(),
     claimOpensAtMs: opens,
+    result: positionResult(pool, position, BigInt(nowMs)),
   };
 }
 
