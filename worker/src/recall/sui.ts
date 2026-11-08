@@ -23,9 +23,7 @@ export function tatumConfigured(env: RecallEnv): boolean {
   return Boolean(env.TATUM_API_KEY?.trim());
 }
 
-/** The key that pays for commits: SUI_COMMIT_KEY, else the Walrus Memory delegate key. */
-export function commitKeypair(env: RecallEnv): Ed25519Keypair | null {
-  const raw = (env.SUI_COMMIT_KEY?.trim() || env.MEMWAL_KEY?.trim()) ?? "";
+function keypairFrom(raw: string): Ed25519Keypair | null {
   if (!raw) return null;
   try {
     if (raw.startsWith("suiprivkey")) return Ed25519Keypair.fromSecretKey(decodeSuiPrivateKey(raw).secretKey);
@@ -35,6 +33,16 @@ export function commitKeypair(env: RecallEnv): Ed25519Keypair | null {
   } catch {
     return null;
   }
+}
+
+/** The key that pays for commits: SUI_COMMIT_KEY, else the Walrus Memory delegate key. */
+export function commitKeypair(env: RecallEnv): Ed25519Keypair | null {
+  return keypairFrom((env.SUI_COMMIT_KEY?.trim() || env.MEMWAL_KEY?.trim()) ?? "");
+}
+
+/** The key that holds the staking ResolverCap. Used only to create, resolve and void pools. */
+export function resolverKeypair(env: RecallEnv): Ed25519Keypair | null {
+  return keypairFrom(env.RESOLVER_KEY?.trim() ?? "");
 }
 
 export function commitConfigured(env: RecallEnv): boolean {

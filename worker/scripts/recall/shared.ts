@@ -43,6 +43,13 @@ export function setDevVar(name: string, value: string): void {
   writeFileSync(DEV_VARS, next);
 }
 
+/** Puts a comment line above a key in .dev.vars, once. */
+export function setDevVarComment(name: string, comment: string): void {
+  const text = readFileSync(DEV_VARS, "utf8");
+  if (text.includes(`# ${comment}\n${name}=`)) return;
+  writeFileSync(DEV_VARS, text.replace(new RegExp(`^${name}=`, "m"), `# ${comment}\n${name}=`));
+}
+
 export function loadEnv(): CliEnv {
   const vars = readDevVars();
   const missing = ["MEMWAL_ACCOUNT_ID", "MEMWAL_KEY", "RECALL_INSTALL_ID"].filter((name) => !vars[name]);
@@ -69,7 +76,7 @@ export async function openStore(env: CliEnv): Promise<RecallStore> {
 /** Removes any secret from text about to be printed. */
 export function scrub(text: string, env?: Partial<RecallEnv>): string {
   let clean = text;
-  for (const secret of [env?.MEMWAL_KEY, env?.TATUM_API_KEY, env?.SUI_COMMIT_KEY]) {
+  for (const secret of [env?.MEMWAL_KEY, env?.TATUM_API_KEY, env?.SUI_COMMIT_KEY, env?.RESOLVER_KEY]) {
     if (!secret) continue;
     clean = clean.split(secret).join("[redacted]");
     clean = clean.split(secret.replace(/^0x/, "")).join("[redacted]");

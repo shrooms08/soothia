@@ -30,6 +30,7 @@ Soothia is a Chrome MV3 extension (a floating orb on every page) where people ca
 - An updated pick keeps its original `at`, so use `mergePicks`, not `latestBy`, to pick a version.
 - Tatum's Sui JSON-RPC URL returns 404. Its gRPC gateway labels replies `application/grpc`, which is why the custom transport exists. The current plan allows 3 requests a second.
 - `/recall/pick` spends the commit wallet's SUI, so commits pass through `worker/src/recall/commitGuard.ts`. The CLI does not.
+- Staking keys are split: see `docs/staking-trust.md`. `RESOLVER_KEY` holds the ResolverCap and creates, resolves and voids pools. `commitKeypair` only pays for pick commits. The AdminCap and both UpgradeCaps are in the operator's Slush wallet, so scripts cannot use them.
 - KV allows 1,000 writes a day on the free tier. Every KV write goes through `kvPut`.
 - An anchor shows a call was made after a checkpoint. Only a Sui commit shows it was made before kickoff.
 
@@ -41,6 +42,6 @@ Soothia is a Chrome MV3 extension (a floating orb on every page) where people ca
 - Worker: `cd worker && npm install && npm run dev` (local), `npm run deploy` (production), `npm run typecheck`, `npm test`, `npm run build` (dry-run bundle)
 - Move: `cd move/<package> && sui move test`
 - Recall CLI: `cd worker && npx tsx scripts/recall/<lock|list|resolve|commit-existing|verify>.ts`
-- Stake CLI: `cd worker && npx tsx scripts/stake/<publish|smoke>.ts`
+- Stake CLI: `cd worker && npx tsx scripts/stake/<keygen|publish|smoke|handover>.ts`
 - Site Worker tests (security headers, redirect): `cd scripts && npm test`
 - `GET /debug/*` on soothia-proxy needs the `X-Soothia-Admin` header equal to the `ADMIN_TOKEN` secret; otherwise 404. `/detect` and `/recall/*` are limited per IP (`worker/src/ratelimit.ts`).

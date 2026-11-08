@@ -6,6 +6,9 @@ import type { CliEnv } from "../recall/shared";
 import { commitKeypair } from "../../src/recall/sui";
 import { tatumSuiClient } from "../../src/recall/tatumGrpc";
 
+export const PROD_MIN_RESOLVE_DELAY_MS = 8_100_000n;
+export const PROD_CHALLENGE_MS = 21_600_000n;
+
 const GAS_BUDGET = 50_000_000;
 const SETTLE_MS = 30_000;
 

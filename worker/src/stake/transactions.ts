@@ -9,13 +9,14 @@ export interface StakeIds {
 }
 
 const HASH_HEX = /^(0x)?[0-9a-f]{64}$/i;
+export const MAX_EVIDENCE_BYTES = 200;
 
 function hashBytes(name: string, hex: string): number[] {
   if (!HASH_HEX.test(hex)) throw new Error(`${name} must be 32 bytes of hex`);
   return Array.from(hexToBytes(hex));
 }
 
-const target = (ids: StakeIds, fn: string): `${string}::${string}::${string}` => `${ids.packageId}::pool::${fn}`;
+const target = (ids: Pick<StakeIds, "packageId">, fn: string): `${string}::${string}::${string}` => `${ids.packageId}::pool::${fn}`;
 
 export function buildCreatePool(ids: StakeIds, input: { resolverCap: string; questionHash: string; closeMs: bigint }): Transaction {
   const tx = new Transaction();
@@ -50,23 +51,61 @@ export function buildStake(ids: StakeIds, input: { poolId: string; side: boolean
   return tx;
 }
 
-export function buildResolve(ids: StakeIds, input: { resolverCap: string; poolId: string; outcomeYes: boolean }): Transaction {
+export function buildResolve(
+  ids: Pick<StakeIds, "packageId">,
+  input: { resolverCap: string; poolId: string; outcomeYes: boolean; evidence: string },
+): Transaction {
+  const evidence = Array.from(new TextEncoder().encode(input.evidence));
+  if (evidence.length > MAX_EVIDENCE_BYTES) throw new Error(`evidence must be at most ${MAX_EVIDENCE_BYTES} bytes`);
   const tx = new Transaction();
   tx.moveCall({
     target: target(ids, "resolve"),
     arguments: [
       tx.object(input.resolverCap),
-      tx.object(ids.configId),
       tx.object(input.poolId),
       tx.pure.bool(input.outcomeYes),
+      tx.pure.vector("u8", evidence),
       tx.object.clock(),
     ],
   });
   return tx;
 }
 
-export function buildClaim(ids: StakeIds, input: { poolId: string }): Transaction {
+export function buildClaim(ids: Pick<StakeIds, "packageId">, input: { poolId: string }): Transaction {
   const tx = new Transaction();
-  tx.moveCall({ target: target(ids, "claim"), arguments: [tx.object(input.poolId)] });
+  tx.moveCall({ target: target(ids, "claim"), arguments: [tx.object(input.poolId), tx.object.clock()] });
+  return tx;
+}
+
+/** Sends a resolved pool's fee to the treasury after the challenge window. Anyone can call it. */
+export function buildCollectFee(ids: StakeIds, input: { poolId: string }): Transaction {
+  const tx = new Transaction();
+  tx.moveCall({
+    target: target(ids, "collect_fee"),
+    arguments: [tx.object(ids.configId), tx.object(input.poolId), tx.object.clock()],
+  });
+  return tx;
+}
+
+export function buildOverturn(ids: Pick<StakeIds, "packageId">, input: { adminCap: string; poolId: string }): Transaction {
+  const tx = new Transaction();
+  tx.moveCall({
+    target: target(ids, "overturn"),
+    arguments: [tx.object(input.adminCap), tx.object(input.poolId), tx.object.clock()],
+  });
+  return tx;
+}
+
+export function buildSetDelays(ids: StakeIds, input: { adminCap: string; minResolveDelayMs: bigint; challengeMs: bigint }): Transaction {
+  const tx = new Transaction();
+  tx.moveCall({
+    target: target(ids, "set_delays"),
+    arguments: [
+      tx.object(input.adminCap),
+      tx.object(ids.configId),
+      tx.pure.u64(input.minResolveDelayMs),
+      tx.pure.u64(input.challengeMs),
+    ],
+  });
   return tx;
 }
