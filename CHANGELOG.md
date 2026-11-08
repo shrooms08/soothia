@@ -28,6 +28,7 @@ Branch `total-recall`. A local CLI that locks football predictions as memories o
 - The staking sweep voids a pool whose match ESPN has not marked final 72 hours after kickoff.
 - Sui wallet connection in the extension (0.12.0): a page-world bridge finds wallets through the Wallet Standard, with Connect and Disconnect in settings. Every transaction is decoded and checked in the background worker before a wallet can be asked to sign, and only an exact stake or claim is allowed.
 - Admin page at `/admin`, served by the Worker and not indexed: connect the AdminCap wallet, see every challenge window with its time left, and overturn. New admin routes `GET /stake/admin/info`, `POST /stake/admin/overturn/build` and `POST /stake/admin/config/build` return unsigned bytes for the AdminCap holder. New real pools are refused while the delays are not the production values.
+- Extension 0.13.0 with the staking screens.
 - A user's first confirmed stake writes a `wallet_link` memory on Walrus, recording which Sui address is theirs.
 - My record shows each staked call's amount, side and status, a Claim button when there is something to claim, and a wallet summary (staked, won, lost, profit or loss, ROI, best multiplier) when a wallet is connected.
 - Back it sheet (`extension/src/back-sheet.ts`): choose an amount, see the live multiplier, and stake from a Sui wallet on your own side of the call. Every transaction goes through the checker first. New route `GET /stake/balance`.
