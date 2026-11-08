@@ -15,6 +15,7 @@ Branch `total-recall`. A local CLI that locks football predictions as memories o
 - On-chain commits through Tatum gRPC: `publish.ts`, `commit-existing.ts`, `verify.ts`, and `lock.ts` commits each new pick.
 - Worker routes under `/recall/*` (status, record, proof, insights, pick, pref, resolve) and a cron sweep that settles open picks every 15 minutes.
 - Spending guard on `/recall/pick` commits: daily caps per user (5, or 30 for `RECALL_OWNER_KEYS`) and overall (50), a 0.05 SUI balance floor, and no commit when KV fails. A skipped pick is still saved, with `commitSkipped` saying why.
+- Extension 0.10.0: insights on tiles, a Call it sheet with a calibration nudge, a My record tab with on-chain proof, Quiet here per site, and a Link record field in settings. The betting flow is unchanged.
 
 ## [Unreleased]
 

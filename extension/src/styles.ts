@@ -298,6 +298,7 @@ export const STYLES = `
 .close:hover { background: var(--sth-surface-3); color: var(--sth-text); }
 .close svg { display: block; }
 .head-actions { display: flex; align-items: center; gap: 2px; }
+.close.quiet[hidden] { display: none; }
 
 /* First-run speech bubble, attached to the orb. */
 .bubble {

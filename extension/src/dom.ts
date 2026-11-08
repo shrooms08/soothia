@@ -99,7 +99,7 @@ export function starSvg(className = "star"): HTMLElement {
 }
 
 /** A small inline icon from the sheet: close, refresh, warning. */
-export function icon(name: "close" | "refresh" | "warn" | "sound" | "muted"): SVGElement {
+export function icon(name: "close" | "refresh" | "warn" | "sound" | "muted" | "quiet"): SVGElement {
   const svg = document.createElementNS(SVG_NS, "svg");
   svg.setAttribute("aria-hidden", "true");
   const paths: Record<typeof name, [string, string]> = {
@@ -115,6 +115,10 @@ export function icon(name: "close" | "refresh" | "warn" | "sound" | "muted"): SV
     muted: [
       "14",
       `<path d="M2 5.5v3h2.2L7.5 11V3L4.2 5.5H2z" fill="currentColor"/><path d="M9.3 5.2l3.4 3.6M12.7 5.2l-3.4 3.6" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/>`,
+    ],
+    quiet: [
+      "14",
+      `<path d="M11.8 8.9A5.2 5.2 0 0 1 5.1 2.2a5.2 5.2 0 1 0 6.7 6.7z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/>`,
     ],
     warn: [
       "16",

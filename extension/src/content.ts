@@ -50,7 +50,15 @@ import {
 } from "./messages";
 import { readPage, type ReadInfo } from "./reader";
 import { createRecordView } from "./record-view";
-import { isRecallId, leanLabel, sortByRelevance, visibleNotes } from "./recall-logic";
+import {
+  isQuietableSite,
+  isRecallId,
+  leanLabel,
+  mergeQuietSites,
+  sortByRelevance,
+  visibleNotes,
+  type QuietPending,
+} from "./recall-logic";
 import { openBetSheet } from "./bet-sheet";
 import { openCallSheet } from "./call-sheet";
 import { openSheet, type CreateDebug, type PendingCreate, type Sheet } from "./sheet";
@@ -73,6 +81,8 @@ const SKIP_CHECKS_KEY = "soothia:skipChecks";
 const PENDING_KEY = "soothia:pendingCreate";
 const MUTED_KEY = "soothia:muted";
 const STYLE_KEY = "soothia:sfxStyle";
+const QUIET_SITES_KEY = "soothia.quietSites";
+const QUIET_PENDING_KEY = "soothia.quietPending";
 // Set once the first-run speech bubble has been dismissed.
 const BUBBLE_KEY = "soothia:bubbleShown";
 const BUBBLE_DELAY_MS = 1500;
@@ -96,6 +106,7 @@ type View =
   | { kind: "tiles"; tiles: Tile[] }
   | { kind: "empty" }
   | { kind: "skipped" }
+  | { kind: "quiet" }
   | { kind: "error"; reason: "limit" | "unavailable" | "updated" };
 
 // Everything the debug footer shows about the last scan of this URL.
@@ -334,8 +345,12 @@ async function mount(): Promise<void> {
     api,
     layout,
     state: stateBlock,
-    quietSites: () => [],
-    unquiet: async () => false,
+    quietSites: () => quietSites,
+    unquiet: async (site) => {
+      const done = await setSiteQuiet(site, false);
+      if (done && site === hereSite()) resumeAfterQuiet();
+      return done;
+    },
   });
   const tabs = el("div", "tabs");
   tabs.setAttribute("role", "tablist");
@@ -467,7 +482,11 @@ async function mount(): Promise<void> {
     chrome.storage.local.set({ [MUTED_KEY]: isMuted() }).catch(() => {});
   }
   const headActions = el("div", "head-actions");
-  headActions.append(muteButton, close);
+  const quietButton = button("", "close quiet", () => void quietHere());
+  quietButton.setAttribute("aria-label", "Quiet here");
+  quietButton.title = "Quiet here";
+  quietButton.append(icon("quiet"));
+  headActions.append(quietButton, muteButton, close);
   head.append(brand, headActions);
 
   function sound(name: SoundName): void {
@@ -758,8 +777,78 @@ async function mount(): Promise<void> {
     if (!Array.isArray(result.insights)) return;
     insightsByClaim = new Map(result.insights.map((insight) => [insight.claimId, insight]));
     recallShrink = typeof result.shrink === "number" ? result.shrink : 1;
+    if (Array.isArray(result.quietSites)) applyQuietSites(result.quietSites);
     tiles = sortByRelevance(tiles, insightsByClaim);
     if (!sheet) showTiles();
+  }
+
+  // ---- Quiet sites ----
+
+  let quietSites: string[] = [];
+  let quietPending: QuietPending = {};
+
+  function isQuietHere(): boolean {
+    return quietSites.includes(hereSite());
+  }
+
+  function renderQuietButton(): void {
+    quietButton.hidden = !isQuietableSite(hereSite()) || isQuietHere();
+  }
+
+  function applyQuietSites(list: string[]): void {
+    const merged = mergeQuietSites(list, quietPending, Date.now());
+    quietSites = merged.sites;
+    quietPending = merged.pending;
+    chrome.storage.local.set({ [QUIET_SITES_KEY]: quietSites, [QUIET_PENDING_KEY]: quietPending }).catch(() => {});
+    renderQuietButton();
+  }
+
+  /** Saves a site's quiet setting. False when the Worker did not take it. */
+  async function setSiteQuiet(site: string, quiet: boolean): Promise<boolean> {
+    const response = await api("/recall/pref", { kind: quiet ? "quiet_site" : "unquiet_site", site });
+    if (!response.ok) return false;
+    quietPending = { ...quietPending, [site]: { quiet, at: Date.now() } };
+    applyQuietSites(quietSites);
+    return true;
+  }
+
+  async function quietHere(): Promise<void> {
+    quietButton.disabled = true;
+    const done = await setSiteQuiet(hereSite(), true);
+    quietButton.disabled = false;
+    if (!done) {
+      sound("softError");
+      if (!sheet) body.prepend(el("p", "warn", "Couldn't quiet this site just now."));
+      layout();
+      return;
+    }
+    clearTimeout(detectTimer);
+    stopWatchingForText();
+    insightSeq++;
+    tiles = [];
+    render({ kind: "quiet" });
+    showTab("claims");
+  }
+
+  function resumeAfterQuiet(): void {
+    render({ kind: "watching" });
+    scheduleDetect();
+  }
+
+  async function showCallsHere(): Promise<void> {
+    if (await setSiteQuiet(hereSite(), false)) {
+      resumeAfterQuiet();
+      return;
+    }
+    sound("softError");
+    body.replaceChildren(
+      stateBlock(
+        "error",
+        "Couldn't change that just now.",
+        button("Try again", "button", () => void showCallsHere()),
+      ),
+    );
+    layout();
   }
 
   function openBet(target: BuyTarget): void {
@@ -1150,6 +1239,16 @@ async function mount(): Promise<void> {
         setOrb("idle");
         body.replaceChildren(stateBlock("empty", "Nothing to call here."));
         break;
+      case "quiet":
+        setOrb("idle");
+        body.replaceChildren(
+          stateBlock(
+            "skipped",
+            `Soothia is quiet on ${hereSite()}.`,
+            button("Show calls here again", "button", () => void showCallsHere()),
+          ),
+        );
+        break;
       case "skipped":
         setOrb("idle");
         body.replaceChildren(stateBlock("skipped", "Not enough to read on this page."));
@@ -1330,9 +1429,15 @@ async function mount(): Promise<void> {
         STYLE_KEY,
         SHOW_DEBUG_KEY,
         RECALL_ID_KEY,
+        QUIET_SITES_KEY,
+        QUIET_PENDING_KEY,
         "soothia:devEvents",
       ]);
       recallInput.value = isRecallId(stored[RECALL_ID_KEY]) ? stored[RECALL_ID_KEY] : "";
+      const savedQuiet: unknown = stored[QUIET_SITES_KEY];
+      quietSites = Array.isArray(savedQuiet) ? savedQuiet.filter((site): site is string => typeof site === "string") : [];
+      const savedPending: unknown = stored[QUIET_PENDING_KEY];
+      quietPending = typeof savedPending === "object" && savedPending !== null ? (savedPending as QuietPending) : {};
       devEvents = stored["soothia:devEvents"] === true;
       showDebugToggle.box.checked = stored[SHOW_DEBUG_KEY] === true;
       dryRunToggle.box.checked = stored[DRY_RUN_KEY] !== false;
@@ -1347,6 +1452,7 @@ async function mount(): Promise<void> {
     skipChecksToggle.box.disabled = !dryRunToggle.box.checked;
     applyDebugVisibility();
     renderMute();
+    renderQuietButton();
   }
 
   showDebugToggle.box.addEventListener("change", () => {
@@ -1484,6 +1590,8 @@ async function mount(): Promise<void> {
     const remaining = MIN_THINKING_MS - (Date.now() - started);
     if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining));
     if (url !== watchedUrl) return;
+    // "Quiet here" was pressed while this scan was running.
+    if (!refresh && isQuietHere()) return;
 
     if (!result) {
       setScan({ state: `error (${relayError})`, detect: null });
@@ -1519,6 +1627,10 @@ async function mount(): Promise<void> {
   function scheduleDetect(): void {
     clearTimeout(detectTimer);
     stopWatchingForText();
+    if (isQuietHere()) {
+      render({ kind: "quiet" });
+      return;
+    }
     const url = watchedUrl;
     detectTimer = setTimeout(() => void safe("detect", () => runDetect(url, THIN_RETRIES, false)), SETTLE_MS);
   }
