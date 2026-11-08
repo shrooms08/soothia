@@ -10,6 +10,7 @@ import type { PickRecord, Side, StakeRecord } from "../recall/records";
 import { identify, storeFor } from "../recall/routes";
 import { cacheGet, cachePut, kvPut } from "../store";
 import { ADMIN_ROUTES } from "./admin";
+import { DRILL_ROUTES } from "./drill";
 import { stakeSettings, tatumStakeChain, type StakeChain, type StakeSettings } from "./chain";
 import { abortCodeOf, clearPoolCreation, parseAddress, refuse, StakeRefusal, type Context } from "./context";
 import { flipSubject, poolIdentity, type PoolFixture, type PoolIdentity, type Subject } from "./identity";
@@ -407,7 +408,7 @@ const USER_ROUTES = ["POST /stake/pool", "POST /stake/build", "POST /stake/confi
 export async function stakeRoute(request: Request, env: Env, path: string, deps: StakeDeps = {}): Promise<Response> {
   try {
     const route = `${request.method} ${path}`;
-    const adminRoute = route === "GET /stake/admin/pending" ? adminPendingRoute : ADMIN_ROUTES[route];
+    const adminRoute = route === "GET /stake/admin/pending" ? adminPendingRoute : (ADMIN_ROUTES[route] ?? DRILL_ROUTES[route]);
     const admin = adminRoute !== undefined;
     // Without the admin header these paths do not exist.
     if (admin ? !isAdmin(request, env) : !USER_ROUTES.includes(route)) return json(request, { error: "not_found" }, 404);

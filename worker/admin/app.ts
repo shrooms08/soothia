@@ -3,6 +3,7 @@
 
 import { connectWallet, listWallets } from "../../extension/src/sui-wallet-core";
 import { api, byId, digestLink, failureText, make, page, readToken, saveToken, setStatus } from "./core";
+import { startDrill } from "./drill";
 import { formatLeft, suiAmount } from "./logic";
 
 const COUNTDOWN_MS = 1_000;
@@ -168,4 +169,5 @@ byId("save-token").addEventListener("click", () => void useToken());
 byId("connect").addEventListener("click", () => void chooseWallet());
 byId("refresh").addEventListener("click", () => void refreshPending());
 window.setInterval(tick, COUNTDOWN_MS);
+startDrill(byId("drill-root"));
 void loadAll();

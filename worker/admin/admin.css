@@ -18,6 +18,7 @@ a { color: var(--accent); overflow-wrap: anywhere; }
 .status.good { color: var(--good); }
 .item { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
 .item p { margin: 2px 0; overflow-wrap: anywhere; }
+.reset-row { margin-top: 12px; }
 .step { display: grid; grid-template-columns: 180px 1fr; gap: 8px 12px; align-items: start; margin-top: 12px; }
 .step button { width: 100%; }
 .step .status { margin: 4px 0 0; }

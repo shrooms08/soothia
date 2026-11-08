@@ -34,6 +34,7 @@ async function infoRoute(context: Context): Promise<Response> {
 
 /** Builds for the AdminCap's owner. A contract refusal comes back with its code. */
 async function buildForOwner(context: Context, tx: Transaction, owner: string): Promise<Response> {
+  if ((await context.chain.balanceOf(owner)) < BigInt(ADMIN_GAS_BUDGET)) refuse(409, "admin_wallet_low_balance", { neededMist: String(ADMIN_GAS_BUDGET) });
   try {
     return json(context.request, { txBytes: await context.chain.buildForSender(tx, owner, ADMIN_GAS_BUDGET), sender: owner });
   } catch (error) {
