@@ -20,6 +20,7 @@ Branch `total-recall`. A local CLI that locks football predictions as memories o
 - `soothia_stake` hardened: the fee and delays are locked per pool, a resolve waits out a delay, and a challenge window lets the admin overturn and refund before anyone can claim. Fees are collected once, by anyone, after the window. Published on Sui mainnet as `0xf9507a1cb35b01c191614a67bf5ca3f22c7c3a7745fdc7ddea67369686a6720f`, replacing the unused first package.
 - Staking keys split: the ResolverCap is held by a dedicated `RESOLVER_KEY`, and the AdminCap and both UpgradeCaps are in the operator's Slush wallet. See `docs/staking-trust.md`.
 - Staking helpers in `worker/src/stake` (payout and claim-window math, readers, transaction builders) and `keygen`, `publish`, `smoke` and `handover` scripts.
+- Staking pool identity (`worker/src/stake/identity.ts`): one pool per question, whichever way round a page lists the match.
 - Called matches: `/recall/insights` returns `called` from the full pick list. Both tiles of a called match show "Your call" with a Proof link instead of Call it.
 - Sui-only: removed Solana, Panta, betting, market creation, wallet connection and the markets and share pages. Tag `v0.9-solana-final` marks the last commit with them. `/stats` now reports Total Recall numbers. Extension 0.11.0.
 - Calling is now the primary action: Call it leads each tile, betting and market creation become text links, the wallet row shows only for betting, and the first-run copy leads with calling.
