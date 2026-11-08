@@ -1066,6 +1066,10 @@ input[type="number"].input { font-family: var(--sth-font-mono); }
 .debug .button.small { margin: 2px 0 8px; font-size: 12px; }
 .toggle { display: flex; align-items: center; gap: 8px; padding: 3px 0; color: var(--sth-text-2); cursor: pointer; }
 .toggle-box { margin: 0; accent-color: var(--sth-orb-edge); }
+.recall-field { margin: 8px 0; }
+.recall-row { display: flex; align-items: center; gap: 6px; }
+.recall-row .input { flex: 1 1 auto; min-width: 0; height: 32px; font-size: 12px; }
+.recall-row .button.small { margin: 0; padding: 0 10px; }
 .status { display: flex; align-items: center; gap: 10px; padding: 6px 0; }
 .dot { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--sth-text-3); }
 .status[data-state="good"] .dot { background: var(--sth-yes); box-shadow: 0 0 6px rgba(93,202,165,.6); }

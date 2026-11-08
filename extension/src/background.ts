@@ -10,6 +10,7 @@ import {
   INJECT_SIGNER,
   MUSIC_CONTROL,
   OPEN_WELCOME,
+  RECALL_ID_KEY,
   type MusicStatus,
   type ApiRequestMessage,
   type ApiResponse,
@@ -23,6 +24,7 @@ import {
   type PageContext,
   type FixtureSignal,
 } from "./messages";
+import { isRecallId } from "./recall-logic";
 
 const INSTALL_KEY = "soothia:installId";
 // v2: results now carry a debug block.
@@ -57,10 +59,18 @@ async function installId(): Promise<string> {
   return created;
 }
 
+// A linked record's id acts as its password, so only /recall/* routes ever get it.
+async function recallHeaders(path: string): Promise<Record<string, string>> {
+  if (!path.startsWith("/recall/")) return {};
+  const stored: unknown = (await chrome.storage.local.get(RECALL_ID_KEY))[RECALL_ID_KEY];
+  return isRecallId(stored) ? { "X-Soothia-Recall": stored } : {};
+}
+
 async function post(path: string, body: unknown, refresh = false): Promise<Response> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
     "X-Soothia-Install": await installId(),
+    ...(await recallHeaders(path)),
   };
   if (refresh) headers["X-Soothia-Refresh"] = "1";
   return fetch(`${WORKER_URL}${path}`, {
@@ -166,7 +176,7 @@ async function relay(message: ApiRequestMessage): Promise<ApiResponse> {
     const response =
       API_ROUTES[message.path] === "GET"
         ? await fetch(`${WORKER_URL}${message.path}?${new URLSearchParams(message.body as Record<string, string>)}`, {
-            headers: { "X-Soothia-Install": await installId() },
+            headers: { "X-Soothia-Install": await installId(), ...(await recallHeaders(message.path)) },
             signal: AbortSignal.timeout(28_000),
           })
         : await post(message.path, message.body);

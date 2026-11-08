@@ -191,6 +191,12 @@ export const API_ROUTES = {
   "/creator/markets": "GET",
   "/positions": "GET",
   "/market": "GET",
+  "/recall/status": "GET",
+  "/recall/record": "GET",
+  "/recall/proof": "GET",
+  "/recall/insights": "POST",
+  "/recall/pick": "POST",
+  "/recall/pref": "POST",
 } as const;
 export type ApiPath = keyof typeof API_ROUTES;
 
@@ -344,6 +350,95 @@ export interface FinishResult {
   registered: boolean;
   registerError: string | null;
   error?: string;
+}
+
+// ---- Total Recall (worker/src/recall/routes.ts) ----
+
+export const RECALL_ID_KEY = "soothia.recallId";
+
+export interface RecallInsight {
+  claimId: string;
+  relevance: number;
+  notes: string[];
+  existing: { pYes: number; at: string } | null;
+  nudge: number;
+}
+
+export interface RecallInsights {
+  insights: RecallInsight[];
+  shrink: number;
+  quietSites: string[];
+}
+
+export type CommitSkipReason = "user_cap" | "global_cap" | "low_balance" | "kv_unavailable";
+
+export interface RecallPickBody {
+  question: string;
+  category: string;
+  pYes: number;
+  endTime: string;
+  source: { site: string; url: string };
+  marketId?: string;
+  marketYes?: number;
+  fixture?: { home: string; away: string; competition?: string; startISO: string; subject: "home" | "away" };
+}
+
+export interface RecallSavedPick {
+  id: string;
+  at: string;
+  pYes: number;
+  commit: { digest: string; network: string } | null;
+  commitSkipped?: CommitSkipReason;
+}
+
+export interface RecallLesson {
+  key: string;
+  at: string;
+  text: string;
+  n: number;
+  bias?: number;
+  entity?: string;
+}
+
+export interface RecallRecordPick {
+  id: string;
+  at: string;
+  question: string;
+  pYes: number;
+  fixture: { home: string; away: string } | null;
+  status: "open" | "right" | "wrong";
+  detail: string | null;
+  brier: number | null;
+  commit: { digest: string; explorerUrl: string } | null;
+  commitSkipped: CommitSkipReason | null;
+}
+
+export interface RecallRecord {
+  summary: {
+    picks: number;
+    open: number;
+    resolved: number;
+    hits: number;
+    brier: number | null;
+    marketBrier: number | null;
+    vsMarketCalls: number;
+    calibration: { label: string; calls: number; hitRate: number; claimed: number }[];
+    entities: { entity: string; calls: number; hits: number; brier: number }[];
+  };
+  picks: RecallRecordPick[];
+  lessons: RecallLesson[];
+  account: { accountId: string; owner: string | null; explorerUrl: string } | null;
+}
+
+export interface RecallProof {
+  digest: string;
+  verified: boolean;
+  timestampMs: number | null;
+  explorerUrl: string;
+  problem?: string;
+  kickoffISO: string | null;
+  gapMs: number | null;
+  beforeKickoff: boolean | null;
 }
 
 /** Worker error body. */

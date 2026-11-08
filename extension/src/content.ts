@@ -23,6 +23,7 @@ import {
   HEALTH_REQUEST,
   OPEN_WELCOME,
   NAV_CHANGED,
+  RECALL_ID_KEY,
   WALLET_REQUEST,
   WALLET_STATUS,
   type ApiError,
@@ -44,6 +45,7 @@ import {
   type PageContext,
 } from "./messages";
 import { readPage, type ReadInfo } from "./reader";
+import { isRecallId } from "./recall-logic";
 import { openBetSheet } from "./bet-sheet";
 import { openSheet, type CreateDebug, type PendingCreate, type Sheet } from "./sheet";
 import { checkSignedTransaction } from "./tx-check";
@@ -350,6 +352,42 @@ async function mount(): Promise<void> {
   );
 
   const showDebugToggle = toggle("Show debug info");
+
+  // Link record: view and add to a record made elsewhere, such as with the CLI.
+  const recallInput = el("input", "input recall-input");
+  recallInput.type = "text";
+  recallInput.placeholder = "Recall ID";
+  recallInput.spellcheck = false;
+  recallInput.autocomplete = "off";
+  const recallNote = el("p", "note");
+  async function saveRecallId(value: string): Promise<void> {
+    if (value && !isRecallId(value)) {
+      recallNote.textContent = "That isn't a valid Recall ID.";
+      layout();
+      return;
+    }
+    try {
+      if (value) await chrome.storage.local.set({ [RECALL_ID_KEY]: value });
+      else await chrome.storage.local.remove(RECALL_ID_KEY);
+    } catch {
+      recallNote.textContent = "Couldn't save that. Reload this tab and try again.";
+      layout();
+      return;
+    }
+    recallInput.value = value;
+    recallNote.textContent = value ? "Record linked." : "Record unlinked.";
+    onRecallIdentityChanged();
+    layout();
+  }
+  const recallField = el("div", "field recall-field");
+  const recallRow = el("div", "recall-row");
+  recallRow.append(
+    recallInput,
+    button("Save", "button small", () => void saveRecallId(recallInput.value.trim())),
+    button("Clear", "button small", () => void saveRecallId("")),
+  );
+  recallField.append(el("span", "field-label", "Link record"), recallRow, recallNote);
+
   const summary = el("summary", "debug-summary", "settings");
   summary.append(el("span", "debug-version", extensionVersion()));
   debug.append(
@@ -359,6 +397,7 @@ async function mount(): Promise<void> {
     dryRunToggle.row,
     skipChecksToggle.row,
     showDebugToggle.row,
+    recallField,
     createInfo,
     replayRow,
     walletRow.row,
@@ -1107,6 +1146,9 @@ async function mount(): Promise<void> {
     register: "\u2013",
   };
 
+  // The linked record changed, so anything read from the old one is out of date.
+  function onRecallIdentityChanged(): void {}
+
   function setCreateDebug(update: Partial<CreateDebug>): void {
     createDebug = { ...createDebug, ...update };
     const rows: [string, string][] = [
@@ -1164,8 +1206,10 @@ async function mount(): Promise<void> {
         MUTED_KEY,
         STYLE_KEY,
         SHOW_DEBUG_KEY,
+        RECALL_ID_KEY,
         "soothia:devEvents",
       ]);
+      recallInput.value = isRecallId(stored[RECALL_ID_KEY]) ? stored[RECALL_ID_KEY] : "";
       devEvents = stored["soothia:devEvents"] === true;
       showDebugToggle.box.checked = stored[SHOW_DEBUG_KEY] === true;
       dryRunToggle.box.checked = stored[DRY_RUN_KEY] !== false;
