@@ -2,6 +2,14 @@
 
 All notable changes to Soothia. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions are the Chrome extension's manifest version; the Workers deploy continuously alongside it.
 
+## Total Recall (in progress)
+
+Branch `total-recall`. A local CLI that locks football predictions as memories on Walrus Memory mainnet, then scores them after the matches. No Worker deploy and no extension changes.
+
+### Added
+
+- Scaffold: record shapes, scoring and lessons, Walrus Memory client, Tatum Sui RPC, and the `soothia_recall` Move package (`worker/src/recall`, `move/soothia_recall`).
+
 ## [Unreleased]
 
 ### Changed

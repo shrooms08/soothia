@@ -7,7 +7,7 @@
 // mainnet; ownership of the memory account lives on Sui.
 
 import { MemWal } from "@mysten-incubation/memwal";
-import type { Env } from "../http";
+import type { RecallEnv } from "./env";
 import { cacheGet, cachePut } from "../store";
 import {
   decodeRecord,
@@ -33,13 +33,13 @@ export interface MemoryBackend {
   recall(namespace: string, query: string, limit: number, sort: "relevance" | "recent"): Promise<RecalledText[]>;
 }
 
-export function memwalConfigured(env: Env): boolean {
+export function memwalConfigured(env: RecallEnv): boolean {
   return Boolean(env.MEMWAL_KEY?.trim() && env.MEMWAL_ACCOUNT_ID?.trim());
 }
 
 let cachedClient: { key: string; client: MemWal } | null = null;
 
-function client(env: Env): MemWal {
+function client(env: RecallEnv): MemWal {
   const key = `${env.MEMWAL_ACCOUNT_ID}:${env.MEMWAL_SERVER_URL ?? ""}`;
   if (cachedClient?.key === key) return cachedClient.client;
   const created = MemWal.create({
@@ -54,7 +54,7 @@ function client(env: Env): MemWal {
   return created;
 }
 
-export function memwalBackend(env: Env): MemoryBackend {
+export function memwalBackend(env: RecallEnv): MemoryBackend {
   return {
     async remember(namespace, text) {
       const job = await client(env).remember(text, namespace);
@@ -68,7 +68,7 @@ export function memwalBackend(env: Env): MemoryBackend {
 }
 
 /** The relayer's health, for /recall/status. Needs no credentials. */
-export async function memwalHealth(env: Env): Promise<unknown> {
+export async function memwalHealth(env: RecallEnv): Promise<unknown> {
   if (!memwalConfigured(env)) return { configured: false };
   try {
     return { configured: true, health: await client(env).health() };

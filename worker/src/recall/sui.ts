@@ -14,16 +14,16 @@ import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
 import { decodeSuiPrivateKey } from "@mysten/sui/cryptography";
 import { JsonRpcHTTPTransport, SuiJsonRpcClient } from "@mysten/sui/jsonRpc";
 import { Transaction } from "@mysten/sui/transactions";
-import type { Env } from "../http";
+import type { RecallEnv } from "./env";
 
 export const TATUM_SUI_MAINNET = "https://sui-mainnet.gateway.tatum.io";
 
-export function tatumConfigured(env: Env): boolean {
+export function tatumConfigured(env: RecallEnv): boolean {
   return Boolean(env.TATUM_API_KEY?.trim());
 }
 
 /** One raw JSON-RPC call to Sui mainnet through Tatum. */
-export async function tatumRpc<T>(env: Env, method: string, params: unknown[] = []): Promise<T> {
+export async function tatumRpc<T>(env: RecallEnv, method: string, params: unknown[] = []): Promise<T> {
   const response = await fetch(env.TATUM_SUI_URL?.trim() || TATUM_SUI_MAINNET, {
     method: "POST",
     headers: {
@@ -43,7 +43,7 @@ export async function tatumRpc<T>(env: Env, method: string, params: unknown[] = 
 let cachedClient: SuiJsonRpcClient | null = null;
 
 /** The Sui SDK client, with every request sent to Tatum's gateway. */
-function suiClient(env: Env): SuiJsonRpcClient {
+function suiClient(env: RecallEnv): SuiJsonRpcClient {
   if (cachedClient) return cachedClient;
   cachedClient = new SuiJsonRpcClient({
     network: "mainnet",
@@ -56,7 +56,7 @@ function suiClient(env: Env): SuiJsonRpcClient {
 }
 
 /** The key that pays for commits: SUI_COMMIT_KEY, else the Walrus Memory delegate key. */
-export function commitKeypair(env: Env): Ed25519Keypair | null {
+export function commitKeypair(env: RecallEnv): Ed25519Keypair | null {
   const raw = (env.SUI_COMMIT_KEY?.trim() || env.MEMWAL_KEY?.trim()) ?? "";
   if (!raw) return null;
   try {
@@ -71,7 +71,7 @@ export function commitKeypair(env: Env): Ed25519Keypair | null {
   }
 }
 
-export function commitConfigured(env: Env): boolean {
+export function commitConfigured(env: RecallEnv): boolean {
   return tatumConfigured(env) && Boolean(env.SOOTHIA_RECALL_PACKAGE?.trim()) && commitKeypair(env) !== null;
 }
 
@@ -83,7 +83,7 @@ export function hexToBytes(hex: string): Uint8Array {
 }
 
 /** Commits a pick's hash on Sui mainnet. Returns the transaction digest. */
-export async function commitPick(env: Env, hashHex: string, pickId: string): Promise<string> {
+export async function commitPick(env: RecallEnv, hashHex: string, pickId: string): Promise<string> {
   const signer = commitKeypair(env);
   if (!signer || !env.SOOTHIA_RECALL_PACKAGE?.trim()) throw new Error("commit_not_configured");
   const tx = new Transaction();
@@ -143,7 +143,7 @@ function bytesFromEvent(value: number[] | string | undefined): string | null {
 }
 
 /** Reads a commit back through Tatum and checks it carries the expected hash. */
-export async function verifyCommit(env: Env, digest: string, expectedHash: string): Promise<CommitProof> {
+export async function verifyCommit(env: RecallEnv, digest: string, expectedHash: string): Promise<CommitProof> {
   const explorerUrl = `https://suivision.xyz/txblock/${digest}`;
   try {
     const tx = await tatumRpc<TxBlock>(env, "sui_getTransactionBlock", [
@@ -186,7 +186,7 @@ export interface MemoryAccountInfo {
 }
 
 /** The Walrus Memory account object on Sui, read through Tatum. */
-export async function memoryAccount(env: Env): Promise<MemoryAccountInfo | null> {
+export async function memoryAccount(env: RecallEnv): Promise<MemoryAccountInfo | null> {
   const accountId = env.MEMWAL_ACCOUNT_ID?.trim();
   if (!accountId || !tatumConfigured(env)) return null;
   const [object, checkpoint] = await Promise.all([
