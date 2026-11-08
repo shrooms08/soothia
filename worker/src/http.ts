@@ -12,6 +12,8 @@ export interface Env extends RecallEnv {
   HELIUS_RPC_URL: string;
   /** Gates /debug/* (header X-Soothia-Admin). Unset means those routes do not exist. */
   ADMIN_TOKEN?: string;
+  /** Comma-separated Total Recall user keys with the higher daily commit cap. Not secret. */
+  RECALL_OWNER_KEYS?: string;
   SOOTHIA_CACHE: KVNamespace;
 }
 

@@ -21,6 +21,8 @@ export interface PickFixture {
   subject: "home" | "away";
 }
 
+export type CommitSkipReason = "user_cap" | "global_cap" | "low_balance" | "kv_unavailable";
+
 /** The user's call on a claim, written before the event. */
 export interface PickRecord {
   id: string;
@@ -44,6 +46,8 @@ export interface PickRecord {
   hash: string;
   /** The Sui transaction that committed the hash, if the commit went through. */
   commit: { digest: string; network: "mainnet" } | null;
+  /** Why the Worker chose not to commit this pick on Sui. */
+  commitSkipped?: CommitSkipReason;
 }
 
 /** What happened, and how the call scored. */

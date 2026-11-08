@@ -4,6 +4,7 @@
 
 import { installId, isAdmin, json, readJsonObject, type Env } from "../http";
 import { kvPut } from "../store";
+import { checkCommitGuard } from "./commitGuard";
 import { memwalBackend, memwalHealth, RecallStore, userKeyFor } from "./memory";
 import { buildPick, mergePicks, type PickInput } from "./picks";
 import type { PickFixture, PickRecord, PrefKind } from "./records";
@@ -146,6 +147,7 @@ async function record(request: Request, env: Env, userKey: string): Promise<Resp
         brier: outcome?.brier ?? null,
         anchor: pick.anchor ?? null,
         commit: pick.commit ? { ...pick.commit, explorerUrl: `https://suivision.xyz/txblock/${pick.commit.digest}` } : null,
+        commitSkipped: pick.commit ? null : (pick.commitSkipped ?? null),
       };
     });
   return json(request, {
@@ -216,10 +218,15 @@ async function createPick(request: Request, env: Env, userKey: string): Promise<
   const store = storeFor(env, userKey);
   // The cached list folds in recent writes, which the relayer has not stored yet.
   if (isDuplicatePick(mergePicks(await store.list("pick")), checked.input)) return json(request, { error: "duplicate_pick" }, 409);
-  const pick = await buildPick(checked.input, env);
+  return json(request, await savePick(checked.input, env, userKey, store));
+}
+
+/** Builds a pick under the spending guard and saves it, committed on Sui or not. */
+export async function savePick(input: PickInput, env: Env, userKey: string, store: RecallStore): Promise<PickRecord> {
+  const pick = await buildPick(input, env, { guard: () => checkCommitGuard(env, userKey) });
   await store.write("pick", pick);
   await kvPut(env, `${SWEEP_PREFIX}${pick.id}`, JSON.stringify({ userKey }), { metadata: { userKey } });
-  return json(request, pick);
+  return pick;
 }
 
 async function createPref(request: Request, env: Env, userKey: string): Promise<Response> {

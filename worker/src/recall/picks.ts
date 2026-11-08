@@ -4,7 +4,7 @@
 
 import type { RecallEnv } from "./env";
 import type { Fixture } from "./espn";
-import { canonicalPick, type PickFixture, type PickRecord } from "./records";
+import { canonicalPick, type CommitSkipReason, type PickFixture, type PickRecord } from "./records";
 import { commitConfigured, commitPick, latestCheckpoint } from "./sui";
 
 export interface PickInput {
@@ -21,6 +21,8 @@ export interface PickInput {
 
 export interface BuildPickOptions {
   warn?: (message: string) => void;
+  /** Asked before spending on a commit. A returned reason skips the commit. */
+  guard?: () => Promise<CommitSkipReason | null>;
 }
 
 const MATCH_LENGTH_MS = 3 * 3_600_000;
@@ -96,14 +98,18 @@ export async function buildPick(input: PickInput, env: RecallEnv, options: Build
   const hash = await sha256Hex(canonicalPick(unsigned));
 
   let commit: PickRecord["commit"] = null;
+  let commitSkipped: CommitSkipReason | null = null;
   if (commitConfigured(env)) {
-    try {
-      commit = { digest: await commitPick(env, hash, unsigned.id), network: "mainnet" };
-    } catch (error) {
-      warn(`not committed on Sui: ${message(error)}`);
+    commitSkipped = options.guard ? await options.guard() : null;
+    if (!commitSkipped) {
+      try {
+        commit = { digest: await commitPick(env, hash, unsigned.id), network: "mainnet" };
+      } catch (error) {
+        warn(`not committed on Sui: ${message(error)}`);
+      }
     }
   }
-  return { ...unsigned, hash, commit };
+  return { ...unsigned, hash, commit, ...(commitSkipped ? { commitSkipped } : {}) };
 }
 
 /**
