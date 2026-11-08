@@ -1,14 +1,17 @@
 // Background service worker. Content-script fetches run with the page's
 // origin and get blocked by CORS, so network calls to the Worker go through here.
+import { checkTransaction, type ExpectedTx, type TxVerdict } from "./tx-check";
 import { WORKER_URL } from "./config";
 import {
   API_REQUEST,
   API_ROUTES,
   DETECT_REQUEST,
   HEALTH_REQUEST,
+  CHECK_TX,
   MUSIC_CONTROL,
   OPEN_WELCOME,
   RECALL_ID_KEY,
+  SUI_WALLET_KEY,
   type MusicStatus,
   type ApiRequestMessage,
   type ApiResponse,
@@ -270,6 +273,19 @@ const respondSafely = (work: Promise<unknown>, sendResponse: (value: unknown) =>
   );
 };
 
+interface CheckTxMessage {
+  txBytes: unknown;
+  expected: ExpectedTx;
+}
+
+/** Checks a transaction against the address saved in storage, which no page can set. */
+async function verifyForSigning(message: CheckTxMessage): Promise<TxVerdict> {
+  const stored = await chrome.storage.local.get(SUI_WALLET_KEY);
+  const address = (stored[SUI_WALLET_KEY] as { address?: unknown } | undefined)?.address;
+  if (typeof address !== "string") return { ok: false, reason: "No Sui wallet is connected." };
+  return checkTransaction(message.txBytes, message.expected, address);
+}
+
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   try {
     return handleMessage(message, sender, sendResponse);
@@ -312,6 +328,9 @@ function handleMessage(
         sendResponse,
         false,
       );
+      return true;
+    case CHECK_TX:
+      respondSafely(verifyForSigning(message as unknown as CheckTxMessage), sendResponse, { ok: false, reason: "The transaction could not be checked." });
       return true;
     case MUSIC_CONTROL:
       // The welcome page asks the background to make sure the player exists.

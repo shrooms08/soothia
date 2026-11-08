@@ -793,6 +793,12 @@ input[type="number"].input { font-family: var(--sth-font-mono); }
 .toggle { display: flex; align-items: center; gap: 8px; padding: 3px 0; color: var(--sth-text-2); cursor: pointer; }
 .toggle-box { margin: 0; accent-color: var(--sth-orb-edge); }
 .recall-field { margin: 8px 0; }
+.wallet-field { margin: 8px 0; }
+.wallet-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.wallet-row .button.small { margin: 0; padding: 0 10px; }
+.wallet-picker { margin-top: 6px; }
+.wallet-note { margin: 6px 0 0; font-size: 12px; color: var(--sth-text-3); overflow-wrap: anywhere; }
+.wallet-note:empty { display: none; }
 .recall-row { display: flex; align-items: center; gap: 6px; }
 .recall-row .input { flex: 1 1 auto; min-width: 0; height: 32px; font-size: 12px; }
 .recall-row .button.small { margin: 0; padding: 0 10px; }

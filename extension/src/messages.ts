@@ -125,6 +125,12 @@ export interface ApiResponse<T = unknown> {
 
 export const RECALL_ID_KEY = "soothia.recallId";
 
+/** The connected Sui wallet: { address, walletId, walletName }. */
+export const SUI_WALLET_KEY = "soothia.suiWallet";
+
+// Content script -> background: check a transaction before any wallet is asked to sign it.
+export const CHECK_TX = "soothia:v1:check-tx";
+
 export interface RecallCalled {
   /** "Arsenal win", or "Arsenal doesn't win (Chelsea win or draw)". */
   side: string;

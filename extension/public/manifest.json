@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Soothia",
-  "version": "0.11.0",
+  "version": "0.12.0",
   "description": "Call any match before kickoff. Proven on Sui, remembered on Walrus.",
   "permissions": [
     "storage",
@@ -54,7 +54,8 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "fonts/*.woff2"
+        "fonts/*.woff2",
+        "wallet-bridge.js"
       ],
       "matches": [
         "http://*/*",

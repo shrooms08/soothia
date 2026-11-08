@@ -50,6 +50,8 @@ import {
 import { openCallSheet, type Sheet } from "./call-sheet";
 import { describeFixture, findFixture } from "./fixture";
 import { guarded, installGuards, isContextDead, safe } from "./guard";
+import { createWalletBridge } from "./wallet-client";
+import { chromeWalletStorage, createWalletSettings } from "./wallet-settings";
 import { CARD_GAP, CARD_WIDTH, EDGE_PADDING, HOST_STYLES, ORB_MARGIN, ORB_SIZE, STYLES } from "./styles";
 
 const HOST_ID = "soothia-host";
@@ -330,6 +332,14 @@ async function mount(): Promise<void> {
   );
   recallField.append(el("span", "field-label", "Link record"), recallRow, recallNote);
 
+  const walletSettings = createWalletSettings(
+    createWalletBridge(() => chrome.runtime.getURL("wallet-bridge.js")),
+    chromeWalletStorage,
+    () => {
+      if (!card.hidden) layout();
+    },
+  );
+
   const summary = el("summary", "debug-summary", "settings");
   summary.append(el("span", "debug-version", extensionVersion()));
   debug.append(
@@ -338,12 +348,14 @@ async function mount(): Promise<void> {
     scanAgain,
     showDebugToggle.row,
     recallField,
+    walletSettings.root,
     replayRow,
     proxyRow.row,
   );
   function applyDebugVisibility(): void {
     const show = showDebugToggle.box.checked;
     scanInfo.hidden = !show;
+    walletSettings.setDebugVisible(show);
     if (!card.hidden) layout();
   }
   applyDebugVisibility();
@@ -1169,6 +1181,7 @@ async function mount(): Promise<void> {
   setTimeout(applyTheme, 1500);
   renderDebug();
   await safe("settings", loadSettings);
+  await safe("wallet", walletSettings.load);
   void safe("bubble", maybeShowBubble);
   render({ kind: "watching" });
   document.documentElement.append(host);
