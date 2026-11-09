@@ -16,11 +16,11 @@ Soothia is a Chrome MV3 extension (a floating orb on every page) where people ca
 ## Architecture
 
 - **Extension** (`extension/`): MV3, TypeScript, Vite. Build output in `extension/dist`. `WORKER_URL` (https://api.soothia.fun) is in `extension/src/config.ts`. Tabs are This page and My record.
-- **Worker** (`worker/`): Cloudflare Worker `soothia-proxy`, served at https://api.soothia.fun and https://soothia-proxy.heylana.workers.dev; both stay live. Routes: `POST /detect` (prose through Claude, or the page's fixture), `/recall/*`, `/stake/*`, `GET /stats`, `GET /health`, and the static admin page at `/admin` (`worker/admin`, bundled into the gitignored `worker/public` by `worker/scripts/build-admin.mjs`, which needs `extension/node_modules`). Never rename the heylana workers.dev subdomain.
+- **Worker** (`worker/`): Cloudflare Worker `soothia-proxy`, served at https://api.soothia.fun and https://soothia-proxy.heylana.workers.dev; both stay live. Routes: `POST /detect` (prose through Claude, or the page's fixture), `/recall/*`, `/stake/*`, `/social/*`, `GET /stats`, `GET /health`, and the static admin page at `/admin` (`worker/admin`, bundled into the gitignored `worker/public` by `worker/scripts/build-admin.mjs`, which needs `extension/node_modules`). Never rename the heylana workers.dev subdomain.
 - **Walrus Memory** (`worker/src/recall/memory.ts`): the source of truth for picks, outcomes, lessons and preferences. Writes are asynchronous and the store is append-only.
 - **Sui through Tatum** (`worker/src/recall/tatumGrpc.ts`, `sui.ts`): reads and commits go through Tatum's gRPC gateway with a fetch-only transport, so they also run in Workers. Do not add `@grpc/grpc-js`.
 - **Move packages** (`move/`): `soothia_recall` commits a pick's hash; `soothia_stake` is the parimutuel SUI staking pool.
-- **Results** (`worker/src/recall/espn.ts`): football results from ESPN for six leagues. A cron sweep settles open picks every 15 minutes, and a second sweep five minutes later advances staking pools (`worker/src/stake/sweep.ts`).
+- **Results** (`worker/src/recall/espn.ts`): football results from ESPN for six leagues. A cron sweep settles open picks every 15 minutes, and a second sweep five minutes later advances staking pools (`worker/src/stake/sweep.ts`), and a third five minutes after that rebuilds public profiles and leaderboards (`worker/src/social/snapshots.ts`).
 - **Site** (`site/`): the landing site Worker `soothia`, served at https://soothia.fun (www redirects there) and https://soothia.heylana.workers.dev.
 - **Scripts**: `worker/scripts/recall` and `worker/scripts/stake` are operator CLIs run with `npx tsx`; `scripts/` holds packaging and asset scripts.
 
@@ -34,6 +34,7 @@ Soothia is a Chrome MV3 extension (a floating orb on every page) where people ca
 - KV allows 1,000 writes a day on the free tier. Every KV write goes through `kvPut`.
 - `poolKey` in `worker/src/stake/identity.ts` names pools that are permanent on Sui. Never change its format.
 - A pool's close time comes from ESPN, never from a pick, because a pick's kickoff comes from the page.
+- A call is "proven before kickoff" against ESPN's kickoff, never the pick's, because a pick's kickoff comes from the page.
 - An anchor shows a call was made after a checkpoint. Only a Sui commit shows it was made before kickoff.
 
 ## Commands

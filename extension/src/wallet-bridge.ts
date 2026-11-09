@@ -2,7 +2,7 @@
 // answers the content script and nothing else. It is given the session nonce through
 // its own script tag, and removes the tag at once.
 
-import { connectWallet, disconnectWallet, listWallets, signAndExecute, walletAccounts } from "./sui-wallet-core";
+import { connectWallet, disconnectWallet, listWallets, signAndExecute, signPersonalMessage, walletAccounts } from "./sui-wallet-core";
 import { acceptRequest, BRIDGE_READY_ID, WALLET_CHANNEL, type WalletRequest, type WalletResponse } from "./wallet-protocol";
 
 const script = document.currentScript as HTMLScriptElement | null;
@@ -25,6 +25,8 @@ function run(request: WalletRequest): Promise<unknown> | unknown {
       return disconnectWallet(walletId);
     case "getAccounts":
       return walletAccounts(walletId);
+    case "signPersonalMessage":
+      return signPersonalMessage(walletId, String(request.params.address ?? ""), String(request.params.message ?? ""));
     case "signAndExecute":
       return signAndExecute(walletId, String(request.params.address ?? ""), String(request.params.txBytes ?? ""));
   }

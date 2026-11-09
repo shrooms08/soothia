@@ -260,6 +260,7 @@ async function stakeRecord(options: StakeHarnessOptions = {}) {
     wallet: {
       current: async () => (options.wallet === undefined ? CONNECTED : options.wallet),
       connect: async () => null,
+      signMessage: async () => ({ signature: "S" }),
       sign: async (_wallet, txBytes, expected) => {
         signed.push([txBytes, expected]);
         return options.sign ? options.sign() : { digest: D };
@@ -269,6 +270,8 @@ async function stakeRecord(options: StakeHarnessOptions = {}) {
       asked.push([path, body]);
       if (path === "/recall/record") return { ok: true, status: 200, body: record };
       if (path === "/stake/positions") return { ok: true, status: 200, body: { positions: options.positions ?? [] } };
+      if (path === "/social/profile/by-address") return { ok: true, status: 200, body: { public: false } };
+      if (path === "/social/suins") return { ok: true, status: 200, body: { suggestion: null } };
       if (path === "/stake/claim/build") return options.claimBuild ?? { ok: true, status: 200, body: { txBytes: "BYTES" } };
       return { ok: false, status: 404, body: null };
     }) as RecordHost["api"],

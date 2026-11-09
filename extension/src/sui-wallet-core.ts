@@ -13,6 +13,7 @@ import {
   type StandardConnectFeature,
   type StandardDisconnectFeature,
   type SuiSignAndExecuteTransactionFeature,
+  type SuiSignPersonalMessageFeature,
   type Wallet,
   type WalletAccount,
   type WalletWithFeatures,
@@ -21,7 +22,7 @@ import type { WalletSummary } from "./wallet-protocol";
 
 const SIGN_FEATURE = "sui:signAndExecuteTransaction";
 
-type SuiWallet = WalletWithFeatures<StandardConnectFeature & SuiSignAndExecuteTransactionFeature & Partial<StandardDisconnectFeature>>;
+type SuiWallet = WalletWithFeatures<StandardConnectFeature & SuiSignAndExecuteTransactionFeature & Partial<StandardDisconnectFeature> & Partial<SuiSignPersonalMessageFeature>>;
 
 const walletId = (wallet: Wallet): string => wallet.id ?? wallet.name;
 
@@ -61,15 +62,30 @@ export async function disconnectWallet(id: string): Promise<void> {
   await findWallet(id).features[StandardDisconnect]?.disconnect();
 }
 
-/** Asks the wallet to sign and send these exact bytes from `address`. */
-export async function signAndExecute(id: string, address: string, txBytes: string): Promise<{ digest: string }> {
-  const wallet = findWallet(id);
+async function accountFor(wallet: SuiWallet, address: string): Promise<WalletAccount> {
   let account = onMainnet(wallet.accounts).find((candidate) => candidate.address === address);
   if (!account) {
     const { accounts } = await wallet.features[StandardConnect].connect({ silent: true });
     account = onMainnet(accounts).find((candidate) => candidate.address === address);
   }
   if (!account) throw new Error("The wallet is not connected to that address.");
+  return account;
+}
+
+/** Asks the wallet to sign a plain message, which can never move anything. */
+export async function signPersonalMessage(id: string, address: string, message: string): Promise<{ signature: string }> {
+  const wallet = findWallet(id);
+  const feature = wallet.features["sui:signPersonalMessage"];
+  if (!feature) throw new Error("This wallet can't sign messages.");
+  const account = await accountFor(wallet, address);
+  const { signature } = await feature.signPersonalMessage({ message: new TextEncoder().encode(message), account, chain: SUI_MAINNET_CHAIN });
+  return { signature };
+}
+
+/** Asks the wallet to sign and send these exact bytes from `address`. */
+export async function signAndExecute(id: string, address: string, txBytes: string): Promise<{ digest: string }> {
+  const wallet = findWallet(id);
+  const account = await accountFor(wallet, address);
   const transaction = Transaction.from(txBytes);
   const { digest } = await signAndExecuteTransaction(wallet, {
     transaction: { toJSON: () => transaction.toJSON() },

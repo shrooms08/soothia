@@ -61,7 +61,7 @@ async function installId(): Promise<string> {
 
 // A linked record's id acts as its password, so only routes that read the record get it.
 async function recallHeaders(path: string): Promise<Record<string, string>> {
-  if (!path.startsWith("/recall/") && path !== "/stake/build" && path !== "/stake/confirm") return {};
+  if (!path.startsWith("/recall/") && path !== "/stake/build" && path !== "/stake/confirm" && path !== "/social/profile/publish") return {};
   const stored: unknown = (await chrome.storage.local.get(RECALL_ID_KEY))[RECALL_ID_KEY];
   return isRecallId(stored) ? { "X-Soothia-Recall": stored } : {};
 }

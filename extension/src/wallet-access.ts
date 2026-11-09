@@ -2,7 +2,7 @@
 // choice between wallets, and signing only through the transaction check.
 
 import type { ExpectedTx } from "./tx-check";
-import { signChecked, type TxChecker, type WalletBridge } from "./wallet-client";
+import { isOwnershipMessage, signChecked, type TxChecker, type WalletBridge } from "./wallet-client";
 import type { ConnectedWallet, WalletSummary } from "./wallet-protocol";
 import { isConnectedWallet, type WalletStorage } from "./wallet-settings";
 
@@ -11,6 +11,8 @@ export interface WalletAccess {
   /** Connects and saves a wallet. `choose` is asked when several are installed; null means cancelled. */
   connect(choose: (wallets: WalletSummary[]) => Promise<WalletSummary | null>): Promise<ConnectedWallet | null>;
   sign(wallet: ConnectedWallet, txBytes: string, expected: ExpectedTx): Promise<{ digest: string }>;
+  /** Signs a profile ownership message. Anything else is refused. */
+  signMessage(wallet: ConnectedWallet, message: string): Promise<{ signature: string }>;
 }
 
 export function createWalletAccess(bridge: WalletBridge, storage: WalletStorage, check: TxChecker): WalletAccess {
@@ -30,5 +32,9 @@ export function createWalletAccess(bridge: WalletBridge, storage: WalletStorage,
       return connected;
     },
     sign: (wallet, txBytes, expected) => signChecked(bridge, check, wallet, txBytes, expected),
+    async signMessage(wallet, message) {
+      if (!isOwnershipMessage(message, wallet.address)) throw new Error("Soothia refused to sign an unexpected message.");
+      return (await bridge.call("signPersonalMessage", { walletId: wallet.walletId, address: wallet.address, message })) as { signature: string };
+    },
   };
 }

@@ -818,6 +818,20 @@ input[type="number"].input { font-family: var(--sth-font-mono); }
 .wallet-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
 .wallet-stat { display: flex; flex-direction: column; font-size: 12px; color: var(--sth-text-2); }
 .wallet-stat b { font-size: 14px; font-weight: 500; color: var(--sth-text); }
+.go-public { padding: 10px; border: 1px solid var(--sth-hairline-soft, rgba(175,169,236,.14)); border-radius: 10px; }
+.go-public-handle { width: 100%; height: 32px; font-size: 13px; }
+.go-public-title { margin: 0; font-size: 14px; font-weight: 600; color: var(--sth-text); }
+.go-public .button.small { align-self: flex-start; margin: 0; }
+.go-public-status:empty { display: none; }
+.board-periods { display: flex; gap: 6px; margin-bottom: 8px; }
+.board-periods .button.small { margin: 0; padding: 0 10px; }
+.board-period.selected { outline: 2px solid var(--sth-text-2); outline-offset: -2px; }
+.board-row { display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; gap: 0 8px; align-items: baseline; padding: 8px 0; border-bottom: 1px solid rgba(175,169,236,.14); }
+.board-rank { color: var(--sth-text-2); font-size: 12px; }
+.board-handle { min-width: 0; overflow-wrap: anywhere; }
+.board-score { font-weight: 600; color: var(--sth-text); }
+.board-meta { grid-column: 2 / -1; }
+.board-all { display: inline-block; margin-top: 10px; }
 .wallet-field { margin: 8px 0; }
 .wallet-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .wallet-row .button.small { margin: 0; padding: 0 10px; }

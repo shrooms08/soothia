@@ -14,7 +14,7 @@ export interface WalletBridge {
   call(method: WalletMethod, params?: Record<string, unknown>): Promise<unknown>;
 }
 
-const timeoutFor = (method: WalletMethod): number => (method === "connect" || method === "signAndExecute" ? APPROVAL_TIMEOUT_MS : LIST_TIMEOUT_MS);
+const timeoutFor = (method: WalletMethod): number => (method === "connect" || method === "signAndExecute" || method === "signPersonalMessage" ? APPROVAL_TIMEOUT_MS : LIST_TIMEOUT_MS);
 
 export function createWalletBridge(scriptUrl: () => string, win: Window = window, doc: Document = document): WalletBridge {
   const nonce = crypto.randomUUID();
@@ -79,6 +79,11 @@ export function createWalletBridge(scriptUrl: () => string, win: Window = window
       });
     },
   };
+}
+
+/** Only Soothia's own ownership message, for this address, may reach the wallet to sign. */
+export function isOwnershipMessage(message: unknown, address: string): message is string {
+  return typeof message === "string" && message.length < 400 && message.startsWith("Soothia: confirm you own this wallet.\n") && message.includes(`\nAddress: ${address.toLowerCase()}\n`);
 }
 
 export type TxChecker = (txBytes: string, expected: ExpectedTx) => Promise<TxVerdict | undefined>;

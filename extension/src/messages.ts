@@ -110,6 +110,13 @@ export const API_ROUTES = {
   "/stake/positions": "GET",
   "/stake/balance": "GET",
   "/stake/claim/build": "POST",
+  "/social/profile/challenge": "POST",
+  "/social/profile/publish": "POST",
+  "/social/profile/update": "POST",
+  "/social/profile/unpublish": "POST",
+  "/social/profile/by-address": "GET",
+  "/social/suins": "GET",
+  "/social/leaderboard": "GET",
 } as const;
 export type ApiPath = keyof typeof API_ROUTES;
 

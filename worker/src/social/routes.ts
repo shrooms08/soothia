@@ -1,7 +1,7 @@
 // The /social/* routes. Profiles and leaderboards are public and read only KV;
 // everything that changes a profile is proven by a wallet signature.
 
-import { verifyPersonalMessageSignature } from "@mysten/sui/verify";
+import { isValidPersonalMessageSignature } from "@mysten/sui/verify";
 import { json, type Env } from "../http";
 import { tatumSuiClient } from "../recall/tatumGrpc";
 import { identify, storeFor } from "../recall/routes";
@@ -17,16 +17,9 @@ export interface SocialDeps {
 }
 
 function chainVerifier(env: Env): SignatureVerifier {
-  return async (message, signature, address) => {
-    try {
-      // The client is only used for zkLogin wallets, whose keys rotate by epoch.
-      await verifyPersonalMessageSignature(message, signature, { address, client: tatumSuiClient(env.TATUM_API_KEY.trim()) });
-      return true;
-    } catch (error) {
-      if (/signature|address|invalid/i.test(String((error as Error)?.message ?? error))) return false;
-      throw error;
-    }
-  };
+  // False for a bad or malformed signature. It only throws when it couldn't check, and
+  // the client is only used for zkLogin wallets, whose keys rotate by epoch.
+  return (message, signature, address) => isValidPersonalMessageSignature(message, signature, { address, client: tatumSuiClient(env.TATUM_API_KEY.trim()) });
 }
 
 function chainNames(env: Env): NameLookup {

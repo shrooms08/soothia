@@ -39,6 +39,7 @@ import {
   type RecallRecord,
 } from "./messages";
 import { readPage, type ReadInfo } from "./reader";
+import { createLeaderboardView } from "./leaderboard-view";
 import { calledRow, createRecordView } from "./record-view";
 import {
   isQuietableSite,
@@ -250,6 +251,9 @@ async function mount(): Promise<void> {
   // Two views: the claims on this page, and the user's record.
   const recordPane = el("div", "body");
   recordPane.hidden = true;
+  const boardPane = el("div", "body");
+  boardPane.hidden = true;
+  const boardView = createLeaderboardView(boardPane, { api, layout });
   const recordView = createRecordView(recordPane, {
     api,
     layout,
@@ -268,19 +272,23 @@ async function mount(): Promise<void> {
   tabs.setAttribute("role", "tablist");
   const claimsTab = button("This page", "tab selected", () => showTab("claims"));
   const recordTab = button("My record", "tab", () => showTab("record"));
-  for (const tab of [claimsTab, recordTab]) tab.setAttribute("role", "tab");
-  tabs.append(claimsTab, recordTab);
-  function showTab(which: "claims" | "record"): void {
+  const boardTab = button("Leaderboard", "tab", () => showTab("board"));
+  for (const tab of [claimsTab, recordTab, boardTab]) tab.setAttribute("role", "tab");
+  tabs.append(claimsTab, recordTab, boardTab);
+  function showTab(which: "claims" | "record" | "board"): void {
     body.hidden = which !== "claims";
     recordPane.hidden = which !== "record";
+    boardPane.hidden = which !== "board";
     for (const [name, tab] of [
       ["claims", claimsTab],
       ["record", recordTab],
+      ["board", boardTab],
     ] as const) {
       tab.classList.toggle("selected", which === name);
       tab.setAttribute("aria-selected", String(which === name));
     }
     if (which === "record") void safe("record", recordView.render);
+    if (which === "board") void safe("leaderboard", boardView.render);
     layout();
   }
   const debug = el("details", "debug");
@@ -406,7 +414,7 @@ async function mount(): Promise<void> {
   }
   armSounds(shadow);
   armSounds(window);
-  card.append(head, tabs, body, recordPane, debug);
+  card.append(head, tabs, body, recordPane, boardPane, debug);
 
   // Typing in the sheet must not trigger the page's keyboard shortcuts (X
   // has many). Escape still closes the card: that listener runs in capture.

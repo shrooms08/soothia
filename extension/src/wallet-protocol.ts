@@ -5,8 +5,8 @@
 export const WALLET_CHANNEL = "soothia:v1:wallet";
 export const BRIDGE_READY_ID = "ready";
 
-export type WalletMethod = "list" | "connect" | "disconnect" | "getAccounts" | "signAndExecute";
-const METHODS: readonly string[] = ["list", "connect", "disconnect", "getAccounts", "signAndExecute"];
+export type WalletMethod = "list" | "connect" | "disconnect" | "getAccounts" | "signAndExecute" | "signPersonalMessage";
+const METHODS: readonly string[] = ["list", "connect", "disconnect", "getAccounts", "signAndExecute", "signPersonalMessage"];
 
 export interface WalletRequest {
   channel: typeof WALLET_CHANNEL;

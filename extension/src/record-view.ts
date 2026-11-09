@@ -1,6 +1,7 @@
 // The My record tab: what the user has called, how it went, and the proof on Sui.
 import { button, el, externalLink, icon } from "./dom";
 import type { ApiError, ApiPath, ApiResponse, RecallCalled, RecallProof, RecallRecord, RecallRecordPick } from "./messages";
+import { createGoPublicPanel } from "./go-public";
 import { leanSide, pickLean, proofText, recordHeadline, shortId, skipReasonText } from "./recall-logic";
 import {
   formatSui,
@@ -299,9 +300,12 @@ export function createRecordView(pane: HTMLElement, host: RecordHost): { render(
       return;
     }
     const { summary } = record;
+    const panel = host.wallet ? createGoPublicPanel({ api: host.api, wallet: host.wallet, layout: host.layout }) : null;
+    void panel?.load().catch(() => undefined);
     pane.replaceChildren(
       refreshRow(),
       ...(wallet ? [walletStats(wallet, positions)] : []),
+      ...(panel ? [panel.node] : []),
       el("p", "record-headline", recordHeadline(summary)),
       ...(summary.calibration.length > 0 ? [section("Calibration", calibration(summary.calibration))] : []),
       ...(summary.entities.length > 0 ? [section("Teams", teamTable(summary.entities))] : []),

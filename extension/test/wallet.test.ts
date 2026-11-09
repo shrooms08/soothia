@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { JSDOM } from "jsdom";
 import { acceptRequest, acceptResponse, WALLET_CHANNEL } from "../src/wallet-protocol";
-import { signChecked, type TxChecker, type WalletBridge } from "../src/wallet-client";
+import { isOwnershipMessage, signChecked, type TxChecker, type WalletBridge } from "../src/wallet-client";
 import type { ExpectedTx } from "../src/tx-check";
 import type { ConnectedWallet } from "../src/wallet-protocol";
 
@@ -54,6 +54,20 @@ function recordingBridge(): { bridge: WalletBridge; calls: unknown[][] } {
     },
   };
 }
+
+const OWNERSHIP = `Soothia: confirm you own this wallet.\nThis is not a transaction and costs nothing.\n\nAction: publish\nAddress: 0xabc\nNonce: n\nExpires: t`;
+
+test("only Soothia's ownership message, for this address, may be signed", () => {
+  assert.equal(isOwnershipMessage(OWNERSHIP, "0xabc"), true);
+  assert.equal(isOwnershipMessage(OWNERSHIP, "0xdef"), false);
+  assert.equal(isOwnershipMessage("Please sign this", "0xabc"), false);
+  assert.equal(isOwnershipMessage(`${OWNERSHIP}${"x".repeat(400)}`, "0xabc"), false);
+  assert.equal(isOwnershipMessage(7, "0xabc"), false);
+});
+
+test("the sign-message method passes the filter", () => {
+  assert.ok(acceptRequest(event({ ...request, method: "signPersonalMessage" }), win, NONCE));
+});
 
 test("checked bytes go to the wallet unchanged", async () => {
   const { bridge, calls } = recordingBridge();
