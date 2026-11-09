@@ -7,6 +7,7 @@ import { tatumSuiClient } from "../recall/tatumGrpc";
 import { identify, storeFor } from "../recall/routes";
 import { SocialRefusal, type SignatureVerifier, type NameLookup, type SocialContext } from "./context";
 import { byAddressRoute, challengeRoute, publishRoute, suinsRoute, unpublishRoute, updateRoute } from "./identity";
+import { leaderboardRoute, profileRoute } from "./public";
 
 export interface SocialDeps {
   verify?: SignatureVerifier;
@@ -55,13 +56,17 @@ export async function socialRoute(request: Request, env: Env, path: string, deps
         return await byAddressRoute(context);
       case "GET /social/suins":
         return await suinsRoute(context);
+      case "GET /social/leaderboard":
+        return await leaderboardRoute(context);
       case "POST /social/profile/publish": {
         const user = await identify(request);
         if (typeof user !== "string") return user;
         return await publishRoute(context, user);
       }
-      default:
-        return json(request, { error: "not_found" }, 404);
+      default: {
+        const handle = /^GET \/social\/profile\/([^/]+)$/.exec(route)?.[1];
+        return handle ? await profileRoute(context, handle) : json(request, { error: "not_found" }, 404);
+      }
     }
   } catch (error) {
     if (error instanceof SocialRefusal) return json(request, { error: error.code, ...error.extra }, error.status);

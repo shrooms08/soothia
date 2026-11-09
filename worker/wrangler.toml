@@ -48,6 +48,6 @@ STAKE_RESOLVER_CAP = "0x8a8bc9de0047bd4d99fabb7e5c655c3f1d407c743ad1711f2a638861
 # Only its id, to read who owns it. The AdminCap stays in the Slush wallet.
 STAKE_ADMIN_CAP = "0x6bb33f67cec908f6d38c53de4b6fe3e047392e08d6e7b2ec670462b22edb2cbf"
 
-# Two sweeps share this schedule: open picks at :00, :15, :30, :45, and staking pools five minutes later.
+# Three sweeps share this schedule, each every 15 minutes: open picks at :00, staking pools at :05, public profiles at :10.
 [triggers]
 crons = ["*/5 * * * *"]

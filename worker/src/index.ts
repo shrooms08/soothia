@@ -8,6 +8,7 @@ import { LIMITS, rateLimited } from "./ratelimit";
 import { recallRoute } from "./recall/routes";
 import { sweepRecall } from "./recall/sweep";
 import { socialRoute } from "./social/routes";
+import { sweepSocial } from "./social/snapshots";
 import { stakeRoute } from "./stake/routes";
 import { sweepStake } from "./stake/sweep";
 import { handleStats } from "./stats";
@@ -26,8 +27,9 @@ export default {
     // Settle open Total Recall picks every 15 minutes.
     const slot = new Date().getUTCMinutes() % 15;
     if (slot < 5) ctx.waitUntil(sweepRecall(env).catch(() => {}));
-    // A run five minutes later, because one invocation has a limited number of outbound calls.
+    // Separate runs five minutes apart, because one invocation has a limited number of outbound calls.
     else if (slot < 10) ctx.waitUntil(sweepStake(env).catch(() => {}));
+    else ctx.waitUntil(sweepSocial(env).catch(() => {}));
   },
 } satisfies ExportedHandler<Env>;
 
