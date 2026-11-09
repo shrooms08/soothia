@@ -241,6 +241,7 @@
     address.target = "_blank";
     address.rel = "noopener";
     since.append(`Public since ${new Date(body.profile.publicSince).toLocaleDateString()} · `, address);
+    root.before(h("p", "social-meta", `${body.followers} followers · ${body.following} following · Follow in Soothia`));
 
     if (!body.stats) {
       status.textContent = "Stats appear within about 15 minutes of going public.";

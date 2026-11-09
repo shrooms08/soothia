@@ -846,6 +846,32 @@ input[type="number"].input { font-family: var(--sth-font-mono); }
 .record-more { margin-top: 10px; font-size: 12px; color: var(--sth-text-2); }
 .record-more-summary { cursor: pointer; }
 .record-more .note { margin: 6px 0 0; }
+.orb-badge { position: absolute; top: -2px; right: -2px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 999px; background: var(--sth-no); color: var(--sth-text-on-orb); font: 700 10px/16px var(--sth-font-sans); text-align: center; pointer-events: none; }
+.social-slot { display: flex; flex-direction: column; gap: 6px; }
+.feed-row { display: flex; flex-direction: column; gap: 2px; padding: 8px 0; border-bottom: 1px solid rgba(175,169,236,.14); }
+.feed-top { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+.feed-handle { min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
+.feed-time { flex: none; font-size: 11px; color: var(--sth-text-3); }
+.feed-match { margin: 0; font-size: 13px; font-weight: 600; color: var(--sth-text); overflow-wrap: anywhere; }
+.feed-call, .feed-mine { margin: 0; font-size: 12px; color: var(--sth-text-2); }
+.feed-tail { align-self: flex-start; margin: 4px 0 0; }
+.follow-search { width: 100%; height: 32px; font-size: 13px; }
+.follow-results, .follow-list { display: flex; flex-direction: column; }
+.follow-results:empty { display: none; }
+.follow-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; border-bottom: 1px solid rgba(175,169,236,.14); }
+.follow-row .feed-handle { flex: 1 1 auto; }
+.follow-row .button.small { flex: none; margin: 0; }
+.followed { margin-top: 6px; }
+.followed-head { display: flex; align-items: center; gap: 6px; width: 100%; padding: 0; border: 0; background: transparent; color: var(--sth-text-2); font: 400 12px/1.35 var(--sth-font-sans); text-align: left; cursor: pointer; }
+.followed-avatars { display: inline-flex; flex: none; }
+.followed-avatar { display: inline-block; width: 18px; height: 18px; margin-right: -4px; border-radius: 50%; background: var(--sth-orb-mid); color: var(--sth-text-on-orb); font: 700 9px/18px var(--sth-font-sans); text-align: center; }
+.followed-text { min-width: 0; margin-left: 6px; }
+.followed-list { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+.followed-call { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--sth-text-2); }
+.followed-who { flex: none; font-weight: 600; color: var(--sth-text); }
+.followed-lean { flex: 1 1 auto; min-width: 0; }
+.followed-call .button.small { flex: none; margin: 0; }
+.tail-label { margin: 0 0 6px; font-size: 12px; font-weight: 600; color: var(--sth-orb-mid); }
 .go-public { padding: 10px; border: 1px solid var(--sth-hairline-soft, rgba(175,169,236,.14)); border-radius: 10px; }
 .go-public-handle { width: 100%; height: 32px; font-size: 13px; }
 .go-public-title { margin: 0; font-size: 14px; font-weight: 600; color: var(--sth-text); }

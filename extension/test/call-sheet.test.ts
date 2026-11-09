@@ -136,3 +136,64 @@ test("a fixture claim with no upcoming match cannot be locked", async () => {
   assert.match(q(".status-line").textContent!, /calls are closed/);
   assert.equal(sent.length, 0);
 });
+
+const PREFILL = { side: "no" as const, percent: 70, tailOf: "ada" };
+const SAVED: RecallSavedPick = { id: "p1", at: "x", pYes: 0.3, commit: { digest: "d", network: "mainnet" }, fixture: { home: "Arsenal", away: "Chelsea", startISO: "2026-11-21T15:00:00.000Z", subject: "home" } };
+const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
+const named = (node: Element, label: string) => [...node.querySelectorAll("button")].find((item) => item.textContent === label) as HTMLButtonElement;
+
+test("a tail starts from their side and confidence, and says whose it is", () => {
+  const { sheet } = setup({ ok: true, status: 200, body: SAVED }, { prefill: PREFILL });
+  assert.equal(sheet.node.querySelector(".tail-label")!.textContent, "Tail of @ada");
+  assert.equal(sheet.node.querySelector(".call-value")!.textContent, "NO 70%");
+  assert.equal(sheet.node.querySelector<HTMLInputElement>(".call-slider")!.value, "70");
+});
+
+test("a tail sends its handle, and no flip when the side is kept", async () => {
+  const { sheet, sent } = setup({ ok: true, status: 200, body: SAVED }, { prefill: PREFILL });
+  sheet.trigger!();
+  await tick();
+  assert.equal(sent[0].body.tailOf, "ada");
+  assert.equal(sent[0].body.tailFlip, undefined);
+  assert.equal(sent[0].body.pYes, 0.3);
+});
+
+test("changing the side of a tail sends an explicit flip", async () => {
+  const { sheet, sent } = setup({ ok: true, status: 200, body: SAVED }, { prefill: PREFILL });
+  sheet.node.querySelector<HTMLButtonElement>(".side-yes")!.click();
+  sheet.trigger!();
+  await tick();
+  assert.equal(sent[0].body.tailFlip, true);
+  assert.equal(sent[0].body.pYes, 0.7);
+});
+
+test("a normal call has no tail fields", async () => {
+  const { sheet, sent } = setup({ ok: true, status: 200, body: SAVED });
+  assert.equal(sheet.node.querySelector(".tail-label"), null);
+  sheet.trigger!();
+  await tick();
+  assert.equal("tailOf" in sent[0].body, false);
+});
+
+test("after locking a tail, Back it is offered with the new call", async () => {
+  const offered: unknown[] = [];
+  const { sheet } = setup({ ok: true, status: 200, body: SAVED }, { prefill: PREFILL, offerBack: (called) => offered.push(called) });
+  sheet.trigger!();
+  await tick();
+  named(sheet.node, "Back it").click();
+  assert.equal((offered[0] as { pickId: string }).pickId, "p1");
+});
+
+test("no proof on Sui means no Back it", async () => {
+  const { sheet } = setup({ ok: true, status: 200, body: { ...SAVED, commit: null } }, { prefill: PREFILL, offerBack: () => undefined });
+  sheet.trigger!();
+  await tick();
+  assert.equal(named(sheet.node, "Back it"), undefined);
+});
+
+test("a refused tail explains itself", async () => {
+  const { sheet } = setup({ ok: false, status: 404, body: { error: "tail_source_not_found" } }, { prefill: PREFILL });
+  sheet.trigger!();
+  await tick();
+  assert.match(sheet.node.querySelector(".status-line")!.textContent!, /no longer in their feed/);
+});

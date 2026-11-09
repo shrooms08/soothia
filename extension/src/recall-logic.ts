@@ -73,6 +73,7 @@ export function callBody(
   percent: number,
   page: { site: string; url: string },
   fixture: FixtureSignal | null,
+  tail?: { tailOf: string; flip: boolean },
 ): RecallPickBody {
   return {
     question: claim.question,
@@ -91,6 +92,7 @@ export function callBody(
           },
         }
       : {}),
+    ...(tail ? { tailOf: tail.tailOf, ...(tail.flip ? { tailFlip: true } : {}) } : {}),
   };
 }
 
@@ -171,6 +173,23 @@ export function callErrorMessage(status: number, body: ApiError | null): { text:
   if (status === 0) return { text: "I couldn't reach Soothia's server. Check your connection.", retry: true };
   if (status === 429) return { text: "Too many requests just now. Try again in a minute.", retry: true };
   if (status === 409 && body?.error === "duplicate_pick") return { text: "You already called this.", retry: false };
+  switch (body?.error) {
+    case "tail_source_not_found":
+      return { text: "That call is no longer in their feed.", retry: false };
+    case "tail_side_mismatch":
+    case "tail_wrong_question":
+      return { text: "This doesn't match the call you're tailing.", retry: false };
+    case "cannot_tail_self":
+      return { text: "That's your own call.", retry: false };
+    case "fixture_not_open":
+    case "too_close_to_kickoff":
+      return { text: "This match has started or is about to, so calls are closed.", retry: false };
+    case "fixture_not_on_espn":
+    case "fixture_date_mismatch":
+      return { text: "ESPN doesn't list this match for that day.", retry: false };
+    case "espn_unavailable":
+      return { text: "ESPN couldn't be checked just now. Try again in a minute.", retry: true };
+  }
   if (status === 400) {
     if (body?.field === "fixture.startISO") return { text: "This match has already kicked off.", retry: false };
     if (body?.field === "endTime") return { text: "The deadline for this call has passed.", retry: false };

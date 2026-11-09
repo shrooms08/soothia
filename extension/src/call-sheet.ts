@@ -2,8 +2,10 @@
 // Walrus and, when the Worker's spending guard allows, committed on Sui. No wallet
 // and no money from the user.
 import { button, el, externalLink } from "./dom";
-import type { ApiError, ApiPath, ApiResponse, FixtureSignal, RecallSavedPick, Tile } from "./messages";
+import type { ApiError, ApiPath, ApiResponse, FixtureSignal, RecallCalled, RecallSavedPick, Tile } from "./messages";
+import type { TailPrefill } from "./social-logic";
 import {
+  calledFromPick,
   callBody,
   callErrorMessage,
   overconfidencePoints,
@@ -37,6 +39,10 @@ export interface CallHost {
   locked(pick: RecallSavedPick): void;
   celebrate?: () => void;
   sound?: (name: "betPlaced" | "softError") => void;
+  /** Starts the sheet from someone else's call. Their side and confidence stay editable. */
+  prefill?: TailPrefill;
+  /** Offers Back it once the call is locked on Sui. */
+  offerBack?: (called: RecallCalled) => void;
 }
 
 const MIN_PERCENT = 51;
@@ -47,8 +53,9 @@ export function openCallSheet(host: CallHost): Sheet {
   const { claim } = host.tile;
   // A fixture claim whose match is no longer upcoming would save as an unscorable call.
   const closed = claim.fromFixture === true && host.fixture === null;
-  let side: CallSide = "yes";
-  let percent = DEFAULT_PERCENT;
+  const { prefill } = host;
+  let side: CallSide = prefill?.side ?? "yes";
+  let percent = prefill?.percent ?? DEFAULT_PERCENT;
   let bias: number | null = null;
   let busy = false;
   let disposed = false;
@@ -98,6 +105,7 @@ export function openCallSheet(host: CallHost): Sheet {
   nudge.append(nudgeText, useButton);
   nudge.hidden = host.shrink >= 1;
 
+  if (prefill) form.append(el("p", "tail-label", `Tail of @${prefill.tailOf}`));
   form.append(el("p", "question", claim.question), sides);
   form.append(sliderField, nudge);
 
@@ -150,6 +158,10 @@ export function openCallSheet(host: CallHost): Sheet {
     } else {
       outcome.append(el("p", "question", "Saved to Walrus. The Sui proof didn't go through this time."));
     }
+    if (host.offerBack && pick.commit) {
+      const called = calledFromPick(pick);
+      outcome.append(button("Back it", "button primary wide", () => host.offerBack?.(called)));
+    }
     outcome.append(button("Done", "button wide", () => host.back()));
     host.layout();
   }
@@ -159,7 +171,7 @@ export function openCallSheet(host: CallHost): Sheet {
     busy = true;
     lockButton.disabled = true;
     setStatus("Locking your call…");
-    const response = await host.api<RecallSavedPick>("/recall/pick", callBody(host.tile, side, percent, host.page, host.fixture));
+    const response = await host.api<RecallSavedPick>("/recall/pick", callBody(host.tile, side, percent, host.page, host.fixture, prefill ? { tailOf: prefill.tailOf, flip: side !== prefill.side } : undefined));
     busy = false;
     if (response.ok && response.body) {
       const pick = response.body as RecallSavedPick;

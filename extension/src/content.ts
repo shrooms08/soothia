@@ -21,7 +21,9 @@ import {
   OPEN_WELCOME,
   NAV_CHANGED,
   RECALL_ID_KEY,
+  FEED_CHECK_KEY,
   RECORD_SECTION_KEY,
+  SOCIAL_SEEN_KEY,
   SUI_WALLET_KEY,
   type ApiError,
   type ApiPath,
@@ -40,7 +42,9 @@ import {
   type RecallRecord,
 } from "./messages";
 import { readPage, type ReadInfo } from "./reader";
-import { createLeaderboardView } from "./leaderboard-view";
+import { badgeText, cachedFeedCount, FEED_CHECK_MS, pageFollowedCount, tailSheetFor, type FeedCheck, type FollowedCall, type TailSource } from "./social-logic";
+import type { TailPrefill } from "./social-logic";
+import { createSocialView, followedRow } from "./social-view";
 import { calledRow, createRecordView } from "./record-view";
 import {
   isQuietableSite,
@@ -153,6 +157,7 @@ function tileNode(
   onCall: () => void,
   proofHost: Parameters<typeof calledRow>[1],
   stakeRow?: HTMLElement,
+  followed?: HTMLElement,
 ): HTMLElement {
   const tile = el("div", "tile");
 
@@ -177,6 +182,7 @@ function tileNode(
     recall.append(button("Call it", "button primary call-it", onCall));
     tile.append(recall);
   }
+  if (followed) tile.append(followed);
   const notes = visibleNotes(insight);
   if (notes.length > 0) {
     const list = el("div", "tile-notes");
@@ -220,7 +226,9 @@ async function mount(): Promise<void> {
   const orbBody = el("span", "orb-body");
   orbBody.append(el("span", "orb-shimmer"));
   const orbStars = el("span", "orb-stars");
-  orb.append(orbBody, starSvg("orb-glint"), el("span", "orb-arc"), orbStars, el("span", "orb-pulse"));
+  const orbBadge = el("span", "orb-badge");
+  orbBadge.hidden = true;
+  orb.append(orbBody, starSvg("orb-glint"), el("span", "orb-arc"), orbStars, el("span", "orb-pulse"), orbBadge);
 
   // Light pages (Wikipedia, BBC) get the orb's edge shadow and star drop shadows.
   function pageIsLight(): boolean {
@@ -252,9 +260,9 @@ async function mount(): Promise<void> {
   // Two views: the claims on this page, and the user's record.
   const recordPane = el("div", "body");
   recordPane.hidden = true;
-  const boardPane = el("div", "body");
-  boardPane.hidden = true;
-  const boardView = createLeaderboardView(boardPane, { api, layout });
+  const socialPane = el("div", "body");
+  socialPane.hidden = true;
+  const socialView = createSocialView(socialPane, { api, layout, state: stateBlock, onTail: (handle, source) => openSocialTail(handle, source) });
   const recordView = createRecordView(recordPane, {
     api,
     layout,
@@ -278,23 +286,27 @@ async function mount(): Promise<void> {
   tabs.setAttribute("role", "tablist");
   const claimsTab = button("This page", "tab selected", () => showTab("claims"));
   const recordTab = button("My record", "tab", () => showTab("record"));
-  const boardTab = button("Leaderboard", "tab", () => showTab("board"));
-  for (const tab of [claimsTab, recordTab, boardTab]) tab.setAttribute("role", "tab");
-  tabs.append(claimsTab, recordTab, boardTab);
-  function showTab(which: "claims" | "record" | "board"): void {
+  const socialTab = button("Social", "tab", () => showTab("social"));
+  for (const tab of [claimsTab, recordTab, socialTab]) tab.setAttribute("role", "tab");
+  tabs.append(claimsTab, recordTab, socialTab);
+  function showTab(which: "claims" | "record" | "social"): void {
+    closeSocialSheet();
     body.hidden = which !== "claims";
     recordPane.hidden = which !== "record";
-    boardPane.hidden = which !== "board";
+    socialPane.hidden = which !== "social";
     for (const [name, tab] of [
       ["claims", claimsTab],
       ["record", recordTab],
-      ["board", boardTab],
+      ["social", socialTab],
     ] as const) {
       tab.classList.toggle("selected", which === name);
       tab.setAttribute("aria-selected", String(which === name));
     }
     if (which === "record") void safe("record", recordView.render);
-    if (which === "board") void safe("leaderboard", boardView.render);
+    if (which === "social") {
+      markSocialSeen();
+      void safe("social", socialView.render);
+    }
     layout();
   }
   const debug = el("details", "debug");
@@ -432,7 +444,7 @@ async function mount(): Promise<void> {
   }
   armSounds(shadow);
   armSounds(window);
-  card.append(head, tabs, body, recordPane, boardPane, debug);
+  card.append(head, tabs, body, recordPane, socialPane, debug);
 
   // Typing in the sheet must not trigger the page's keyboard shortcuts (X
   // has many). Escape still closes the card: that listener runs in capture.
@@ -603,6 +615,7 @@ async function mount(): Promise<void> {
     setOrb("found", tiles.length);
     const staking = stakeTileIds(tiles, (claimId) => insightsByClaim.get(claimId)?.called, Date.now());
     stakeRows = [];
+    let followedShown = false;
     body.replaceChildren(
       ...tiles.map((tile) => {
         const insight = insightsByClaim.get(tile.claim.id);
@@ -612,7 +625,13 @@ async function mount(): Promise<void> {
           stakeRows.push(stakeRow);
           row = stakeRow.node;
         }
-        return tileNode(tile, insight, () => openCall(tile), { api, layout }, row);
+        let followed: HTMLElement | undefined;
+        // Both questions on a match share one crowd, so the line appears once.
+        if (!followedShown && insight?.followedCalls?.length) {
+          followedShown = true;
+          followed = followedRow(insight.followedCalls, insight.consensus ?? null, insight.called ? null : (call: FollowedCall) => openPageTail(call), layout);
+        }
+        return tileNode(tile, insight, () => openCall(tile), { api, layout }, row, followed);
       }),
     );
     if (!card.hidden) refreshStakeRows();
@@ -632,7 +651,55 @@ async function mount(): Promise<void> {
     layout();
   }
 
-  function openCall(tile: Tile): void {
+  function openPageTail(call: FollowedCall): void {
+    const { tile, prefill } = tailSheetFor(call.handle, call);
+    openCall(tile, { prefill, offerBack: (called) => openBack(called) });
+  }
+
+  // A tail from Social opens over Social, so backing out returns to the feed.
+  let socialSheet: Sheet | null = null;
+
+  function closeSocialSheet(): void {
+    socialSheet?.dispose();
+    socialSheet = null;
+    socialPane.classList.remove("has-sheet");
+  }
+
+  function showInSocial(next: Sheet): void {
+    closeSocialSheet();
+    socialSheet = next;
+    socialPane.classList.add("has-sheet");
+    socialPane.replaceChildren(next.node);
+    layout();
+  }
+
+  function backToSocial(): void {
+    closeSocialSheet();
+    void safe("social", socialView.render);
+  }
+
+  function openSocialTail(handle: string, source: TailSource): void {
+    const { tile, fixture, prefill } = tailSheetFor(handle, source);
+    showInSocial(
+      openCallSheet({
+        tile,
+        page: { site: "soothia.fun", url: fixture.sourceUrl },
+        fixture,
+        shrink: recallShrink,
+        calibrationBias,
+        api,
+        layout,
+        back: backToSocial,
+        locked: () => undefined,
+        celebrate: pulseOrb,
+        sound,
+        prefill,
+        offerBack: (called) => showInSocial(openBackSheet({ called, api, wallet: walletAccess, layout, back: backToSocial, celebrate: pulseOrb, sound })),
+      }),
+    );
+  }
+
+  function openCall(tile: Tile, tail?: { prefill: TailPrefill; offerBack: (called: RecallCalled) => void }): void {
     closeSheet();
     showTab("claims");
     sheet = openCallSheet({
@@ -661,6 +728,7 @@ async function mount(): Promise<void> {
       },
       celebrate: pulseOrb,
       sound,
+      ...(tail ?? {}),
     });
     body.classList.add("has-sheet");
     body.replaceChildren(sheet.node);
@@ -707,6 +775,8 @@ async function mount(): Promise<void> {
     const result = response.body as RecallInsights;
     if (!Array.isArray(result.insights)) return;
     insightsByClaim = new Map(result.insights.map((insight) => [insight.claimId, insight]));
+    pageFollowed = pageFollowedCount(result.insights.map((insight) => insight.followedCalls));
+    renderBadge();
     recallShrink = typeof result.shrink === "number" ? result.shrink : 1;
     if (Array.isArray(result.quietSites)) applyQuietSites(result.quietSites);
     tiles = sortByRelevance(tiles, insightsByClaim);
@@ -792,8 +862,52 @@ async function mount(): Promise<void> {
     }
   }
 
+  // ---- The orb's badge ----
+
+  let pageFollowed = 0;
+  let newFeedItems = 0;
+
+  function renderBadge(): void {
+    const text = badgeText(pageFollowed + newFeedItems);
+    orbBadge.hidden = text === null;
+    orbBadge.textContent = text ?? "";
+  }
+
+  function markSocialSeen(): void {
+    const now = Date.now();
+    newFeedItems = 0;
+    renderBadge();
+    chrome.storage.local.set({ [SOCIAL_SEEN_KEY]: now, [FEED_CHECK_KEY]: { at: now, seen: now, count: 0 } satisfies FeedCheck }).catch(() => {});
+  }
+
+  /** Counts feed items since Social was last opened, asking the Worker every few minutes at most. */
+  async function refreshFeedBadge(): Promise<void> {
+    const stored = await chrome.storage.local.get([SOCIAL_SEEN_KEY, FEED_CHECK_KEY]);
+    const now = Date.now();
+    const savedSeen: unknown = stored[SOCIAL_SEEN_KEY];
+    if (typeof savedSeen !== "number") {
+      // A first run starts from now, not from everything anyone ever called.
+      await chrome.storage.local.set({ [SOCIAL_SEEN_KEY]: now });
+      return;
+    }
+    const cached = cachedFeedCount(stored[FEED_CHECK_KEY] as FeedCheck | undefined, savedSeen, now);
+    let count = cached;
+    if (count === null) {
+      const response = await api<{ count: number }>("/social/feed/new", { since: savedSeen });
+      if (!response.ok || !response.body) return;
+      count = (response.body as { count: number }).count;
+      await chrome.storage.local.set({ [FEED_CHECK_KEY]: { at: now, seen: savedSeen, count } satisfies FeedCheck });
+    }
+    newFeedItems = count;
+    renderBadge();
+  }
+
   function render(view: View): void {
     closeSheet();
+    if (view.kind !== "tiles") {
+      pageFollowed = 0;
+      renderBadge();
+    }
     switch (view.kind) {
       case "watching":
         setOrb("idle");
@@ -1248,6 +1362,8 @@ async function mount(): Promise<void> {
   renderDebug();
   await safe("settings", loadSettings);
   await safe("wallet", walletSettings.load);
+  void safe("feed badge", refreshFeedBadge);
+  setInterval(guarded("feed badge", () => void safe("feed badge", refreshFeedBadge)), FEED_CHECK_MS);
   // A wallet connected from the Back it sheet shows in settings too.
   chrome.storage.onChanged.addListener(
     guarded("wallet change", (changes: Record<string, chrome.storage.StorageChange>) => {

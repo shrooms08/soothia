@@ -1,6 +1,8 @@
 // Message types shared by the extension's scripts. Names are namespaced so
 // they cannot collide with messages a page or another extension sends.
 
+import type { ConsensusView, FollowedCall } from "./social-logic";
+
 // Content script -> background service worker, via chrome.runtime.sendMessage.
 export const HEALTH_REQUEST = "soothia:v1:health";
 
@@ -117,6 +119,12 @@ export const API_ROUTES = {
   "/social/profile/by-address": "GET",
   "/social/suins": "GET",
   "/social/leaderboard": "GET",
+  "/social/follow": "POST",
+  "/social/unfollow": "POST",
+  "/social/following": "GET",
+  "/social/search": "GET",
+  "/social/feed": "GET",
+  "/social/feed/new": "GET",
 } as const;
 export type ApiPath = keyof typeof API_ROUTES;
 
@@ -140,6 +148,10 @@ export const RECALL_ID_KEY = "soothia.recallId";
 
 /** The connected Sui wallet: { address, walletId, walletName }. */
 export const SUI_WALLET_KEY = "soothia.suiWallet";
+
+/** When Social was last opened, and the last check for newer feed items. */
+export const SOCIAL_SEEN_KEY = "soothia.socialSeen";
+export const FEED_CHECK_KEY = "soothia.feedCheck";
 
 /** Which section of My record was open last. */
 export const RECORD_SECTION_KEY = "soothia.recordSection";
@@ -165,6 +177,8 @@ export interface RecallInsight {
   nudge: number;
   /** Missing on a Worker older than this extension. */
   called?: RecallCalled | null;
+  followedCalls?: FollowedCall[];
+  consensus?: ConsensusView | null;
 }
 
 export interface RecallInsights {
@@ -182,6 +196,8 @@ export interface RecallPickBody {
   endTime: string;
   source: { site: string; url: string };
   fixture?: { home: string; away: string; competition?: string; startISO: string; subject: "home" | "away" };
+  tailOf?: string;
+  tailFlip?: boolean;
 }
 
 export interface RecallSavedPick {

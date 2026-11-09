@@ -184,6 +184,18 @@ test("lessons run most specific first", () => {
   assert.deepEqual(list.map((lesson) => lesson.key), ["entity:arsenal", "favourites", "vs_market"]);
 });
 
+test("the social lessons slot in after entities, ahead of favourites", () => {
+  const keys = ["calibration", "vs_market", "favourites", "consensus", "stakes", "tail:ada", "entity:arsenal"];
+  const order: string[] = [];
+  let remaining = keys.map((key) => taught(key, "2026-11-08T00:00:00Z"));
+  while (remaining.length > 0) {
+    const [first] = lessonsForDisplay(remaining);
+    order.push(first.key);
+    remaining = remaining.filter((lesson) => lesson.key !== first.key);
+  }
+  assert.deepEqual(order, ["entity:arsenal", "tail:ada", "stakes", "consensus", "favourites", "vs_market", "calibration"]);
+});
+
 test("only the newest lesson per key counts, at most three", () => {
   const list = lessonsForDisplay([taught("calibration", "2026-11-01T00:00:00Z", "old"), taught("calibration", "2026-11-08T00:00:00Z", "new")]);
   assert.deepEqual(list.map((lesson) => lesson.text), ["new"]);
