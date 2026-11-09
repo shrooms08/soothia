@@ -9,6 +9,7 @@ import { mergePicks } from "../recall/picks";
 import type { PickRecord, Side, StakeRecord } from "../recall/records";
 import { identify, storeFor } from "../recall/routes";
 import { cacheGet, cachePut, kvPut } from "../store";
+import { pushStakeToFeed } from "../social/feed";
 import { ADMIN_ROUTES } from "./admin";
 import { DRILL_ROUTES } from "./drill";
 import { stakeSettings, tatumStakeChain, type StakeChain, type StakeSettings } from "./chain";
@@ -338,6 +339,7 @@ async function confirmRoute(context: Context, userKey: string): Promise<Response
   }
   await forgetPool(identity.questionHash);
   await linkWallet(context, userKey, sender);
+  await pushStakeToFeed(env, userKey, pick, amount);
   return json(context.request, { ok: true, duplicate: false, indexed, stake });
 }
 

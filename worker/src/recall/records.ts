@@ -48,6 +48,12 @@ export interface PickRecord {
   commit: { digest: string; network: "mainnet" } | null;
   /** Why the Worker chose not to commit this pick on Sui. */
   commitSkipped?: CommitSkipReason;
+  /** The public handle this call copied, if any. */
+  tailOf?: string;
+  /** The user chose the opposite side to the one they tailed. */
+  tailFlipped?: boolean;
+  /** Whether this call matched what the people followed had said when it was made. */
+  followedConsensus?: "with" | "against";
 }
 
 /** What happened, and how the call scored. */

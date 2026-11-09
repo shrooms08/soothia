@@ -6,6 +6,7 @@ import { json, type Env } from "../http";
 import { tatumSuiClient } from "../recall/tatumGrpc";
 import { identify, storeFor } from "../recall/routes";
 import { SocialRefusal, type SignatureVerifier, type NameLookup, type SocialContext } from "./context";
+import { feedNewRoute, feedRoute } from "./feed";
 import { followingRoute, followRoute, searchRoute, unfollowRoute } from "./follow";
 import { byAddressRoute, challengeRoute, publishRoute, suinsRoute, unpublishRoute, updateRoute } from "./identity";
 import { leaderboardRoute, profileRoute } from "./public";
@@ -55,11 +56,15 @@ export async function socialRoute(request: Request, env: Env, path: string, deps
       case "POST /social/follow":
       case "POST /social/unfollow":
       case "GET /social/following":
+      case "GET /social/feed":
+      case "GET /social/feed/new":
       case "GET /social/search": {
         const user = await identify(request);
         if (typeof user !== "string") return user;
         if (route === "POST /social/follow") return await followRoute(context, user);
         if (route === "POST /social/unfollow") return await unfollowRoute(context, user);
+        if (route === "GET /social/feed") return await feedRoute(context, user);
+        if (route === "GET /social/feed/new") return await feedNewRoute(context, user);
         return await (route === "GET /social/following" ? followingRoute(context, user) : searchRoute(context, user));
       }
       case "POST /social/profile/publish": {

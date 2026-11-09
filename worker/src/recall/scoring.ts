@@ -345,7 +345,7 @@ function kickoffDay(startISO: string): string | null {
 }
 
 /** The same two teams on the same UTC day, whichever way round they are listed. */
-function sameMatch(a: { home: string; away: string; startISO: string }, b: { home: string; away: string; startISO: string }): boolean {
+export function sameMatch(a: { home: string; away: string; startISO: string }, b: { home: string; away: string; startISO: string }): boolean {
   const day = kickoffDay(a.startISO);
   if (day === null || day !== kickoffDay(b.startISO)) return false;
   const [teamA, teamB] = [teamKey(a.home), teamKey(a.away)];

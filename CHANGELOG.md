@@ -29,6 +29,7 @@ Branch `total-recall`. A local CLI that locks football predictions as memories o
 - Sui wallet connection in the extension (0.12.0): a page-world bridge finds wallets through the Wallet Standard, with Connect and Disconnect in settings. Every transaction is decoded and checked in the background worker before a wallet can be asked to sign, and only an exact stake or claim is allowed.
 - Admin page at `/admin`, served by the Worker and not indexed: connect the AdminCap wallet, see every challenge window with its time left, and overturn. New admin routes `GET /stake/admin/info`, `POST /stake/admin/overturn/build` and `POST /stake/admin/config/build` return unsigned bytes for the AdminCap holder. New real pools are refused while the delays are not the production values.
 - Extension 0.13.0 with the staking screens.
+- Feed: a public user's calls and stakes go into `recent:<handle>`. `GET /social/feed` merges the people you follow, and `/recall/insights` now says who you follow called the match and what most of them said.
 - Following: `POST /social/follow` and `/social/unfollow`, `GET /social/following` and `GET /social/search`. Follows are memories on Walrus with a KV index, and following doesn't need a public profile.
 - Extension 0.14.1 with the reorganised My record.
 - Lessons are written only when their meaning changes or a figure moves by 5 points or more, instead of on every small change.

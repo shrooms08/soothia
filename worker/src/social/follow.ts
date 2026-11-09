@@ -65,7 +65,7 @@ export async function unfollowRoute(context: SocialContext, userKey: string): Pr
   return socialJson(context, { ok: true, following: false });
 }
 
-async function scoresByHandle(context: SocialContext): Promise<Map<string, number>> {
+export async function scoresByHandle(context: Pick<SocialContext, "env">): Promise<Map<string, number>> {
   const document = await context.env.SOOTHIA_CACHE.get<BoardsDocument>(BOARDS_KEY, "json");
   return new Map((document?.entries ?? []).map((entry) => [entry.handle, entry.periods.all.stats.score]));
 }

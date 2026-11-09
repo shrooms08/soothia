@@ -13,6 +13,7 @@ import { resolveUser } from "./resolve";
 import { insightsFor, latestBy, quietSites, shrinkFactor, summarize, type RelatedHit } from "./scoring";
 import { commitConfigured, latestCheckpoint, memoryAccount, tatumConfigured, verifyCommit } from "./sui";
 import { SWEEP_PREFIX } from "./sweep";
+import { consensusOf, followedCallsOn, loadFollowedItems, pushPickToFeed } from "../social/feed";
 import { callScore } from "../social/stats";
 import { stakeSummaries } from "../stake/positions";
 
@@ -212,11 +213,19 @@ async function insights(request: Request, env: Env, userKey: string): Promise<Re
       related.set(claim.id, hits.map((hit) => ({ pick: hit.record, distance: hit.distance })));
     }),
   );
+  const followed = await loadFollowedItems({ env }, userKey).catch(() => []);
+  const consensusLesson = latestBy(memory.lesson, (lesson) => lesson.key).get("consensus");
+  const fixtures = new Map(claims.map((claim) => [claim.id, claim.fixture]));
   return json(request, {
     insights: insightsFor(
       claims.map((claim) => ({ ...claim, entities: entitiesFromQuestion(claim.question) })),
       { picks: mergePicks(memory.pick), outcomes: memory.outcome, lessons: memory.lesson, related },
-    ),
+    ).map((insight) => {
+      const fixture = fixtures.get(insight.claimId);
+      const followedCalls = fixture ? followedCallsOn(followed, fixture) : [];
+      const notes = followedCalls.length > 0 && consensusLesson ? [...insight.notes, consensusLesson.text] : insight.notes;
+      return { ...insight, notes, followedCalls, consensus: consensusOf(followedCalls) };
+    }),
     shrink: shrinkFactor(memory.lesson),
     quietSites: quietSites(memory.pref),
   });
@@ -230,7 +239,9 @@ async function createPick(request: Request, env: Env, userKey: string): Promise<
   const store = storeFor(env, userKey);
   // The cached list folds in recent writes, which the relayer has not stored yet.
   if (isDuplicatePick(mergePicks(await store.list("pick")), checked.input)) return json(request, { error: "duplicate_pick" }, 409);
-  return json(request, await savePick(checked.input, env, userKey, store));
+  const pick = await savePick(checked.input, env, userKey, store);
+  await pushPickToFeed(env, userKey, pick);
+  return json(request, pick);
 }
 
 /** Builds a pick under the spending guard and saves it, committed on Sui or not. */
