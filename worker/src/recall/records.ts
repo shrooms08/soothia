@@ -6,8 +6,8 @@
 // Each install gets its own set of namespaces, one per kind, so "all my picks"
 // is a single recall against one namespace rather than a filter over everyone.
 
-export type RecordKind = "pick" | "outcome" | "lesson" | "pref" | "stake" | "profile";
-export const RECORD_KINDS: readonly RecordKind[] = ["pick", "outcome", "lesson", "pref", "stake", "profile"];
+export type RecordKind = "pick" | "outcome" | "lesson" | "pref" | "stake" | "profile" | "follow";
+export const RECORD_KINDS: readonly RecordKind[] = ["pick", "outcome", "lesson", "pref", "stake", "profile", "follow"];
 
 export type Side = "YES" | "NO";
 
@@ -128,6 +128,13 @@ export interface ProfileRecord {
   unpublished?: boolean;
 }
 
+/** Following someone, or no longer. The newest record for a handle says which. */
+export interface FollowRecord {
+  handle: string;
+  kind: "follow" | "unfollow";
+  at: string;
+}
+
 export interface RecordByKind {
   pick: PickRecord;
   outcome: OutcomeRecord;
@@ -135,9 +142,10 @@ export interface RecordByKind {
   pref: PrefRecord;
   stake: StakeRecord;
   profile: ProfileRecord;
+  follow: FollowRecord;
 }
 
-const TAG = /⟦soothia:(pick|outcome|lesson|pref|stake|profile):v1 (\{[\s\S]*\})⟧\s*$/;
+const TAG = /⟦soothia:(pick|outcome|lesson|pref|stake|profile|follow):v1 (\{[\s\S]*\})⟧\s*$/;
 
 function pct(p: number): string {
   return `${Math.round(p * 100)}%`;
@@ -175,6 +183,10 @@ export function sentenceFor<K extends RecordKind>(kind: K, record: RecordByKind[
       return pref.kind === "quiet_site"
         ? `Preference: stay quiet on ${pref.site}.`
         : `Preference: show calls on ${pref.site} again.`;
+    }
+    case "follow": {
+      const follow = record as FollowRecord;
+      return follow.kind === "follow" ? `I follow @${follow.handle} on Soothia.` : `I no longer follow @${follow.handle} on Soothia.`;
     }
     case "profile": {
       const profile = record as ProfileRecord;

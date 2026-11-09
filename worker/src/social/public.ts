@@ -1,7 +1,7 @@
 // Public profiles: the two pages anyone can read. KV only, and briefly cached.
 
 import { cacheGet, cachePut } from "../store";
-import { BOARDS_KEY, handleKey, HIDDEN_KEY, parseHandle, publicProfile, refuse, socialJson, statsKey, type ProfileIndex, type SocialContext } from "./context";
+import { BOARDS_KEY, followersKey, followingKey, handleKey, HIDDEN_KEY, parseHandle, publicProfile, refuse, socialJson, statsKey, type ProfileIndex, type SocialContext } from "./context";
 import type { BoardsDocument, ProfileSnapshot } from "./snapshots";
 import { BOARDS, findBreakdown, PERIODS, rankBoard, type Board, type BoardRow, type Period } from "./stats";
 
@@ -18,10 +18,16 @@ export async function profileRoute(context: SocialContext, rawHandle: string): P
   const kv = context.env.SOOTHIA_CACHE;
   const profile = await kv.get<ProfileIndex>(handleKey(handle), "json");
   if (!profile) return refuse(404, "not_found");
-  const snapshot = await kv.get<ProfileSnapshot>(statsKey(handle), "json");
+  const [snapshot, followers, following] = await Promise.all([
+    kv.get<ProfileSnapshot>(statsKey(handle), "json"),
+    kv.get(followersKey(handle)),
+    kv.get<string[]>(followingKey(profile.userKey), "json"),
+  ]);
   // Listed field by field, so what the sweep keeps for itself can never leak out.
   const view = {
     profile: publicProfile(profile),
+    followers: Number(followers) || 0,
+    following: following?.length ?? 0,
     builtAt: snapshot?.builtAt ?? null,
     stats: snapshot?.periods.all.stats ?? null,
     periods: snapshot ? Object.fromEntries(PERIODS.map((period) => [period, snapshot.periods[period].stats])) : null,

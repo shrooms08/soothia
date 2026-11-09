@@ -44,6 +44,9 @@ export const handleKey = (handle: string): string => `profile:${handle}`;
 export const addressKey = (address: string): string => `profileaddr:${address}`;
 export const userIndexKey = (userKey: string): string => `profileuser:${userKey}`;
 export const statsKey = (handle: string): string => `socialstats:${handle}`;
+export const followingKey = (userKey: string): string => `following:${userKey}`;
+export const followersKey = (handle: string): string => `followers:${handle}`;
+export const recentKey = (handle: string): string => `recent:${handle}`;
 export const BOARDS_KEY = "social:boards";
 export const HIDDEN_KEY = "social:hidden";
 

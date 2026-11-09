@@ -4,7 +4,7 @@
 
 import { readJsonObject } from "../http";
 import { kvPut } from "../store";
-import { addressKey, handleKey, HIDDEN_KEY, parseAddress, parseHandle, publicProfile, refuse, socialJson, statsKey, userIndexKey, type ProfileIndex, type SocialContext } from "./context";
+import { addressKey, followersKey, handleKey, HIDDEN_KEY, parseAddress, parseHandle, publicProfile, refuse, socialJson, recentKey, statsKey, userIndexKey, type ProfileIndex, type SocialContext } from "./context";
 
 export const CHALLENGE_TTL_SEC = 600;
 const ACTIONS = ["publish", "update", "unpublish"] as const;
@@ -126,7 +126,7 @@ export async function unpublishRoute(context: SocialContext): Promise<Response> 
   await consumeChallenge(context, address, "unpublish", body.signature);
 
   await context.store(profile.userKey).write("profile", { address, handle: profile.handle, publicSince: profile.publicSince, shareHistory: profile.shareHistory, unpublished: true });
-  await Promise.all([handleKey(profile.handle), addressKey(address), userIndexKey(profile.userKey), statsKey(profile.handle)].map((key) => env.SOOTHIA_CACHE.delete(key)));
+  await Promise.all([handleKey(profile.handle), addressKey(address), userIndexKey(profile.userKey), statsKey(profile.handle), followersKey(profile.handle), recentKey(profile.handle)].map((key) => env.SOOTHIA_CACHE.delete(key)));
   await hide(context, profile.handle);
   return socialJson(context, { ok: true });
 }

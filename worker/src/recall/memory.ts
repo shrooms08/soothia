@@ -85,6 +85,7 @@ const LIST_QUERY: Record<RecordKind, string> = {
   pref: "Preference for where Soothia shows calls",
   stake: "Staked SUI on my call",
   profile: "My public Soothia profile",
+  follow: "Who I follow on Soothia",
 };
 const LIST_ALL_KINDS = ["pick", "outcome", "lesson", "pref", "stake"] as const;
 const LIST_LIMIT = 100;
@@ -153,7 +154,7 @@ export class RecallStore {
     return out;
   }
 
-  async listAll(): Promise<{ [K in Exclude<RecordKind, "profile">]: RecordByKind[K][] }> {
+  async listAll(): Promise<{ [K in Exclude<RecordKind, "profile" | "follow">]: RecordByKind[K][] }> {
     const [pick, outcome, lesson, pref, stake] = await Promise.all(LIST_ALL_KINDS.map((kind) => this.list(kind)));
     return {
       pick: pick as RecordByKind["pick"][],
