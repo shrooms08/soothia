@@ -29,6 +29,7 @@ Branch `total-recall`. A local CLI that locks football predictions as memories o
 - Sui wallet connection in the extension (0.12.0): a page-world bridge finds wallets through the Wallet Standard, with Connect and Disconnect in settings. Every transaction is decoded and checked in the background worker before a wallet can be asked to sign, and only an exact stake or claim is allowed.
 - Admin page at `/admin`, served by the Worker and not indexed: connect the AdminCap wallet, see every challenge window with its time left, and overturn. New admin routes `GET /stake/admin/info`, `POST /stake/admin/overturn/build` and `POST /stake/admin/config/build` return unsigned bytes for the AdminCap holder. New real pools are refused while the delays are not the production values.
 - Extension 0.13.0 with the staking screens.
+- Lessons are written only when their meaning changes or a figure moves by 5 points or more, instead of on every small change.
 - My record has four sections, Calls, Lessons, Wallet and Me, and remembers the last one. Calls are one tappable row each. Link record is also in Me, and the terms Brier and memory account now live only in expanders.
 - My record has an attention strip for stakes ready to claim, calls settling today and new lessons.
 - My record has a header: public or private, Call Score, and how many calls were right.

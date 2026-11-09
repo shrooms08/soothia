@@ -41,7 +41,81 @@ test("an overconfident history produces a calibration lesson with bias above 0.0
   assert.match(lesson.text, /overconfident/);
 });
 
-test("newLessons drops a lesson with identical text and keeps a changed one", () => {
+const lessonAt = (key: LessonRecord["key"], text: string, minute: number, bias?: number): LessonRecord => ({ key, at: new Date(Date.UTC(2026, 10, 8, 12, minute)).toISOString(), text, n: minute + 3, ...(bias === undefined ? {} : { bias }) });
+const matched = (minute: number, claimed: number, landed: number) => lessonAt("calibration", `Your confidence matches your hit rate (${claimed}% claimed, ${landed}% landed). Keep calling it like this.`, minute);
+
+/** Feeds lessons in one by one, the way sweeps do, and returns the ones that get written. */
+function written(series: LessonRecord[]): LessonRecord[] {
+  const kept: LessonRecord[] = [];
+  for (const lesson of series) kept.push(...newLessons(kept, [lesson]));
+  return kept;
+}
+
+test("the current scenario: 8 matched lessons moving 1 to 3 points write only the first", () => {
+  const series = [[72, 71], [73, 72], [73, 74], [74, 73], [72, 72], [73, 71], [72, 73], [73, 74]].map(([claimed, landed], minute) => matched(minute, claimed, landed));
+  assert.deepEqual(written(series), [series[0]]);
+});
+
+test("a figure moving exactly 5 points writes; 4 does not", () => {
+  const first = matched(0, 70, 70);
+  assert.deepEqual(newLessons([first], [matched(1, 70, 74)]), []);
+  assert.equal(newLessons([first], [matched(1, 70, 75)]).length, 1);
+  assert.equal(newLessons([first], [matched(1, 65, 70)]).length, 1);
+});
+
+test("small moves add up against the newest lesson written", () => {
+  const series = [matched(0, 70, 70), matched(1, 70, 72), matched(2, 70, 74), matched(3, 70, 76)];
+  assert.deepEqual(written(series).map((lesson) => lesson.text), [series[0].text, series[3].text]);
+});
+
+test("a change of meaning writes even when the numbers barely move", () => {
+  const before = matched(0, 72, 70);
+  const after = lessonAt("calibration", "You call 72% on average but land 63%: you run 9 points overconfident. Shade your calls toward 50%.", 1);
+  assert.equal(newLessons([before], [after]).length, 1);
+  const under = lessonAt("calibration", "You land 83% of calls while claiming 69%: you are 14 points underconfident. Back yourself more.", 2);
+  assert.equal(newLessons([after], [under]).length, 1);
+});
+
+test("favourites: earned and burned are different meanings", () => {
+  const earned = lessonAt("favourites", "Your strong calls (60%+) come in 83% of the time, better than you claim. Your conviction is earned.", 0);
+  const burned = lessonAt("favourites", "Your strong calls (60%+) come in 80% of the time, 9 points below what you claim. Favourites have burned you.", 1);
+  assert.equal(newLessons([earned], [burned]).length, 1);
+  assert.deepEqual(newLessons([earned], [lessonAt("favourites", "Your strong calls (60%+) come in 85% of the time, better than you claim. Your conviction is earned.", 1)]), []);
+});
+
+test("vs market: ahead, behind and level, and the edge in points", () => {
+  const ahead = lessonAt("vs_market", "You have beaten the market price on 5 calls (Brier 0.02 better). Your edge is real so far.", 0, 0.02);
+  const behind = lessonAt("vs_market", "The market price has beaten you on 6 calls (Brier 0.02 worse). When you disagree with the odds, think twice.", 1, -0.02);
+  const level = lessonAt("vs_market", "You and the market have scored about the same on 7 calls.", 2, 0);
+  assert.equal(newLessons([ahead], [behind]).length, 1);
+  assert.equal(newLessons([behind], [level]).length, 1);
+  // More calls and a similar edge say nothing new.
+  assert.deepEqual(newLessons([ahead], [lessonAt("vs_market", "You have beaten the market price on 9 calls (Brier 0.03 better). Your edge is real so far.", 1, 0.03)]), []);
+  assert.equal(newLessons([ahead], [lessonAt("vs_market", "You have beaten the market price on 9 calls (Brier 0.08 better). Your edge is real so far.", 1, 0.08)]).length, 1);
+});
+
+test("entities: better, overrate and underrate, and the hit rate", () => {
+  const better = lessonAt("entity:arsenal", "You read Arsenal well: 3 of 4 right, better than your usual.", 0);
+  const overrate = lessonAt("entity:arsenal", "You overrate Arsenal: 3 of 4 right, and your YES runs 12 points high on them.", 1);
+  const underrate = lessonAt("entity:arsenal", "You underrate Arsenal: 3 of 4 right, and they keep doing better than you expect.", 2);
+  assert.equal(newLessons([better], [overrate]).length, 1);
+  assert.equal(newLessons([overrate], [underrate]).length, 1);
+  // 3 of 4 is 75%, 8 of 11 is 73%: one more call, the same story.
+  assert.deepEqual(newLessons([better], [lessonAt("entity:arsenal", "You read Arsenal well: 8 of 11 right, better than your usual.", 1)]), []);
+  assert.equal(newLessons([better], [lessonAt("entity:arsenal", "You read Arsenal well: 4 of 4 right, better than your usual.", 1)]).length, 1);
+});
+
+test("a key seen for the first time is always written", () => {
+  assert.equal(newLessons([matched(0, 70, 70)], [lessonAt("favourites", "Your strong calls (60%+) come in 83% of the time, better than you claim. Your conviction is earned.", 1)]).length, 1);
+});
+
+test("only the newest lesson of a key is compared", () => {
+  const older = matched(0, 50, 50);
+  const newest = matched(1, 70, 70);
+  assert.deepEqual(newLessons([older, newest], [matched(2, 71, 71)]), []);
+});
+
+test("text Soothia doesn't recognise falls back to comparing the words", () => {
   const old: LessonRecord = { key: "calibration", at: "2026-11-01T00:00:00.000Z", text: "same", n: 3 };
   assert.deepEqual(newLessons([old], [{ ...old, at: AT }]), []);
   const changed: LessonRecord = { ...old, at: AT, text: "different" };

@@ -252,10 +252,50 @@ export function deriveLessons(outcomes: OutcomeRecord[], at: string): LessonReco
   return lessons;
 }
 
-/** Only lessons whose text changed since the last one with the same key. */
+const LESSON_MOVE_POINTS = 5;
+
+const MEANINGS: [RegExp, string][] = [
+  [/overconfident/, "over"],
+  [/underconfident/, "under"],
+  [/matches your hit rate/, "matched"],
+  [/conviction is earned/, "earned"],
+  [/burned you/, "burned"],
+  [/beaten the market/, "ahead"],
+  [/market price has beaten/, "behind"],
+  [/about the same/, "level"],
+  [/You read .+ well/, "better"],
+  [/You overrate/, "overrate"],
+  [/You underrate/, "underrate"],
+  [/blind spot/, "blind_spot"],
+];
+
+/** What a lesson is saying, apart from its numbers. Read from the text so older lessons compare too. */
+export function lessonMeaning(lesson: Pick<LessonRecord, "text">): string {
+  return MEANINGS.find(([pattern]) => pattern.test(lesson.text))?.[1] ?? lesson.text;
+}
+
+/** A lesson's figures in points: percentages, "x of y right", gaps, or the market edge. */
+function lessonFigures(lesson: LessonRecord): number[] {
+  if (lesson.key === "vs_market") return lesson.bias === undefined ? [] : [lesson.bias * 100];
+  const figures = [...lesson.text.matchAll(/(\d+)%/g)].map((match) => Number(match[1]));
+  for (const match of lesson.text.matchAll(/(\d+) of (\d+) right/g)) figures.push((Number(match[1]) / Number(match[2])) * 100);
+  for (const match of lesson.text.matchAll(/(\d+) points?\b/g)) figures.push(Number(match[1]));
+  return figures;
+}
+
+function lessonChanged(previous: LessonRecord | undefined, fresh: LessonRecord): boolean {
+  if (!previous) return true;
+  if (lessonMeaning(previous) !== lessonMeaning(fresh)) return true;
+  const before = lessonFigures(previous);
+  const after = lessonFigures(fresh);
+  if (before.length !== after.length) return true;
+  return after.some((figure, index) => Math.abs(figure - before[index]) >= LESSON_MOVE_POINTS);
+}
+
+/** Only lessons whose meaning changed, or with a figure that moved 5 points, since the last with the same key. */
 export function newLessons(previous: LessonRecord[], fresh: LessonRecord[]): LessonRecord[] {
   const latest = latestBy(previous, (lesson) => lesson.key);
-  return fresh.filter((lesson) => latest.get(lesson.key)?.text !== lesson.text);
+  return fresh.filter((lesson) => lessonChanged(latest.get(lesson.key), lesson));
 }
 
 /** Sites the user asked Soothia to stay quiet on, newest preference per site winning. */
