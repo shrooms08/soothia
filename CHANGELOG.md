@@ -29,6 +29,7 @@ Branch `total-recall`. A local CLI that locks football predictions as memories o
 - Sui wallet connection in the extension (0.12.0): a page-world bridge finds wallets through the Wallet Standard, with Connect and Disconnect in settings. Every transaction is decoded and checked in the background worker before a wallet can be asked to sign, and only an exact stake or claim is allowed.
 - Admin page at `/admin`, served by the Worker and not indexed: connect the AdminCap wallet, see every challenge window with its time left, and overturn. New admin routes `GET /stake/admin/info`, `POST /stake/admin/overturn/build` and `POST /stake/admin/config/build` return unsigned bytes for the AdminCap holder. New real pools are refused while the delays are not the production values.
 - Extension 0.13.0 with the staking screens.
+- `soothia_pay`: a Move package for premium call payments, splitting each one between the caller and the treasury, with one-time nonces. x402 decision and wire format in `docs/x402.md`.
 - Extension 0.15.0 with Social. The sweep fills a public user's feed from earlier public calls once, so followers have something to see.
 - New lessons: staked vs free calls, bigger vs smaller stakes, how tailing each person went, and going against the people you follow. They follow the same rule as other lessons, and My record orders them after team lessons.
 - Social tab in the extension: a feed with Tail, the leaderboard, and search and follow. Tiles say who you follow called the match, and the orb shows a count. The web profile shows followers and following.

@@ -1,0 +1,6 @@
+[package]
+name = "soothia_pay"
+edition = "2024"
+
+[addresses]
+soothia_pay = "0x0"
