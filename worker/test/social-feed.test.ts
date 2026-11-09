@@ -5,7 +5,7 @@ import type { Env } from "../src/http";
 import { userKeyFor, type RecallStore } from "../src/recall/memory";
 import type { PickRecord } from "../src/recall/records";
 import { clearMemoryCache } from "../src/store";
-import { consensusOf, feedItemFor, followedCallsOn, followedStance, mergeFeed, pushPickToFeed, pushStakeToFeed, withItem, type FeedItem, type FollowedItem } from "../src/social/feed";
+import { consensusOf, feedItemFor, followedCallsOn, followedStance, mergeFeed, pushPickToFeed, pushStakeToFeed, withItem, type FeedItem, type FollowedItem, type OpenFollowedCall } from "../src/social/feed";
 import { socialRoute } from "../src/social/routes";
 
 const INSTALL = "12345678-1234-1234-1234-123456789abc";
@@ -137,7 +137,7 @@ test("followed calls match by teams and day, whichever way round", () => {
   const calls = followedCallsOn([followed("ada", item("a", 1))], page);
   assert.equal(calls.length, 1);
   assert.equal(calls[0].handle, "ada");
-  assert.equal(calls[0].lean, "Arsenal win");
+  assert.equal((calls[0] as OpenFollowedCall).lean, "Arsenal win");
   assert.equal(followedCallsOn([followed("ada", item("a", 1))], { ...page, home: "Arsenal", away: "Newcastle" }).length, 1);
 });
 
@@ -149,7 +149,7 @@ test("another match or day isn't followed", () => {
 test("each person counts once, with their newest call", () => {
   const calls = followedCallsOn([followed("ada", item("old", 1, { confidence: 55 })), followed("ada", item("new", 5, { confidence: 80 }))], page);
   assert.equal(calls.length, 1);
-  assert.equal(calls[0].confidence, 80);
+  assert.equal((calls[0] as OpenFollowedCall).confidence, 80);
 });
 
 test("the consensus is the side most people took", () => {

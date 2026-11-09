@@ -16,7 +16,7 @@ Soothia is a Chrome MV3 extension (a floating orb on every page) where people ca
 ## Architecture
 
 - **Extension** (`extension/`): MV3, TypeScript, Vite. Build output in `extension/dist`. `WORKER_URL` (https://api.soothia.fun) is in `extension/src/config.ts`. Tabs are This page, My record and Social.
-- **Worker** (`worker/`): Cloudflare Worker `soothia-proxy`, served at https://api.soothia.fun and https://soothia-proxy.heylana.workers.dev; both stay live. Routes: `POST /detect` (prose through Claude, or the page's fixture), `/recall/*`, `/stake/*`, `/social/*`, `GET /stats`, `GET /health`, and the static admin page at `/admin` (`worker/admin`, bundled into the gitignored `worker/public` by `worker/scripts/build-admin.mjs`, which needs `extension/node_modules`). Never rename the heylana workers.dev subdomain.
+- **Worker** (`worker/`): Cloudflare Worker `soothia-proxy`, served at https://api.soothia.fun and https://soothia-proxy.heylana.workers.dev; both stay live. Routes: `POST /detect` (prose through Claude, or the page's fixture), `/recall/*`, `/stake/*`, `/social/*`, `/premium/*`, `GET /stats`, `GET /health`, and the static admin page at `/admin` (`worker/admin`, bundled into the gitignored `worker/public` by `worker/scripts/build-admin.mjs`, which needs `extension/node_modules`). Never rename the heylana workers.dev subdomain.
 - **Walrus Memory** (`worker/src/recall/memory.ts`): the source of truth for picks, outcomes, lessons and preferences. Writes are asynchronous and the store is append-only.
 - **Sui through Tatum** (`worker/src/recall/tatumGrpc.ts`, `sui.ts`): reads and commits go through Tatum's gRPC gateway with a fetch-only transport, so they also run in Workers. Do not add `@grpc/grpc-js`.
 - **Move packages** (`move/`): `soothia_recall` commits a pick's hash; `soothia_stake` is the parimutuel SUI staking pool; `soothia_pay` splits premium call payments (`docs/x402.md`).
@@ -36,6 +36,9 @@ Soothia is a Chrome MV3 extension (a floating orb on every page) where people ca
 - A pool's close time comes from ESPN, never from a pick, because a pick's kickoff comes from the page.
 - A call is "proven before kickoff" against ESPN's kickoff, never the pick's, because a pick's kickoff comes from the page.
 - Only calls already public reach a feed (`recent:<handle>`): a stake must never make an earlier private call public.
+- A premium call's side is removed when it is read (`visibleToViewer`, `publicCallView`), never when written. Any new surface that shows a followed or public call must do the same before kickoff.
+- `/premium/transfer/execute` relays only a withdrawal of a whole gas coin, and the x402 route only the exact payment in `worker/src/premium/verify.ts`. The Worker must never become a general transaction relay.
+- The agent wallet's key is the one exception to "keys live only in the Worker": the operator chose to keep it in the extension's background. It must never reach a content script or a page.
 - An anchor shows a call was made after a checkpoint. Only a Sui commit shows it was made before kickoff.
 
 ## Commands
