@@ -5,6 +5,7 @@
 import { handleDetect } from "./detect";
 import { corsHeaders, isAdmin, json, type Env } from "./http";
 import { LIMITS, rateLimited } from "./ratelimit";
+import { premiumRoute } from "./premium/routes";
 import { recallRoute } from "./recall/routes";
 import { sweepRecall } from "./recall/sweep";
 import { socialRoute } from "./social/routes";
@@ -84,6 +85,10 @@ async function route(request: Request, env: Env): Promise<Response> {
   if (path.startsWith("/social/")) {
     const writes = request.method === "POST";
     return (await limited(request, writes ? "social-write" : "social", writes ? LIMITS.socialWrite : LIMITS.social)) ?? socialRoute(request, env, path);
+  }
+
+  if (path.startsWith("/premium/")) {
+    return (await limited(request, "premium", LIMITS.premium)) ?? premiumRoute(request, env, path);
   }
 
   if (path.startsWith("/stake/")) {

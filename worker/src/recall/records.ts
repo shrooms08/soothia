@@ -6,8 +6,8 @@
 // Each install gets its own set of namespaces, one per kind, so "all my picks"
 // is a single recall against one namespace rather than a filter over everyone.
 
-export type RecordKind = "pick" | "outcome" | "lesson" | "pref" | "stake" | "profile" | "follow";
-export const RECORD_KINDS: readonly RecordKind[] = ["pick", "outcome", "lesson", "pref", "stake", "profile", "follow"];
+export type RecordKind = "pick" | "outcome" | "lesson" | "pref" | "stake" | "profile" | "follow" | "unlock";
+export const RECORD_KINDS: readonly RecordKind[] = ["pick", "outcome", "lesson", "pref", "stake", "profile", "follow", "unlock"];
 
 export type Side = "YES" | "NO";
 
@@ -145,6 +145,17 @@ export interface FollowRecord {
   at: string;
 }
 
+/** A premium call this user paid to see. */
+export interface UnlockRecord {
+  pickId: string;
+  handle: string;
+  priceMist: string;
+  digest: string;
+  at: string;
+  fixture: { home: string; away: string; competition: string | null; startISO: string; subject: "home" | "away" };
+  side: Side;
+}
+
 export interface RecordByKind {
   pick: PickRecord;
   outcome: OutcomeRecord;
@@ -153,9 +164,10 @@ export interface RecordByKind {
   stake: StakeRecord;
   profile: ProfileRecord;
   follow: FollowRecord;
+  unlock: UnlockRecord;
 }
 
-const TAG = /⟦soothia:(pick|outcome|lesson|pref|stake|profile|follow):v1 (\{[\s\S]*\})⟧\s*$/;
+const TAG = /⟦soothia:(pick|outcome|lesson|pref|stake|profile|follow|unlock):v1 (\{[\s\S]*\})⟧\s*$/;
 
 function pct(p: number): string {
   return `${Math.round(p * 100)}%`;
@@ -197,6 +209,10 @@ export function sentenceFor<K extends RecordKind>(kind: K, record: RecordByKind[
     case "follow": {
       const follow = record as FollowRecord;
       return follow.kind === "follow" ? `I follow @${follow.handle} on Soothia.` : `I no longer follow @${follow.handle} on Soothia.`;
+    }
+    case "unlock": {
+      const unlock = record as UnlockRecord;
+      return `Unlocked @${unlock.handle}'s premium call on ${unlock.fixture.home} v ${unlock.fixture.away} for ${suiAmount(unlock.priceMist)} SUI.`;
     }
     case "profile": {
       const profile = record as ProfileRecord;

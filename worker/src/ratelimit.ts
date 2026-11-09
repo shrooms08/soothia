@@ -18,6 +18,7 @@ export const LIMITS = {
   detect: { limit: 60, windowSec: 60 },
   recall: { limit: 60, windowSec: 60 },
   stake: { limit: 30, windowSec: 60 },
+  premium: { limit: 30, windowSec: 60 },
   social: { limit: 60, windowSec: 60 },
   /** Each signed step writes to KV, which is rationed for the whole account. */
   socialWrite: { limit: 6, windowSec: 60 },
