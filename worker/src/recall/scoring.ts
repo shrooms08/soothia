@@ -11,6 +11,7 @@ import {
   type PrefRecord,
   type SitePref,
   type Side,
+  type StakeRecord,
 } from "./records";
 
 /** Brier score for one probability against what happened. */
@@ -152,14 +153,72 @@ function signedPoints(value: number): string {
   return `${points} point${points === 1 ? "" : "s"}`;
 }
 
+export interface LessonContext {
+  picks: PickRecord[];
+  stakes: StakeRecord[];
+}
+
+const hitPercent = (list: OutcomeRecord[]): number => Math.round((list.filter((outcome) => outcome.hit).length / list.length) * 100);
+
+/** What staking and following teach, each needing enough calls on both sides. */
+export function stakingAndSocialLessons(scored: OutcomeRecord[], { picks, stakes }: LessonContext, at: string): LessonRecord[] {
+  const lessons: LessonRecord[] = [];
+  const staked = new Map<string, bigint>();
+  const counted = new Set<string>();
+  for (const stake of stakes) {
+    if (counted.has(stake.digest)) continue;
+    counted.add(stake.digest);
+    staked.set(stake.pickId, (staked.get(stake.pickId) ?? 0n) + BigInt(stake.amountMist));
+  }
+
+  const withStake = scored.filter((outcome) => staked.has(outcome.pickId));
+  const free = scored.filter((outcome) => !staked.has(outcome.pickId));
+  if (withStake.length >= LESSON_MIN_CALLS && free.length >= LESSON_MIN_CALLS) {
+    lessons.push({ key: "stakes", at, n: scored.length, text: `Your staked calls land ${hitPercent(withStake)}%, free ones ${hitPercent(free)}%.` });
+  }
+
+  if (withStake.length > 0) {
+    const sizes = withStake.map((outcome) => staked.get(outcome.pickId) as bigint).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+    const middle = Math.floor(sizes.length / 2);
+    const median = sizes.length % 2 === 1 ? sizes[middle] * 2n : sizes[middle - 1] + sizes[middle];
+    // Doubled on both sides, so an even count's midpoint needs no rounding.
+    const bigger = withStake.filter((outcome) => (staked.get(outcome.pickId) as bigint) * 2n > median);
+    const smaller = withStake.filter((outcome) => (staked.get(outcome.pickId) as bigint) * 2n < median);
+    if (bigger.length >= LESSON_MIN_CALLS && smaller.length >= LESSON_MIN_CALLS) {
+      const big = hitPercent(bigger);
+      const small = hitPercent(smaller);
+      const verdict = big > small ? "You size up well." : big < small ? "You size up on the wrong calls." : "Stake size makes no difference to your calls.";
+      lessons.push({ key: "stake_size", at, n: bigger.length + smaller.length, text: `Your bigger stakes land ${big}%, your smaller ones ${small}%. ${verdict}` });
+    }
+  }
+
+  const byPick = new Map(picks.map((pick) => [pick.id, pick]));
+  const tails = new Map<string, OutcomeRecord[]>();
+  const against: OutcomeRecord[] = [];
+  for (const outcome of scored) {
+    const pick = byPick.get(outcome.pickId);
+    if (pick?.tailOf && !pick.tailFlipped) tails.set(pick.tailOf, [...(tails.get(pick.tailOf) ?? []), outcome]);
+    if (pick?.followedConsensus === "against") against.push(outcome);
+  }
+  for (const [handle, list] of tails) {
+    if (list.length < LESSON_MIN_CALLS) continue;
+    lessons.push({ key: `tail:${handle}`, at, n: list.length, text: `Tailing @${handle}: ${list.filter((outcome) => outcome.hit).length} of ${list.length} right` });
+  }
+  if (against.length >= LESSON_MIN_CALLS) {
+    lessons.push({ key: "consensus", at, n: against.length, text: `When you go against the people you follow, you're right ${hitPercent(against)}%.` });
+  }
+  return lessons;
+}
+
 /**
  * The patterns worth telling the user about, from resolved calls only.
  * Each has a stable key so a newer lesson replaces an older one.
  */
-export function deriveLessons(outcomes: OutcomeRecord[], at: string): LessonRecord[] {
+export function deriveLessons(outcomes: OutcomeRecord[], at: string, context?: LessonContext): LessonRecord[] {
   const scored = [...latestBy(outcomes, (outcome) => outcome.pickId).values()];
   const lessons: LessonRecord[] = [];
   if (scored.length < LESSON_MIN_CALLS) return lessons;
+  if (context) lessons.push(...stakingAndSocialLessons(scored, context, at));
 
   // Calibration: how far the confidence of the lean sits above the hit rate.
   const claimed = mean(scored.map((outcome) => Math.max(outcome.pYes, 1 - outcome.pYes)));
@@ -267,6 +326,12 @@ const MEANINGS: [RegExp, string][] = [
   [/You overrate/, "overrate"],
   [/You underrate/, "underrate"],
   [/blind spot/, "blind_spot"],
+  [/Your staked calls land/, "stakes"],
+  [/You size up well/, "bigger_better"],
+  [/You size up on the wrong calls/, "bigger_worse"],
+  [/Stake size makes no difference/, "size_level"],
+  [/^Tailing @/, "tail"],
+  [/When you go against the people you follow/, "consensus"],
 ];
 
 /** What a lesson is saying, apart from its numbers. Read from the text so older lessons compare too. */

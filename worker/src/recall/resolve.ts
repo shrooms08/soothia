@@ -108,7 +108,9 @@ export async function resolveUser(store: RecallStore, now: Date, options: Resolv
   }
 
   const outcomes = [...previousOutcomes, ...written];
-  const lessons = newLessons(previousLessons, deriveLessons(outcomes, now.toISOString()));
+  // Staking lessons are a bonus, so a failed read only means fewer of them this run.
+  const stakes = await store.list("stake", true).catch(() => []);
+  const lessons = newLessons(previousLessons, deriveLessons(outcomes, now.toISOString(), { picks, stakes }));
   const savedLessons: LessonRecord[] = [];
   for (const lesson of lessons) {
     try {

@@ -16,7 +16,7 @@ import { commitConfigured, latestCheckpoint, memoryAccount, tatumConfigured, ver
 import { SWEEP_PREFIX } from "./sweep";
 import { parseHandle } from "../social/context";
 import { applyTail, type TailRequest } from "../social/tail";
-import { consensusOf, followedCallsOn, loadFollowedItems, pushPickToFeed } from "../social/feed";
+import { consensusOf, followedCallsOn, followedStance, loadFollowedItems, pushPickToFeed } from "../social/feed";
 import { callScore } from "../social/stats";
 import { stakeSummaries } from "../stake/positions";
 
@@ -255,6 +255,12 @@ async function createPick(request: Request, env: Env, userKey: string): Promise<
     const tailed = await applyTail(env, input, checked.tail, userKey, fetchScoreboard, Date.now());
     if (!tailed.ok) return json(request, { error: tailed.code }, tailed.status);
     input = tailed.input;
+  }
+  if (input.fixture) {
+    // Remembered at lock time, because what they said can change later. Never blocks the call.
+    const followed = await loadFollowedItems({ env }, userKey).catch(() => []);
+    const stance = followedStance(input.fixture, input.pYes, followedCallsOn(followed, input.fixture));
+    if (stance) input = { ...input, followedConsensus: stance };
   }
   const pick = await savePick(input, env, userKey, store);
   await pushPickToFeed(env, userKey, pick);

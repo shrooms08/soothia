@@ -156,6 +156,13 @@ export function consensusOf(calls: FollowedCall[]): Consensus | null {
   return { key, lean: group[0].lean, count: group.length, total: calls.length, text: `${group.length} of ${calls.length} say ${group[0].lean}` };
 }
 
+/** Whether a new call goes with or against what the people followed have said. */
+export function followedStance(fixture: FeedFixture | PickRecord["fixture"], pYes: number, calls: FollowedCall[]): "with" | "against" | undefined {
+  const consensus = consensusOf(calls);
+  if (!consensus || !fixture) return undefined;
+  return leanKey(fixture, pYes >= 0.5 ? "YES" : "NO") === consensus.key ? "with" : "against";
+}
+
 export async function feedRoute(context: SocialContext, userKey: string): Promise<Response> {
   const [items, scores, picks] = await Promise.all([
     loadFollowedItems(context, userKey),

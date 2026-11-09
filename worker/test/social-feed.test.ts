@@ -5,7 +5,7 @@ import type { Env } from "../src/http";
 import { userKeyFor, type RecallStore } from "../src/recall/memory";
 import type { PickRecord } from "../src/recall/records";
 import { clearMemoryCache } from "../src/store";
-import { consensusOf, feedItemFor, followedCallsOn, mergeFeed, pushPickToFeed, pushStakeToFeed, withItem, type FeedItem, type FollowedItem } from "../src/social/feed";
+import { consensusOf, feedItemFor, followedCallsOn, followedStance, mergeFeed, pushPickToFeed, pushStakeToFeed, withItem, type FeedItem, type FollowedItem } from "../src/social/feed";
 import { socialRoute } from "../src/social/routes";
 
 const INSTALL = "12345678-1234-1234-1234-123456789abc";
@@ -162,6 +162,21 @@ test("a split or empty crowd has no consensus", () => {
 test("the same side counts together however the match was listed", () => {
   const reversed = item("r", 2, { fixture: { home: "Arsenal", away: "Newcastle United", competition: null, startISO: KICKOFF, subject: "home" } });
   assert.equal(consensusOf(followedCallsOn([followed("ada", item("a", 1)), followed("bob", reversed)], page))!.count, 2);
+});
+
+test("a new call is with or against the crowd, by what it means", () => {
+  const calls = followedCallsOn([followed("ada", item("a", 1)), followed("bob", item("b", 2))], page);
+  const fixture = pick("x").fixture;
+  assert.equal(followedStance(fixture, 0.6, calls), "with");
+  assert.equal(followedStance(fixture, 0.4, calls), "against");
+  // The same side, listed the other way round.
+  assert.equal(followedStance({ home: "Arsenal", away: "Newcastle", startISO: KICKOFF, subject: "home" }, 0.6, calls), "with");
+});
+
+test("no crowd means no stance", () => {
+  assert.equal(followedStance(pick("x").fixture, 0.6, []), undefined);
+  const no = item("n", 2, { side: "NO", lean: "Arsenal doesn't win" });
+  assert.equal(followedStance(pick("x").fixture, 0.6, followedCallsOn([followed("ada", item("a", 1)), followed("cal", no)], page)), undefined);
 });
 
 async function feedHarness(picks: PickRecord[] = [], listFails = false) {

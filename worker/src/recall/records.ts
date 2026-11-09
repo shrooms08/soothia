@@ -78,7 +78,7 @@ export interface OutcomeRecord {
   favourite: boolean;
 }
 
-export type LessonKey = "calibration" | "favourites" | "vs_market" | `entity:${string}` | `category:${string}`;
+export type LessonKey = "calibration" | "favourites" | "vs_market" | "stakes" | "stake_size" | "consensus" | `entity:${string}` | `category:${string}` | `tail:${string}`;
 
 /** A pattern Soothia has learned about the user's calls. */
 export interface LessonRecord {
