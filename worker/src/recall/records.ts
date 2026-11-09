@@ -54,6 +54,8 @@ export interface PickRecord {
   tailFlipped?: boolean;
   /** Whether this call matched what the people followed had said when it was made. */
   followedConsensus?: "with" | "against";
+  /** Hidden from everyone else until kickoff, and sold for this price. */
+  premium?: { priceMist: string };
 }
 
 /** What happened, and how the call scored. */
@@ -137,6 +139,8 @@ export interface ProfileRecord {
 /** Following someone, or no longer. The newest record for a handle says which. */
 export interface FollowRecord {
   handle: string;
+  /** Who is followed. Older records have only the handle. */
+  address?: string;
   kind: "follow" | "unfollow";
   at: string;
 }

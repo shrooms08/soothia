@@ -19,6 +19,7 @@ export interface PickInput {
   tailOf?: string;
   tailFlipped?: boolean;
   followedConsensus?: "with" | "against";
+  premium?: { priceMist: string };
 }
 
 export interface BuildPickOptions {
@@ -119,6 +120,7 @@ export async function buildPick(input: PickInput, env: RecallEnv, options: Build
     ...(input.tailOf ? { tailOf: input.tailOf } : {}),
     ...(input.tailFlipped ? { tailFlipped: true } : {}),
     ...(input.followedConsensus ? { followedConsensus: input.followedConsensus } : {}),
+    ...(input.premium ? { premium: input.premium } : {}),
   };
 }
 

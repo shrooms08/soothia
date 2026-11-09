@@ -16,7 +16,8 @@ import { commitConfigured, latestCheckpoint, memoryAccount, tatumConfigured, ver
 import { SWEEP_PREFIX } from "./sweep";
 import { parseHandle } from "../social/context";
 import { applyTail, type TailRequest } from "../social/tail";
-import { consensusOf, followedCallsOn, followedStance, loadFollowedItems, pushPickToFeed } from "../social/feed";
+import { consensusOf, feedItemFor, followedCallsOn, followedStance, loadFollowedItems, pushPickToFeed, visibleToViewer, type FeedItem } from "../social/feed";
+import { parsePriceMist, preparePremium, savePremiumEntry, type Seller } from "../social/premium";
 import { callScore } from "../social/stats";
 import { stakeSummaries } from "../stake/positions";
 
@@ -48,12 +49,12 @@ function isWebUrl(value: unknown): value is string {
   }
 }
 
-export type PickValidation = { ok: true; input: PickInput; tail?: TailRequest } | { ok: false; field: string };
+export type PickValidation = { ok: true; input: PickInput; tail?: TailRequest; premiumMist?: bigint } | { ok: false; field: string };
 
 /** Checks a POST /recall/pick body. */
 export function validatePickBody(body: Record<string, unknown>, nowMs: number): PickValidation {
   const fail = (field: string): PickValidation => ({ ok: false, field });
-  const { question, category, pYes, endTime, fixture, source, tailOf, tailFlip } = body;
+  const { question, category, pYes, endTime, fixture, source, tailOf, tailFlip, premium } = body;
   if (!shortString(question, MAX_QUESTION)) return fail("question");
   if (!shortString(category, 40)) return fail("category");
   if (typeof pYes !== "number" || !Number.isFinite(pYes) || pYes < 0.01 || pYes > 0.99) return fail("pYes");
@@ -85,8 +86,16 @@ export function validatePickBody(body: Record<string, unknown>, nowMs: number): 
     tail = { handle, flip: tailFlip === true };
   }
 
+  let premiumMist: bigint | undefined;
+  if (premium !== undefined) {
+    const price = parsePriceMist((premium as { priceMist?: unknown } | null)?.priceMist);
+    if (price === null) return fail("premium");
+    premiumMist = price;
+  }
+
   return {
     ok: true,
+    ...(premiumMist !== undefined ? { premiumMist } : {}),
     ...(tail ? { tail } : {}),
     input: {
       question: question.trim(),
@@ -224,7 +233,7 @@ async function insights(request: Request, env: Env, userKey: string): Promise<Re
       related.set(claim.id, hits.map((hit) => ({ pick: hit.record, distance: hit.distance })));
     }),
   );
-  const followed = await loadFollowedItems({ env }, userKey).catch(() => []);
+  const followed = await loadFollowedItems({ env }, userKey).then((items) => visibleToViewer({ env }, userKey, items, Date.now())).catch(() => []);
   const consensusLesson = latestBy(memory.lesson, (lesson) => lesson.key).get("consensus");
   const fixtures = new Map(claims.map((claim) => [claim.id, claim.fixture]));
   return json(request, {
@@ -256,14 +265,25 @@ async function createPick(request: Request, env: Env, userKey: string): Promise<
     if (!tailed.ok) return json(request, { error: tailed.code }, tailed.status);
     input = tailed.input;
   }
+  let seller: Seller | null = null;
+  if (checked.premiumMist !== undefined) {
+    if (checked.tail) return json(request, { error: "premium_tail" }, 400);
+    const prepared = await preparePremium(env, userKey, input, checked.premiumMist, fetchScoreboard, Date.now());
+    if (!prepared.ok) return json(request, prepared.body, prepared.status);
+    input = prepared.input;
+    seller = prepared.seller;
+  }
   if (input.fixture) {
     // Remembered at lock time, because what they said can change later. Never blocks the call.
-    const followed = await loadFollowedItems({ env }, userKey).catch(() => []);
+    const followed = await loadFollowedItems({ env }, userKey).then((items) => visibleToViewer({ env }, userKey, items, Date.now())).catch(() => []);
     const stance = followedStance(input.fixture, input.pYes, followedCallsOn(followed, input.fixture));
     if (stance) input = { ...input, followedConsensus: stance };
   }
   const pick = await savePick(input, env, userKey, store);
   await pushPickToFeed(env, userKey, pick);
+  if (seller) {
+    await savePremiumEntry(env, { pickId: pick.id, handle: seller.handle, payTo: seller.address, userKey, priceMist: (pick.premium as { priceMist: string }).priceMist, kickoffMs: seller.kickoffMs, item: feedItemFor(pick) as FeedItem }, Date.now());
+  }
   return json(request, pick);
 }
 

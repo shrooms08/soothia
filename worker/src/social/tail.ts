@@ -9,6 +9,7 @@ import type { PickInput } from "../recall/picks";
 import { sameMatch } from "../recall/scoring";
 import { recentKey, userIndexKey } from "./context";
 import type { FeedItem } from "./feed";
+import { isHidden, unlockKey } from "./premium";
 
 const MATCH_LENGTH_MS = 3 * 3_600_000;
 
@@ -31,6 +32,10 @@ export async function applyTail(env: Env, input: PickInput, tail: TailRequest, u
   const items = (await env.SOOTHIA_CACHE.get<FeedItem[]>(recentKey(tail.handle), "json")) ?? [];
   const source = items.filter((item) => sameMatch(fixture, item.fixture)).sort((a, b) => b.at.localeCompare(a.at))[0];
   if (!source) return { ok: false, status: 404, code: "tail_source_not_found" };
+  // Checked first: the errors below would otherwise tell a guesser which side it was.
+  if (isHidden(source.premium, source.fixture.startISO, nowMs) && (await env.SOOTHIA_CACHE.get(unlockKey(userKey, source.pickId))) === null) {
+    return { ok: false, status: 402, code: "tail_locked" };
+  }
   if (subjectTeam(fixture) !== subjectTeam(source.fixture)) return { ok: false, status: 400, code: "tail_wrong_question" };
   const side = input.pYes >= 0.5 ? "YES" : "NO";
   if (side !== source.side && !tail.flip) return { ok: false, status: 400, code: "tail_side_mismatch" };

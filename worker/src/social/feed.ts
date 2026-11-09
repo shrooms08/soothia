@@ -8,7 +8,8 @@ import type { PickRecord, Side } from "../recall/records";
 import { leanSide, matchCalled, sameMatch } from "../recall/scoring";
 import { kvPut } from "../store";
 import { handleKey, recentKey, refuse, socialJson, userIndexKey, type ProfileIndex, type SocialContext } from "./context";
-import { readFollowing, scoresByHandle } from "./follow";
+import { readFollowing, resolveFollowed, scoresByHandle } from "./follow";
+import { isHidden, unlockKey } from "./premium";
 
 const MAX_RECENT = 50;
 const MAX_FEED = 50;
@@ -31,6 +32,18 @@ export interface FeedItem {
   stakeMist?: string;
   at: string;
   tailOf?: string;
+  premium?: { priceMist: string };
+  proof?: { digest: string; url: string };
+}
+
+/** What anyone may see of a premium call before kickoff: nothing that gives away the side. */
+export interface LockedItem {
+  pickId: string;
+  fixture: Omit<FeedFixture, "subject">;
+  at: string;
+  premium: { priceMist: string };
+  proof?: { digest: string; url: string };
+  locked: true;
 }
 
 export interface FollowedItem {
@@ -49,8 +62,17 @@ export function feedItemFor(pick: PickRecord): FeedItem | null {
     confidence: Math.round(Math.max(pick.pYes, 1 - pick.pYes) * 100),
     at: pick.at,
     ...(pick.tailOf ? { tailOf: pick.tailOf } : {}),
+    ...(pick.premium ? { premium: pick.premium } : {}),
+    ...(pick.commit ? { proof: { digest: pick.commit.digest, url: `https://suivision.xyz/txblock/${encodeURIComponent(pick.commit.digest)}` } } : {}),
   };
 }
+
+export function lockItem(item: FeedItem): LockedItem {
+  const { home, away, competition, startISO } = item.fixture;
+  return { pickId: item.pickId, fixture: { home, away, competition, startISO }, at: item.at, premium: item.premium as { priceMist: string }, ...(item.proof ? { proof: item.proof } : {}), locked: true };
+}
+
+export const isLockedItem = (item: FeedItem | LockedItem): item is LockedItem => (item as LockedItem).locked === true;
 
 /** A public user's feed rebuilt from their record, for someone whose calls predate the feed. */
 export function seedFeedItems(picks: PickRecord[], stakesMistByPick: Map<string, bigint>): FeedItem[] {
@@ -111,17 +133,30 @@ export async function pushStakeToFeed(env: Env, userKey: string, pick: PickRecor
 }
 
 export async function loadFollowedItems(context: Pick<SocialContext, "env">, userKey: string): Promise<FollowedItem[]> {
-  const handles = await readFollowing(context, userKey);
-  const lists = await Promise.all(handles.map((handle) => context.env.SOOTHIA_CACHE.get<FeedItem[]>(recentKey(handle), "json")));
-  return handles.flatMap((handle, index) => (lists[index] ?? []).map((item) => ({ handle, item })));
+  const followed = (await resolveFollowed(context, await readFollowing(context, userKey))).filter((row) => row.handle !== null) as { address: string; handle: string }[];
+  const lists = await Promise.all(followed.map(({ handle }) => context.env.SOOTHIA_CACHE.get<FeedItem[]>(recentKey(handle), "json")));
+  return followed.flatMap(({ handle }, index) => (lists[index] ?? []).map((item) => ({ handle, item })));
+}
+
+export interface VisibleItem {
+  handle: string;
+  item: FeedItem | LockedItem;
+}
+
+/** Locks every premium call this viewer hasn't bought, until kickoff. */
+export async function visibleToViewer(context: Pick<SocialContext, "env">, userKey: string, items: FollowedItem[], nowMs: number): Promise<VisibleItem[]> {
+  const hidden = items.filter(({ item }) => isHidden(item.premium, item.fixture.startISO, nowMs));
+  const unlocked = await Promise.all(hidden.map(({ item }) => context.env.SOOTHIA_CACHE.get(unlockKey(userKey, item.pickId))));
+  const bought = new Set(hidden.filter((_, index) => unlocked[index] !== null).map(({ item }) => item.pickId));
+  return items.map(({ handle, item }) => ({ handle, item: isHidden(item.premium, item.fixture.startISO, nowMs) && !bought.has(item.pickId) ? lockItem(item) : item }));
 }
 
 /** Everyone's items, newest first. */
-export function mergeFeed(items: FollowedItem[], limit = MAX_FEED): FollowedItem[] {
+export function mergeFeed<T extends { item: { at: string } }>(items: T[], limit = MAX_FEED): T[] {
   return [...items].sort((a, b) => b.item.at.localeCompare(a.item.at)).slice(0, limit);
 }
 
-export interface FollowedCall {
+export interface OpenFollowedCall {
   handle: string;
   lean: string;
   confidence: number;
@@ -130,9 +165,24 @@ export interface FollowedCall {
   pickId: string;
   fixture: FeedFixture;
   at: string;
+  premium?: { priceMist: string };
 }
 
-export function followedCallsOn(items: FollowedItem[], fixture: { home: string; away: string; startISO: string }): FollowedCall[] {
+export interface LockedFollowedCall {
+  handle: string;
+  pickId: string;
+  fixture: Omit<FeedFixture, "subject">;
+  at: string;
+  premium: { priceMist: string };
+  proof?: { digest: string; url: string };
+  locked: true;
+}
+
+export type FollowedCall = OpenFollowedCall | LockedFollowedCall;
+
+export const isOpenCall = (call: FollowedCall): call is OpenFollowedCall => (call as LockedFollowedCall).locked !== true;
+
+export function followedCallsOn(items: VisibleItem[], fixture: { home: string; away: string; startISO: string }): FollowedCall[] {
   // One entry each: someone's newest call on the match.
   const seen = new Set<string>();
   return mergeFeed(items, Number.MAX_SAFE_INTEGER)
@@ -141,7 +191,11 @@ export function followedCallsOn(items: FollowedItem[], fixture: { home: string; 
       seen.add(handle);
       return true;
     })
-    .map(({ handle, item }) => ({ handle, lean: item.lean, confidence: item.confidence, stakeMist: item.stakeMist ?? null, side: item.side, pickId: item.pickId, fixture: item.fixture, at: item.at }));
+    .map(({ handle, item }) =>
+      isLockedItem(item)
+        ? { handle, pickId: item.pickId, fixture: item.fixture, at: item.at, premium: item.premium, ...(item.proof ? { proof: item.proof } : {}), locked: true as const }
+        : { handle, lean: item.lean, confidence: item.confidence, stakeMist: item.stakeMist ?? null, side: item.side, pickId: item.pickId, fixture: item.fixture, at: item.at, ...(item.premium ? { premium: item.premium } : {}) },
+    );
 }
 
 /** What a call means regardless of how the match was listed: which team, and yes or no. */
@@ -156,9 +210,11 @@ export interface Consensus {
 }
 
 /** The side most followed users took, or null when there's no single one. */
-export function consensusOf(calls: FollowedCall[]): Consensus | null {
+export function consensusOf(all: FollowedCall[]): Consensus | null {
+  // A locked call must not move the count, or the count would give away its side.
+  const calls = all.filter(isOpenCall);
   if (calls.length === 0) return null;
-  const groups = new Map<string, FollowedCall[]>();
+  const groups = new Map<string, OpenFollowedCall[]>();
   for (const call of calls) {
     const key = leanKey(call.fixture, call.side);
     groups.set(key, [...(groups.get(key) ?? []), call]);
@@ -177,14 +233,15 @@ export function followedStance(fixture: FeedFixture | PickRecord["fixture"], pYe
 }
 
 export async function feedRoute(context: SocialContext, userKey: string): Promise<Response> {
-  const [items, scores, picks] = await Promise.all([
+  const [raw, scores, picks] = await Promise.all([
     loadFollowedItems(context, userKey),
     scoresByHandle(context),
     // Used only to mark matches already called, so the feed survives without it.
     context.store(userKey).list("pick").then(mergePicks).catch(() => [] as PickRecord[]),
   ]);
+  const items = await visibleToViewer(context, userKey, mergeFeed(raw), context.nowMs);
   return socialJson(context, {
-    items: mergeFeed(items).map(({ handle, item }) => {
+    items: items.map(({ handle, item }) => {
       const mine = matchCalled({ question: "", fixture: item.fixture }, picks);
       return { handle, score: scores.get(handle) ?? null, item, myCall: mine ? { side: mine.side, confidence: mine.confidence, pickId: mine.pickId } : null };
     }),

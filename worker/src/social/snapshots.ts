@@ -54,6 +54,16 @@ export interface PublicCall {
   stake: { amountMist: string; result: FinalPosition["result"] | null; payoutMist: string | null } | null;
   proof: { digest: string; url: string } | null;
   tailOf?: string;
+  premium?: { priceMist: string };
+}
+
+export interface LockedPublicCall {
+  at: string;
+  match: PublicCall["match"];
+  status: "open";
+  proof: PublicCall["proof"];
+  premium: { priceMist: string };
+  locked: true;
 }
 
 export interface ProfileSnapshot {
@@ -214,6 +224,7 @@ export async function buildSnapshot(profile: ProfileIndex, previous: ProfileSnap
       stake: pickStakes.length > 0 ? { amountMist: (final ? BigInt(final.amountMist) : recorded).toString(), result: final?.result ?? null, payoutMist: final?.payoutMist ?? null } : null,
       proof: pick.commit ? { digest: pick.commit.digest, url: `https://suivision.xyz/txblock/${encodeURIComponent(pick.commit.digest)}` } : null,
       ...(pick.tailOf ? { tailOf: pick.tailOf } : {}),
+      ...(pick.premium ? { premium: pick.premium } : {}),
     });
   }
 

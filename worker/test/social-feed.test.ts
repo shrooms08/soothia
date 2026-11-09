@@ -51,6 +51,13 @@ function publicUser(data: Map<string, string>, userKey = "u1", handle = "ada", s
   data.set(`profile:${handle}`, JSON.stringify({ handle, address: "0xa", userKey, publicSince: PUBLIC_SINCE, shareHistory }));
 }
 
+const ADA = `0x${"a".repeat(64)}`;
+
+function followAda(data: Map<string, string>, userKey: string): void {
+  data.set(`following:${userKey}`, JSON.stringify([ADA]));
+  data.set(`profileaddr:${ADA}`, JSON.stringify({ handle: "ada", address: ADA, userKey: "u-ada", publicSince: PUBLIC_SINCE, shareHistory: false }));
+}
+
 beforeEach(() => clearMemoryCache());
 
 test("an item is compact, and says nothing about where the call was read", () => {
@@ -192,7 +199,7 @@ async function feedHarness(picks: PickRecord[] = [], listFails = false) {
 
 test("the feed route gives handle, score, item and my call on the match", async () => {
   const h = await feedHarness([pick("mine", { pYes: 0.6 })]);
-  h.data.set(`following:${h.userKey}`, '["ada"]');
+  followAda(h.data, h.userKey);
   h.data.set("recent:ada", JSON.stringify([item("a", 1)]));
   h.data.set("social:boards", JSON.stringify({ entries: [{ handle: "ada", periods: { all: { stats: { score: 612 } } } }] }));
   const { body } = await h.call("/social/feed");
@@ -204,11 +211,11 @@ test("the feed route gives handle, score, item and my call on the match", async 
 
 test("no call of my own means none is claimed, and a Walrus failure doesn't stop the feed", async () => {
   const none = await feedHarness();
-  none.data.set(`following:${none.userKey}`, '["ada"]');
+  followAda(none.data, none.userKey);
   none.data.set("recent:ada", JSON.stringify([item("a", 1)]));
   assert.equal((await none.call("/social/feed")).body.items[0].myCall, null);
   const failing = await feedHarness([], true);
-  failing.data.set(`following:${failing.userKey}`, '["ada"]');
+  followAda(failing.data, failing.userKey);
   failing.data.set("recent:ada", JSON.stringify([item("a", 1)]));
   assert.equal((await failing.call("/social/feed")).status, 200);
 });
@@ -221,7 +228,7 @@ test("following nobody is an empty feed, and the routes need an install id", asy
 
 test("the new-items count uses a time, and reads no Walrus", async () => {
   const h = await feedHarness([], true);
-  h.data.set(`following:${h.userKey}`, '["ada"]');
+  followAda(h.data, h.userKey);
   h.data.set("recent:ada", JSON.stringify([item("a", 1), item("b", 5)]));
   assert.deepEqual((await h.call(`/social/feed/new?since=${Date.parse(at(3))}`)).body, { count: 1 });
   assert.equal((await h.call("/social/feed/new?since=abc")).body.error, "invalid_since");
