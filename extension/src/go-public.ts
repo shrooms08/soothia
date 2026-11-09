@@ -12,9 +12,11 @@ export interface GoPublicHost {
   api<T>(path: ApiPath, body: unknown): Promise<ApiResponse<T | ApiError>>;
   wallet: WalletAccess;
   layout(): void;
+  /** Told whenever the profile is loaded or changes. */
+  onChange?(profile: PublicProfile | null): void;
 }
 
-interface PublicProfile {
+export interface PublicProfile {
   handle: string;
   address: string;
   publicSince: string;
@@ -217,6 +219,7 @@ export function createGoPublicPanel(host: GoPublicHost): { node: HTMLElement; lo
     if (profile) renderPublic(profile);
     else renderPrivate(suggestion);
     node.hidden = false;
+    host.onChange?.(profile);
     host.layout();
   }
 

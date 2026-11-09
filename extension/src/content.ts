@@ -21,6 +21,7 @@ import {
   OPEN_WELCOME,
   NAV_CHANGED,
   RECALL_ID_KEY,
+  RECORD_SECTION_KEY,
   SUI_WALLET_KEY,
   type ApiError,
   type ApiPath,
@@ -260,6 +261,11 @@ async function mount(): Promise<void> {
     get wallet() {
       return walletAccess;
     },
+    linkRecord: () => recallFieldNode(),
+    loadSection: async () => (await chrome.storage.local.get(RECORD_SECTION_KEY))[RECORD_SECTION_KEY],
+    saveSection: (section) => {
+      chrome.storage.local.set({ [RECORD_SECTION_KEY]: section }).catch(() => {});
+    },
     state: stateBlock,
     quietSites: () => quietSites,
     unquiet: async (site) => {
@@ -317,39 +323,51 @@ async function mount(): Promise<void> {
   const showDebugToggle = toggle("Show debug info");
 
   // Link record: view and add to a record made elsewhere, such as with the CLI.
-  const recallInput = el("input", "input recall-input");
-  recallInput.type = "text";
-  recallInput.placeholder = "Recall ID";
-  recallInput.spellcheck = false;
-  recallInput.autocomplete = "off";
-  const recallNote = el("p", "note");
-  async function saveRecallId(value: string): Promise<void> {
-    if (value && !isRecallId(value)) {
-      recallNote.textContent = "That isn't a valid Recall ID.";
+  // The same field appears in settings and in My record's Me section.
+  let linkedRecallId = "";
+  const linkedInputs = new Set<HTMLInputElement>();
+  function recallFieldNode(): HTMLElement {
+    const input = el("input", "input recall-input");
+    input.type = "text";
+    input.placeholder = "Recall ID";
+    input.spellcheck = false;
+    input.autocomplete = "off";
+    input.value = linkedRecallId;
+    linkedInputs.add(input);
+    const note = el("p", "note");
+    async function save(value: string): Promise<void> {
+      if (value && !isRecallId(value)) {
+        note.textContent = "That isn't a valid Recall ID.";
+        layout();
+        return;
+      }
+      try {
+        if (value) await chrome.storage.local.set({ [RECALL_ID_KEY]: value });
+        else await chrome.storage.local.remove(RECALL_ID_KEY);
+      } catch {
+        note.textContent = "Couldn't save that. Reload this tab and try again.";
+        layout();
+        return;
+      }
+      setLinkedRecallId(value);
+      note.textContent = value ? "Record linked." : "Record unlinked.";
+      onRecallIdentityChanged();
       layout();
-      return;
     }
-    try {
-      if (value) await chrome.storage.local.set({ [RECALL_ID_KEY]: value });
-      else await chrome.storage.local.remove(RECALL_ID_KEY);
-    } catch {
-      recallNote.textContent = "Couldn't save that. Reload this tab and try again.";
-      layout();
-      return;
-    }
-    recallInput.value = value;
-    recallNote.textContent = value ? "Record linked." : "Record unlinked.";
-    onRecallIdentityChanged();
-    layout();
+    const row = el("div", "recall-row");
+    row.append(input, button("Save", "button small", () => void save(input.value.trim())), button("Clear", "button small", () => void save("")));
+    const field = el("div", "field recall-field");
+    field.append(el("span", "field-label", "Link record"), row, note);
+    return field;
   }
-  const recallField = el("div", "field recall-field");
-  const recallRow = el("div", "recall-row");
-  recallRow.append(
-    recallInput,
-    button("Save", "button small", () => void saveRecallId(recallInput.value.trim())),
-    button("Clear", "button small", () => void saveRecallId("")),
-  );
-  recallField.append(el("span", "field-label", "Link record"), recallRow, recallNote);
+  function setLinkedRecallId(value: string): void {
+    linkedRecallId = value;
+    for (const input of linkedInputs) {
+      if (input.isConnected) input.value = value;
+      else linkedInputs.delete(input);
+    }
+  }
+  const recallField = recallFieldNode();
 
   const walletBridge = createWalletBridge(() => chrome.runtime.getURL("wallet-bridge.js"));
   const walletAccess = createWalletAccess(walletBridge, chromeWalletStorage, checkInBackground);
@@ -930,7 +948,7 @@ async function mount(): Promise<void> {
         QUIET_PENDING_KEY,
         "soothia:devEvents",
       ]);
-      recallInput.value = isRecallId(stored[RECALL_ID_KEY]) ? stored[RECALL_ID_KEY] : "";
+      setLinkedRecallId(isRecallId(stored[RECALL_ID_KEY]) ? stored[RECALL_ID_KEY] : "");
       const savedQuiet: unknown = stored[QUIET_SITES_KEY];
       quietSites = Array.isArray(savedQuiet) ? savedQuiet.filter((site): site is string => typeof site === "string") : [];
       const savedPending: unknown = stored[QUIET_PENDING_KEY];

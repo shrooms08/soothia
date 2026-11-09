@@ -91,60 +91,97 @@ function setup(answers: Record<string, ApiResponse<unknown>>, overrides: Partial
 const ok = (body: unknown): ApiResponse<unknown> => ({ ok: true, status: 200, body });
 const tick = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 
-test("the record shows the headline, bars, teams, lessons and calls", async () => {
+const named = (pane: Element, label: string) => [...pane.querySelectorAll("button")].find((node) => node.textContent === label) as HTMLButtonElement;
+
+async function shown(answers: Record<string, ApiResponse<unknown>>, section: "Calls" | "Lessons" | "Wallet" | "Me", overrides: Partial<RecordHost> = {}) {
+  const made = setup(answers, overrides);
+  await made.view.render();
+  if (section !== "Calls") named(made.pane, section).click();
+  return made;
+}
+
+test("the header shows the score, and the sections are one tap apart", async () => {
   const { pane, view } = setup({ "/recall/record": ok(full) });
   await view.render();
-  assert.equal(pane.querySelector(".record-headline")!.textContent, "3 calls · 1 right · 50% hit rate · Brier 0.210 vs market 0.250");
-  assert.equal(pane.querySelector<HTMLElement>(".cal-fill.claimed")!.style.width, "75%");
-  assert.equal(pane.querySelector<HTMLElement>(".cal-fill.landed")!.style.width, "50%");
-  assert.equal(pane.querySelector("tbody td")!.textContent, "Arsenal");
-  assert.equal(pane.querySelector(".lesson-text")!.textContent, "Shade your calls toward 50%.");
-  const calls = pane.querySelectorAll(".record-call");
-  assert.equal(calls[0].querySelector(".record-match")!.textContent, "Arsenal vs Chelsea");
-  assert.equal(calls[0].querySelector(".position-text")!.textContent, "Arsenal win \u00b7 70%");
-  assert.equal(calls[1].querySelector(".record-match")!.textContent, "Will rates fall?");
-  assert.match(calls[1].textContent!, /No Sui proof \(Soothia reached today's limit\)/);
+  assert.equal(pane.querySelector(".record-who")!.textContent, "Private");
+  assert.equal(pane.querySelector(".record-tally")!.textContent, "1 of 2 right");
+  assert.deepEqual([...pane.querySelectorAll(".record-segment")].map((node) => node.textContent), ["Calls", "Lessons", "Wallet", "Me"]);
+  assert.equal(pane.querySelector(".record-segment.selected")!.textContent, "Calls");
 });
 
-test("the footer names the memory account and owner, with links", async () => {
-  const { pane, view } = setup({ "/recall/record": ok(full) });
-  await view.render();
-  const footer = pane.querySelector(".record-footer")!;
-  assert.match(footer.textContent!, /^Memory on Walrus mainnet · account 0xabab…abab owned by 0xcdcd…cdcd$/);
-  const links = [...footer.querySelectorAll("a")].map((link) => link.href);
-  assert.deepEqual(links, [`https://suivision.xyz/object/${ACCOUNT}`, `https://suivision.xyz/account/${OWNER}`]);
+test("no main view uses the jargon", async () => {
+  for (const section of ["Calls", "Lessons", "Wallet", "Me"] as const) {
+    const { pane } = await shown({ "/recall/record": ok(full) }, section);
+    for (const details of pane.querySelectorAll("details")) details.remove();
+    for (const word of [/brier/i, /calibration bucket/i, /namespace/i, /memory account/i]) assert.doesNotMatch(pane.textContent!, word, `${section}: ${word}`);
+  }
+});
+
+test("collapsed rows show only the match, date, lean and icon", async () => {
+  const { pane } = await shown({ "/recall/record": ok(full) }, "Calls");
+  const rows = pane.querySelectorAll(".call-row");
+  assert.equal(rows.length, 2);
+  assert.equal(pane.querySelector(".call-detail"), null);
+  const settled = [...rows].find((row) => row.querySelector(".call-icon"))!;
+  assert.equal(settled.querySelector(".call-icon")!.textContent, "\u2713");
+  assert.equal(settled.querySelector(".call-match")!.textContent, "Arsenal v Chelsea");
+  assert.equal(settled.querySelector(".call-lean")!.textContent, "Arsenal win \u00b7 70%");
+  assert.doesNotMatch(settled.textContent!, /Proof|2-0/);
+});
+
+test("tapping a row expands it with confidence, result and proof", async () => {
+  const { pane } = await shown({ "/recall/record": ok(full) }, "Calls");
+  const head = [...pane.querySelectorAll<HTMLButtonElement>(".call-row-head")].find((node) => node.textContent!.includes("Arsenal"))!;
+  head.click();
+  const detail = pane.querySelector(".call-detail")!;
+  assert.match(detail.textContent!, /Arsenal win \u00b7 70% confident/);
+  assert.match(detail.textContent!, /Arsenal 2-0 Chelsea \(ESPN, full time\)/);
+  assert.ok(named(pane, "Proof on Sui"));
+  [...pane.querySelectorAll<HTMLButtonElement>(".call-row-head")].find((node) => node.textContent!.includes("Arsenal"))!.click();
+  assert.equal(pane.querySelector(".call-detail"), null);
+});
+
+test("an uncommitted call says why it has no proof", async () => {
+  const { pane } = await shown({ "/recall/record": ok(full) }, "Calls");
+  [...pane.querySelectorAll<HTMLButtonElement>(".call-row-head")].find((node) => node.textContent!.includes("rates"))!.click();
+  assert.match(pane.querySelector(".call-detail")!.textContent!, /No Sui proof \(Soothia reached today's limit\)/);
+});
+
+const settledPick = (i: number) => ({ ...full.picks[0], id: `s${i}`, fixture: { home: `H${i}`, away: "A", subject: "home" as const, startISO: new Date(Date.UTC(2026, 10, 1 + i)).toISOString() } });
+
+test("settled calls show 10, newest first, then Show more", async () => {
+  const picks = Array.from({ length: 12 }, (_, i) => settledPick(i));
+  const { pane } = await shown({ "/recall/record": ok({ ...full, picks }) }, "Calls");
+  assert.equal(pane.querySelectorAll(".call-row").length, 10);
+  assert.equal(pane.querySelector(".call-match")!.textContent, "H11 v A");
+  named(pane, "Show more").click();
+  assert.equal(pane.querySelectorAll(".call-row").length, 12);
+  assert.equal(named(pane, "Show more"), undefined);
 });
 
 test("Proof asks the Worker and shows the gap", async () => {
-  const proof: RecallProof = {
-    digest: "D1",
-    verified: true,
-    timestampMs: 1,
-    explorerUrl: "x",
-    kickoffISO: "2026-11-08T14:00:00.000Z",
-    gapMs: 2 * 3_600_000 + 7 * 60_000,
-    beforeKickoff: true,
-  };
-  const { pane, view, calls } = setup({ "/recall/record": ok(full), "/recall/proof": ok(proof) });
-  await view.render();
-  [...pane.querySelectorAll("button")].find((node) => node.textContent === "Proof")!.click();
+  const proof: RecallProof = { digest: "D1", verified: true, timestampMs: 1, explorerUrl: "x", kickoffISO: "2026-11-08T14:00:00.000Z", gapMs: 2 * 3_600_000 + 7 * 60_000, beforeKickoff: true };
+  const { pane, calls } = await shown({ "/recall/record": ok(full), "/recall/proof": ok(proof) }, "Calls");
+  [...pane.querySelectorAll<HTMLButtonElement>(".call-row-head")].find((node) => node.textContent!.includes("Arsenal"))!.click();
+  named(pane, "Proof on Sui").click();
   await tick();
   assert.deepEqual(calls.at(-1), { path: "/recall/proof", body: { pickId: "p_1" } });
-  assert.equal(pane.querySelector(".proof-result")!.textContent, "Committed 2h 7m before kickoff ✓");
+  assert.equal(pane.querySelector(".proof-result")!.textContent, "Committed 2h 7m before kickoff \u2713");
 });
 
 test("a Proof failure is reported and does not touch the rest", async () => {
-  const { pane, view } = setup({ "/recall/record": ok(full), "/recall/proof": { ok: false, status: 502, body: null } });
-  await view.render();
-  [...pane.querySelectorAll("button")].find((node) => node.textContent === "Proof")!.click();
+  const { pane } = await shown({ "/recall/record": ok(full), "/recall/proof": { ok: false, status: 502, body: null } }, "Calls");
+  [...pane.querySelectorAll<HTMLButtonElement>(".call-row-head")].find((node) => node.textContent!.includes("Arsenal"))!.click();
+  named(pane, "Proof on Sui").click();
   await tick();
   assert.equal(pane.querySelector(".proof-result")!.textContent, "Couldn't check the proof just now.");
-  assert.equal(pane.querySelectorAll(".record-call").length, 2);
+  assert.equal(pane.querySelectorAll(".call-row").length, 2);
 });
 
-test("the empty state tells the user what to do", async () => {
-  const { pane, view } = setup({ "/recall/record": ok({ summary: emptySummary, picks: [], lessons: [], account: null }) });
-  await view.render();
+test("an empty record still has its header and tells the user what to do", async () => {
+  const { pane } = await shown({ "/recall/record": ok({ summary: emptySummary, picks: [], lessons: [], account: null }) }, "Calls");
+  assert.equal(pane.querySelector(".record-score")!.textContent, "\u2014");
+  assert.match(pane.textContent!, /Needs 1 settled call/);
   assert.equal(pane.querySelector(".state")!.textContent, "No calls yet. Open a match page and tap Call it.");
 });
 
@@ -152,27 +189,92 @@ test("a load failure offers a retry", async () => {
   const { pane, view } = setup({ "/recall/record": { ok: false, status: 502, body: null } });
   await view.render();
   assert.match(pane.textContent!, /Couldn't load your record/);
-  assert.ok([...pane.querySelectorAll("button")].some((node) => node.textContent === "Try again"));
+  assert.ok(named(pane, "Try again"));
 });
 
-test("quiet sites are listed and Undo removes them", async () => {
+test("Lessons show lessons, the plain chart and the two expanders", async () => {
+  const { pane } = await shown({ "/recall/record": ok(full) }, "Lessons");
+  assert.equal(pane.querySelector(".lesson-text")!.textContent, "Shade your calls toward 50%.");
+  assert.equal(pane.querySelector(".cal-label")!.textContent, "When you say ~75%, you're right 50%");
+  assert.equal(pane.querySelector<HTMLElement>(".cal-fill.claimed")!.style.width, "75%");
+  assert.equal(pane.querySelector<HTMLElement>(".cal-fill.landed")!.style.width, "50%");
+  const titles = [...pane.querySelectorAll("summary")].map((node) => node.textContent);
+  assert.deepEqual(titles, ["How Soothia learns", "More numbers"]);
+  const more = [...pane.querySelectorAll("details")].at(-1)!;
+  assert.match(more.textContent!, /Brier 0\.210/);
+  assert.equal(more.querySelector("tbody td")!.textContent, "Arsenal");
+});
+
+test("Me has the footer with its details in an expander", async () => {
+  const { pane } = await shown({ "/recall/record": ok(full) }, "Me");
+  const details = [...pane.querySelectorAll("details")].at(-1)!;
+  assert.equal(details.querySelector("summary")!.textContent, "Calls stored on Walrus \u00b7 proofs on Sui");
+  const links = [...details.querySelectorAll("a")].map((link) => link.href);
+  assert.ok(links.includes(`https://suivision.xyz/object/${ACCOUNT}`));
+  assert.ok(links.includes(`https://suivision.xyz/account/${OWNER}`));
+  assert.equal(links.filter((link) => link.includes("/package/")).length, 2);
+});
+
+test("Me lists quiet sites and Undo removes them", async () => {
   const undone: string[] = [];
-  const { pane, view } = setup(
-    { "/recall/record": ok(full) },
-    {
-      quietSites: () => ["espn.com"],
-      unquiet: async (site) => {
-        undone.push(site);
-        return true;
-      },
+  const { pane } = await shown({ "/recall/record": ok(full) }, "Me", {
+    quietSites: () => ["espn.com"],
+    unquiet: async (site) => {
+      undone.push(site);
+      return true;
     },
-  );
-  await view.render();
+  });
   assert.equal(pane.querySelector(".quiet-site")!.textContent, "espn.com");
-  [...pane.querySelectorAll("button")].find((node) => node.textContent === "Undo")!.click();
+  named(pane, "Undo").click();
   await tick();
   assert.deepEqual(undone, ["espn.com"]);
   assert.equal(pane.querySelector(".quiet-site"), null);
+});
+
+test("Me holds the Link record field", async () => {
+  const field = window.document.createElement("div");
+  field.className = "the-link-field";
+  const { pane } = await shown({ "/recall/record": ok(full) }, "Me", { linkRecord: () => field });
+  assert.ok(pane.querySelector(".the-link-field"));
+});
+
+test("the last section is remembered and restored", async () => {
+  const saved: string[] = [];
+  const first = await shown({ "/recall/record": ok(full) }, "Lessons", { saveSection: (section) => saved.push(section) });
+  assert.deepEqual(saved, ["lessons"]);
+  assert.ok(first);
+  const { pane, view } = setup({ "/recall/record": ok(full) }, { loadSection: async () => "me" });
+  await view.render();
+  assert.equal(pane.querySelector(".record-segment.selected")!.textContent, "Me");
+});
+
+test("a saved section that makes no sense falls back to Calls", async () => {
+  const { pane, view } = setup({ "/recall/record": ok(full) }, { loadSection: async () => "nonsense" });
+  await view.render();
+  assert.equal(pane.querySelector(".record-segment.selected")!.textContent, "Calls");
+});
+
+test("the attention strip opens its section", async () => {
+  const lesson = { key: "favourites", at: new Date().toISOString(), text: "Your strong calls come in. More.", n: 6 };
+  const { pane, view } = setup({ "/recall/record": ok({ ...full, lessons: [lesson] }) });
+  await view.render();
+  const item = pane.querySelector<HTMLButtonElement>(".record-attention-item")!;
+  assert.equal(item.textContent, "New lesson: Your strong calls come in");
+  item.click();
+  assert.equal(pane.querySelector(".record-segment.selected")!.textContent, "Lessons");
+});
+
+test("no strip when nothing needs attention", async () => {
+  const { pane, view } = setup({ "/recall/record": ok({ ...full, lessons: [] }) });
+  await view.render();
+  assert.equal(pane.querySelector(".record-attention"), null);
+});
+
+test("the Go public link in the header opens Me", async () => {
+  const { pane, view } = setup({ "/recall/record": ok(full) });
+  await view.render();
+  named(pane, "Go public").click();
+  assert.equal(pane.querySelector(".record-segment.selected")!.textContent, "Me");
 });
 
 test("a called tile shows the call and a Proof link that works", async () => {
@@ -241,6 +343,7 @@ interface StakeHarnessOptions {
   wallet?: typeof CONNECTED | null;
   claimBuild?: ApiResponse<unknown>;
   sign?: () => Promise<{ digest: string }>;
+  isPublic?: { handle: string; score: number };
 }
 
 async function stakeRecord(options: StakeHarnessOptions = {}) {
@@ -270,7 +373,7 @@ async function stakeRecord(options: StakeHarnessOptions = {}) {
       asked.push([path, body]);
       if (path === "/recall/record") return { ok: true, status: 200, body: record };
       if (path === "/stake/positions") return { ok: true, status: 200, body: { positions: options.positions ?? [] } };
-      if (path === "/social/profile/by-address") return { ok: true, status: 200, body: { public: false } };
+      if (path === "/social/profile/by-address") return { ok: true, status: 200, body: options.isPublic ? { public: true, profile: { handle: options.isPublic.handle }, score: options.isPublic.score } : { public: false } };
       if (path === "/social/suins") return { ok: true, status: 200, body: { suggestion: null } };
       if (path === "/stake/claim/build") return options.claimBuild ?? { ok: true, status: 200, body: { txBytes: "BYTES" } };
       return { ok: false, status: 404, body: null };
@@ -282,13 +385,20 @@ async function stakeRecord(options: StakeHarnessOptions = {}) {
   return { pane, asked, signed, tick, claim, line: () => pane.querySelector(".stake-text")?.textContent, note: () => pane.querySelector(".stake-claim-note")?.textContent };
 }
 
-test("a staked call shows amount, side and status", async () => {
+const inWallet = async (options: StakeHarnessOptions) => {
+  const r = await stakeRecord(options);
+  named(r.pane, "Wallet").click();
+  return r;
+};
+
+test("a staked call adds its amount to the row, and the rest when expanded", async () => {
   const r = await stakeRecord({ positions: [position()] });
-  assert.equal(r.line(), "Staked 0.5 SUI on Arsenal win \u00b7 Open");
-  assert.equal(r.claim(), undefined);
+  assert.equal(r.pane.querySelector(".call-lean")!.textContent, "Arsenal win \u00b7 70% \u00b7 0.5 SUI");
+  r.pane.querySelector<HTMLButtonElement>(".call-row-head")!.click();
+  assert.match(r.pane.querySelector(".call-detail")!.textContent!, /Staked 0\.5 SUI on Arsenal win \u00b7 Open \u00b7 about 0\.7 SUI if right/);
 });
 
-test("every status on the record reads in words", async () => {
+test("every status reads in words in the Wallet list", async () => {
   const cases: [Record<string, unknown>, RegExp][] = [
     [{ status: "awaiting_result" }, /Awaiting result/],
     [{ status: "challenge_window", claimOpensAtMs: 1_794_200_000_000 }, /In challenge window until /],
@@ -298,11 +408,15 @@ test("every status on the record reads in words", async () => {
     [{ status: "claimed", result: "refunded", estimatedPayoutMist: "500000000" }, /Refunded 0\.5 SUI/],
     [{ status: "claimed", result: "won" }, /Claimed 0\.7 SUI/],
   ];
-  for (const [overrides, pattern] of cases) assert.match((await stakeRecord({ positions: [position(overrides)] })).line()!, pattern);
+  for (const [overrides, pattern] of cases) {
+    const r = await inWallet({ positions: [position(overrides)] });
+    assert.match([...r.pane.querySelectorAll(".stake-text")].at(-1)!.textContent!, pattern);
+  }
 });
 
-test("Claim builds, checks through the wallet, and shows the payout and digest", async () => {
-  const r = await stakeRecord({ positions: [position({ status: "claimable", result: "won" })] });
+test("Claim is first in Wallet, and builds, signs and shows the payout and digest", async () => {
+  const r = await inWallet({ positions: [position({ status: "claimable", result: "won" })] });
+  assert.equal(r.pane.querySelector(".record-section .field-label")!.textContent, "Ready to claim");
   r.claim()!.click();
   await r.tick();
   await r.tick();
@@ -314,12 +428,11 @@ test("Claim builds, checks through the wallet, and shows the payout and digest",
 });
 
 test("a refund is claimed the same way", async () => {
-  const r = await stakeRecord({ positions: [position({ status: "refundable", result: "refunded" })] });
-  assert.ok(r.claim());
+  assert.ok((await inWallet({ positions: [position({ status: "refundable", result: "refunded" })] })).claim());
 });
 
 test("cancelling a claim says nothing was claimed, and it can be retried", async () => {
-  const r = await stakeRecord({
+  const r = await inWallet({
     positions: [position({ status: "claimable", result: "won" })],
     sign: async () => {
       throw new Error("User rejected");
@@ -333,7 +446,7 @@ test("cancelling a claim says nothing was claimed, and it can be retried", async
 });
 
 test("a claim the Worker refuses never reaches the wallet", async () => {
-  const r = await stakeRecord({ positions: [position({ status: "claimable", result: "won" })], claimBuild: { ok: false, status: 409, body: { error: "not_claimable" } } });
+  const r = await inWallet({ positions: [position({ status: "claimable", result: "won" })], claimBuild: { ok: false, status: 409, body: { error: "not_claimable" } } });
   r.claim()!.click();
   await r.tick();
   await r.tick();
@@ -341,18 +454,17 @@ test("a claim the Worker refuses never reaches the wallet", async () => {
   assert.equal(r.signed.length, 0);
 });
 
-test("with no wallet connected the record still shows the stake, without a Claim button", async () => {
+test("with no wallet connected, Wallet is just the button and one sentence", async () => {
   const stake = { poolId: POOL, side: "YES" as const, amountMist: "500000000", status: "claimable" as const, payoutMist: "700000000", claimOpensAtMs: null, digests: [D] };
-  const r = await stakeRecord({ wallet: null, picks: [stakePick({ stake })] });
-  assert.match(r.line()!, /Staked 0\.5 SUI on Arsenal win/);
+  const r = await inWallet({ wallet: null, picks: [stakePick({ stake })] });
+  assert.ok(named(r.pane, "Connect Sui wallet"));
   assert.equal(r.claim(), undefined);
-  assert.equal(r.note(), "Connect your wallet in settings to claim.");
-  assert.equal(r.asked.some(([path]) => path === "/stake/positions"), false);
   assert.equal(r.pane.querySelector(".wallet-stats"), null);
+  assert.equal(r.asked.some(([path]) => path === "/stake/positions"), false);
 });
 
-test("a connected wallet gets a summary at the top", async () => {
-  const r = await stakeRecord({
+test("a connected wallet gets the stats grid", async () => {
+  const r = await inWallet({
     positions: [
       position({ status: "claimed", result: "won", amountMist: "1000000000", estimatedPayoutMist: "1500000000" }),
       position({ pickId: "p_2", status: "lost", result: "lost", amountMist: "500000000", estimatedPayoutMist: "0" }),
@@ -360,9 +472,20 @@ test("a connected wallet gets a summary at the top", async () => {
   });
   const text = r.pane.querySelector(".wallet-stats")?.textContent ?? "";
   for (const part of ["1.5 SUIstaked", "1.5 SUIwon", "0.5 SUIlost", "+0 SUIprofit or loss", "0.0%ROI", "1.50xbest multiplier"]) assert.ok(text.includes(part), part);
-  assert.ok(r.pane.firstElementChild?.nextElementSibling?.querySelector(".wallet-stats"));
 });
 
-test("a call with no stake shows no stake line", async () => {
-  assert.equal((await stakeRecord()).line(), undefined);
+test("a connected wallet with no stakes says so", async () => {
+  assert.match((await inWallet({})).pane.textContent!, /No stakes from this wallet yet/);
+});
+
+test("a call with no stake shows no amount", async () => {
+  assert.equal((await stakeRecord()).pane.querySelector(".call-lean")!.textContent, "Arsenal win \u00b7 70%");
+});
+
+test("the header says public, and carries profit once staked", async () => {
+  const r = await stakeRecord({ positions: [position()], isPublic: { handle: "amy", score: 612 } });
+  assert.equal(r.pane.querySelector(".record-who")!.textContent, "@amy \u00b7 Public");
+  assert.equal(r.pane.querySelector(".record-score")!.textContent, "612");
+  assert.equal(named(r.pane, "Go public"), undefined);
+  assert.equal(r.pane.querySelector(".record-tally")!.textContent, "1 of 2 right \u00b7 +0.0 SUI");
 });

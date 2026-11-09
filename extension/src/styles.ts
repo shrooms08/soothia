@@ -828,6 +828,24 @@ input[type="number"].input { font-family: var(--sth-font-mono); }
 .record-attention { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
 .record-attention-item { padding: 8px 10px; border: 1px solid rgba(175,169,236,.3); border-radius: 8px; background: var(--sth-raised); color: var(--sth-text); font: 500 12px/1.3 var(--sth-font-sans); text-align: left; cursor: pointer; }
 .record-attention-item:hover { background: var(--sth-raised-hover); }
+.record-segments { display: grid; grid-template-columns: repeat(4, 1fr); gap: 2px; margin-bottom: 10px; padding: 2px; border-radius: 8px; background: var(--sth-raised); }
+.record-segment { padding: 7px 0; border: 0; border-radius: 6px; background: transparent; color: var(--sth-text-2); font: 500 12px/1 var(--sth-font-sans); cursor: pointer; }
+.record-segment.selected { background: var(--sth-raised-hover); color: var(--sth-text); }
+.call-row { border-bottom: 1px solid rgba(175,169,236,.14); }
+.call-row-head { display: flex; flex-direction: column; gap: 2px; width: 100%; padding: 8px 0; border: 0; background: transparent; color: var(--sth-text); font: 400 13px/1.35 var(--sth-font-sans); text-align: left; cursor: pointer; }
+.call-row-top { display: flex; align-items: baseline; gap: 6px; }
+.call-icon { flex: none; font-weight: 700; }
+.call-icon.right { color: var(--sth-yes); }
+.call-icon.wrong { color: var(--sth-no); }
+.call-match { flex: 1 1 auto; min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
+.call-date { flex: none; font-size: 12px; color: var(--sth-text-2); }
+.call-lean { font-size: 12px; color: var(--sth-text-2); }
+.call-detail { display: flex; flex-direction: column; gap: 4px; padding: 0 0 10px; }
+.call-detail-line { margin: 0; font-size: 12px; color: var(--sth-text-2); }
+.record-show-more { align-self: flex-start; margin-top: 6px; }
+.record-more { margin-top: 10px; font-size: 12px; color: var(--sth-text-2); }
+.record-more-summary { cursor: pointer; }
+.record-more .note { margin: 6px 0 0; }
 .go-public { padding: 10px; border: 1px solid var(--sth-hairline-soft, rgba(175,169,236,.14)); border-radius: 10px; }
 .go-public-handle { width: 100%; height: 32px; font-size: 13px; }
 .go-public-title { margin: 0; font-size: 14px; font-weight: 600; color: var(--sth-text); }

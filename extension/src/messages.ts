@@ -141,6 +141,9 @@ export const RECALL_ID_KEY = "soothia.recallId";
 /** The connected Sui wallet: { address, walletId, walletName }. */
 export const SUI_WALLET_KEY = "soothia.suiWallet";
 
+/** Which section of My record was open last. */
+export const RECORD_SECTION_KEY = "soothia.recordSection";
+
 // Content script -> background: check a transaction before any wallet is asked to sign it.
 export const CHECK_TX = "soothia:v1:check-tx";
 

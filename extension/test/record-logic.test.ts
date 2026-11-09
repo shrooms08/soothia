@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { RecallRecord, RecallRecordPick } from "../src/messages";
-import { attentionItems, buildRecordHeader, kickoffOf, shortLesson, stakesForSummary } from "../src/record-logic";
+import { attentionItems, buildRecordHeader, calibrationRows, groupCalls, isRecordSection, kickoffOf, lessonsForDisplay, lockedText, shortDate, shortLesson, stakeDetailText, stakeListLean, stakesForSummary } from "../src/record-logic";
 import type { StakePositionView } from "../src/stake-logic";
 
 const summary = (overrides: Partial<RecallRecord["summary"]> = {}): RecallRecord["summary"] => ({
@@ -145,4 +145,68 @@ test("a lesson is cut at its first clause and kept short", () => {
 test("a pick with no date has no kickoff", () => {
   assert.equal(Number.isNaN(kickoffOf({ fixture: null })), true);
   assert.equal(kickoffOf({ fixture: null, endTime: "2026-11-21T00:00:00.000Z" }), Date.parse("2026-11-21T00:00:00.000Z"));
+});
+
+const dated = (id: string, startISO: string, status: RecallRecordPick["status"] = "open"): RecallRecordPick => stakedPick({ id, status, stake: null, fixture: { home: "A", away: "B", subject: "home", startISO } });
+
+test("upcoming calls run soonest first, settled ones newest first", () => {
+  const picks = [dated("late", "2026-11-22T12:00:00Z"), dated("old", "2026-11-01T12:00:00Z", "right"), dated("soon", "2026-11-21T12:00:00Z"), dated("recent", "2026-11-08T12:00:00Z", "wrong")];
+  const { upcoming, settled } = groupCalls(picks);
+  assert.deepEqual(upcoming.map((pick) => pick.id), ["soon", "late"]);
+  assert.deepEqual(settled.map((pick) => pick.id), ["recent", "old"]);
+});
+
+test("rows with no date don't disturb the order", () => {
+  const { upcoming } = groupCalls([stakedPick({ id: "none", fixture: null, stake: null }), dated("dated", "2026-11-21T12:00:00Z")]);
+  assert.equal(upcoming.length, 2);
+});
+
+test("dates are short, and blank when there is none", () => {
+  assert.match(shortDate({ fixture: { home: "A", away: "B", subject: "home", startISO: "2026-11-21T12:00:00Z" } }), /21/);
+  assert.equal(shortDate({ fixture: null }), "");
+});
+
+test("Locked shows hours, minutes under one, and days from 48 hours", () => {
+  const commit = { digest: "d", explorerUrl: "u" };
+  const kickoff = "2026-11-21T12:00:00.000Z";
+  const locked = (at: string) => lockedText({ at, commit, fixture: { home: "A", away: "B", subject: "home", startISO: kickoff } });
+  assert.equal(locked("2026-11-21T09:30:00.000Z"), "Locked 2h before kickoff");
+  assert.equal(locked("2026-11-21T11:40:00.000Z"), "Locked 20m before kickoff");
+  assert.equal(locked("2026-11-18T12:00:00.000Z"), "Locked 3d before kickoff");
+  assert.equal(locked("2026-11-21T12:00:01.000Z"), null);
+  assert.equal(lockedText({ at: "x", commit: null, fixture: null }), null);
+});
+
+const taught = (key: string, at: string, text = key) => ({ key, at, text, n: 5 });
+
+test("lessons run most specific first", () => {
+  const list = lessonsForDisplay([taught("calibration", "2026-11-08T22:00:00Z"), taught("vs_market", "2026-11-08T21:00:00Z"), taught("favourites", "2026-11-08T20:00:00Z"), taught("entity:arsenal", "2026-11-08T10:00:00Z")]);
+  assert.deepEqual(list.map((lesson) => lesson.key), ["entity:arsenal", "favourites", "vs_market"]);
+});
+
+test("only the newest lesson per key counts, at most three", () => {
+  const list = lessonsForDisplay([taught("calibration", "2026-11-01T00:00:00Z", "old"), taught("calibration", "2026-11-08T00:00:00Z", "new")]);
+  assert.deepEqual(list.map((lesson) => lesson.text), ["new"]);
+  assert.equal(lessonsForDisplay(["a", "b", "c", "d"].map((name) => taught(`entity:${name}`, "2026-11-08T00:00:00Z"))).length, 3);
+});
+
+test("the confidence chart skips empty buckets and reads plainly", () => {
+  const rows = calibrationRows([{ label: "70-79%", calls: 5, hitRate: 0.8, claimed: 0.72 }, { label: "50-59%", calls: 0, hitRate: 0, claimed: 0 }]);
+  assert.deepEqual(rows, [{ text: "When you say ~70%, you're right 80%", saidPercent: 70, rightPercent: 80 }]);
+});
+
+test("a stake's detail adds an estimate only while it's undecided", () => {
+  const pick = { pYes: 0.6, fixture: { home: "A", away: "B", subject: "away" as const } };
+  assert.equal(stakeDetailText(position({ estimatedPayoutMist: "99000000" }), pick, () => ""), "Staked 0.1 SUI on B win \u00b7 Open \u00b7 about 0.099 SUI if right");
+  assert.equal(stakeDetailText(position({ status: "lost", result: "lost", estimatedPayoutMist: "0" }), pick, () => ""), "Staked 0.1 SUI on B win \u00b7 Lost");
+});
+
+test("the stake list works even for a call not on this record", () => {
+  assert.equal(stakeListLean(position(), [], () => ""), "A v B \u00b7 0.1 SUI on B win \u00b7 Open");
+});
+
+test("only real sections are accepted from storage", () => {
+  assert.equal(isRecordSection("wallet"), true);
+  assert.equal(isRecordSection("settings"), false);
+  assert.equal(isRecordSection(null), false);
 });
