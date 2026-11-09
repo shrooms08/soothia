@@ -7,6 +7,7 @@ import { corsHeaders, isAdmin, json, type Env } from "./http";
 import { LIMITS, rateLimited } from "./ratelimit";
 import { recallRoute } from "./recall/routes";
 import { sweepRecall } from "./recall/sweep";
+import { socialRoute } from "./social/routes";
 import { stakeRoute } from "./stake/routes";
 import { sweepStake } from "./stake/sweep";
 import { handleStats } from "./stats";
@@ -77,6 +78,11 @@ async function route(request: Request, env: Env): Promise<Response> {
   }
 
   if (path === "/admin" || path.startsWith("/admin/")) return adminPage(request, env, path);
+
+  if (path.startsWith("/social/")) {
+    const writes = request.method === "POST";
+    return (await limited(request, writes ? "social-write" : "social", writes ? LIMITS.socialWrite : LIMITS.social)) ?? socialRoute(request, env, path);
+  }
 
   if (path.startsWith("/stake/")) {
     return (await limited(request, "stake", LIMITS.stake)) ?? stakeRoute(request, env, path);

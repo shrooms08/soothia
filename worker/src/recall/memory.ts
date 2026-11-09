@@ -13,7 +13,6 @@ import {
   decodeRecord,
   encodeRecord,
   namespaceFor,
-  RECORD_KINDS,
   type RecordByKind,
   type RecordKind,
 } from "./records";
@@ -85,7 +84,9 @@ const LIST_QUERY: Record<RecordKind, string> = {
   lesson: "Lesson about my calls",
   pref: "Preference for where Soothia shows calls",
   stake: "Staked SUI on my call",
+  profile: "My public Soothia profile",
 };
+const LIST_ALL_KINDS = ["pick", "outcome", "lesson", "pref", "stake"] as const;
 const LIST_LIMIT = 100;
 const READ_CACHE_SEC = 45;
 
@@ -152,8 +153,8 @@ export class RecallStore {
     return out;
   }
 
-  async listAll(): Promise<{ [K in RecordKind]: RecordByKind[K][] }> {
-    const [pick, outcome, lesson, pref, stake] = await Promise.all(RECORD_KINDS.map((kind) => this.list(kind)));
+  async listAll(): Promise<{ [K in Exclude<RecordKind, "profile">]: RecordByKind[K][] }> {
+    const [pick, outcome, lesson, pref, stake] = await Promise.all(LIST_ALL_KINDS.map((kind) => this.list(kind)));
     return {
       pick: pick as RecordByKind["pick"][],
       outcome: outcome as RecordByKind["outcome"][],

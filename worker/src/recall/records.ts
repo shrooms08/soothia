@@ -6,8 +6,8 @@
 // Each install gets its own set of namespaces, one per kind, so "all my picks"
 // is a single recall against one namespace rather than a filter over everyone.
 
-export type RecordKind = "pick" | "outcome" | "lesson" | "pref" | "stake";
-export const RECORD_KINDS: readonly RecordKind[] = ["pick", "outcome", "lesson", "pref", "stake"];
+export type RecordKind = "pick" | "outcome" | "lesson" | "pref" | "stake" | "profile";
+export const RECORD_KINDS: readonly RecordKind[] = ["pick", "outcome", "lesson", "pref", "stake", "profile"];
 
 export type Side = "YES" | "NO";
 
@@ -118,15 +118,26 @@ export interface StakeRecord {
   about: string;
 }
 
+/** A public profile. Append-only: the newest one for an address says how it stands now. */
+export interface ProfileRecord {
+  address: string;
+  handle: string;
+  publicSince: string;
+  /** When true, calls made before publicSince are public too. */
+  shareHistory: boolean;
+  unpublished?: boolean;
+}
+
 export interface RecordByKind {
   pick: PickRecord;
   outcome: OutcomeRecord;
   lesson: LessonRecord;
   pref: PrefRecord;
   stake: StakeRecord;
+  profile: ProfileRecord;
 }
 
-const TAG = /⟦soothia:(pick|outcome|lesson|pref|stake):v1 (\{[\s\S]*\})⟧\s*$/;
+const TAG = /⟦soothia:(pick|outcome|lesson|pref|stake|profile):v1 (\{[\s\S]*\})⟧\s*$/;
 
 function pct(p: number): string {
   return `${Math.round(p * 100)}%`;
@@ -164,6 +175,10 @@ export function sentenceFor<K extends RecordKind>(kind: K, record: RecordByKind[
       return pref.kind === "quiet_site"
         ? `Preference: stay quiet on ${pref.site}.`
         : `Preference: show calls on ${pref.site} again.`;
+    }
+    case "profile": {
+      const profile = record as ProfileRecord;
+      return profile.unpublished ? `My Soothia profile @${profile.handle} is no longer public.` : `My public Soothia profile is @${profile.handle}, for ${profile.address}.`;
     }
     case "stake": {
       const stake = record as StakeRecord;
