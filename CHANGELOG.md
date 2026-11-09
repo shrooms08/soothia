@@ -29,6 +29,7 @@ Branch `total-recall`. A local CLI that locks football predictions as memories o
 - Sui wallet connection in the extension (0.12.0): a page-world bridge finds wallets through the Wallet Standard, with Connect and Disconnect in settings. Every transaction is decoded and checked in the background worker before a wallet can be asked to sign, and only an exact stake or claim is allowed.
 - Admin page at `/admin`, served by the Worker and not indexed: connect the AdminCap wallet, see every challenge window with its time left, and overturn. New admin routes `GET /stake/admin/info`, `POST /stake/admin/overturn/build` and `POST /stake/admin/config/build` return unsigned bytes for the AdminCap holder. New real pools are refused while the delays are not the production values.
 - Extension 0.13.0 with the staking screens.
+- Call Score and profile stats (`worker/src/social/stats.ts`): only calls proven on Sui before kickoff count, once settled.
 - Public profiles: a Sui address can go public under a unique handle, proven by a wallet signature over a one-time message. New routes under `/social/profile/*`, and a `profile` memory on Walrus. One record gets one profile.
 - Extension 0.13.2: fixture detection reads a match's status from its own header, so full-time results in a site's scores bar no longer hide an upcoming match.
 - Extension 0.13.1: the Back it button uses the primary style in every state, is never disabled without a reason shown directly above it, offers to connect a wallet when none is connected, and lets you try when the balance can't be read.
