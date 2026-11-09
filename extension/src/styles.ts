@@ -818,6 +818,13 @@ input[type="number"].input { font-family: var(--sth-font-mono); }
 .wallet-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
 .wallet-stat { display: flex; flex-direction: column; font-size: 12px; color: var(--sth-text-2); }
 .wallet-stat b { font-size: 14px; font-weight: 500; color: var(--sth-text); }
+.record-header { display: flex; flex-direction: column; align-items: flex-start; margin-bottom: 10px; }
+.record-identity { display: flex; align-items: center; gap: 8px; width: 100%; font-size: 12px; color: var(--sth-text-2); }
+.record-who { font-weight: 600; color: var(--sth-text); }
+.record-identity .refresh-row { margin: 0 0 0 auto; }
+.record-score { margin: 6px 0 0; font-size: 40px; font-weight: 600; line-height: 1; color: var(--sth-text); }
+.record-score-label { margin: 2px 0 0; font-size: 11px; letter-spacing: .08em; color: var(--sth-text-2); }
+.record-tally { margin: 6px 0 0; font-size: 13px; color: var(--sth-text); }
 .go-public { padding: 10px; border: 1px solid var(--sth-hairline-soft, rgba(175,169,236,.14)); border-radius: 10px; }
 .go-public-handle { width: 100%; height: 32px; font-size: 13px; }
 .go-public-title { margin: 0; font-size: 14px; font-weight: 600; color: var(--sth-text); }

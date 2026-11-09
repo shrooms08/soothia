@@ -204,7 +204,8 @@ export interface RecallRecordPick {
   at: string;
   question: string;
   pYes: number;
-  fixture: { home: string; away: string; subject: "home" | "away" } | null;
+  endTime?: string;
+  fixture: { home: string; away: string; subject: "home" | "away"; startISO?: string } | null;
   status: "open" | "right" | "wrong";
   detail: string | null;
   brier: number | null;
@@ -235,6 +236,8 @@ export interface RecallRecord {
     vsMarketCalls: number;
     calibration: { label: string; calls: number; hitRate: number; claimed: number }[];
     entities: { entity: string; calls: number; hits: number; brier: number }[];
+    /** Missing on a Worker older than this extension. */
+    callScore?: number;
   };
   picks: RecallRecordPick[];
   lessons: RecallLesson[];

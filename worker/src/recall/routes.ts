@@ -13,6 +13,7 @@ import { resolveUser } from "./resolve";
 import { insightsFor, latestBy, quietSites, shrinkFactor, summarize, type RelatedHit } from "./scoring";
 import { commitConfigured, latestCheckpoint, memoryAccount, tatumConfigured, verifyCommit } from "./sui";
 import { SWEEP_PREFIX } from "./sweep";
+import { callScore } from "../social/stats";
 import { stakeSummaries } from "../stake/positions";
 
 const RECALL_API_VERSION = 1;
@@ -150,8 +151,9 @@ async function record(request: Request, env: Env, userKey: string): Promise<Resp
         stake: stakes.get(pick.id) ?? null,
       };
     });
+  const summary = summarize(picks, memory.outcome);
   return json(request, {
-    summary: summarize(picks, memory.outcome),
+    summary: { ...summary, callScore: callScore(summary.brier, summary.resolved) },
     picks: view,
     lessons: [...latestBy(memory.lesson, (lesson) => lesson.key).values()],
     account: await memoryAccount(env).catch(() => null),

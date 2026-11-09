@@ -220,6 +220,9 @@ test("by-address says whether an address is public, without the user key", async
   assert.equal(body.public, true);
   assert.equal(body.profile.handle, "arsenal_fan");
   assert.equal("userKey" in body.profile, false);
+  assert.equal(body.score, null);
+  h.data.set("socialstats:arsenal_fan", { value: JSON.stringify({ periods: { all: { stats: { score: 612 } } } }) });
+  assert.equal((await h.call("GET", `/social/profile/by-address?address=${ADDRESS}`)).body.score, 612);
 });
 
 test("a SuiNS name becomes a suggested handle", async () => {

@@ -363,3 +363,9 @@ export function walletSummary(positions: StakePositionView[]): WalletSummary {
 export function signedSui(mist: bigint): string {
   return `${mist < 0n ? "-" : "+"}${formatSui(mist < 0n ? -mist : mist, 4)} SUI`;
 }
+
+/** "+0.0 SUI": always at least one decimal, for the record's header. */
+export function signedSuiShort(mist: bigint): string {
+  const text = formatSui(mist < 0n ? -mist : mist, 4);
+  return `${mist < 0n ? "-" : "+"}${text.includes(".") ? text : `${text}.0`} SUI`;
+}

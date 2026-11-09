@@ -2,6 +2,7 @@
 import { button, el, externalLink, icon } from "./dom";
 import type { ApiError, ApiPath, ApiResponse, RecallCalled, RecallProof, RecallRecord, RecallRecordPick } from "./messages";
 import { createGoPublicPanel } from "./go-public";
+import { buildRecordHeader, stakesForSummary, type RecordHeader } from "./record-logic";
 import { leanSide, pickLean, proofText, recordHeadline, shortId, skipReasonText } from "./recall-logic";
 import {
   formatSui,
@@ -80,6 +81,18 @@ function teamTable(entities: RecallRecord["summary"]["entities"]): HTMLElement {
 }
 
 type ApiHost = Pick<RecordHost, "api" | "layout">;
+
+function headerNode(view: RecordHeader, onGoPublic: () => void, refresh: HTMLElement): HTMLElement {
+  const node = el("div", "record-header");
+  const identity = el("div", "record-identity");
+  identity.append(el("span", "record-who", view.identity));
+  if (!view.isPublic) identity.append(button("Go public", "link record-go-public", onGoPublic));
+  identity.append(refresh);
+  node.append(identity, el("p", "record-score", view.score), el("p", "record-score-label", "CALL SCORE"));
+  if (view.scoreNote) node.append(el("p", "note", view.scoreNote));
+  if (view.summary) node.append(el("p", "record-tally", view.summary));
+  return node;
+}
 
 function walletStats(wallet: ConnectedWallet, positions: StakePositionView[]): HTMLElement {
   const summary = walletSummary(positions);
@@ -265,6 +278,13 @@ export function createRecordView(pane: HTMLElement, host: RecordHost): { render(
     return row;
   }
 
+  async function loadPublic(wallet: ConnectedWallet | null): Promise<{ handle: string; score: number | null } | null> {
+    if (!wallet) return null;
+    const response = await host.api<{ public: boolean; profile?: { handle: string }; score?: number | null }>("/social/profile/by-address", { address: wallet.address });
+    const body = response.ok ? (response.body as { public: boolean; profile?: { handle: string }; score?: number | null } | null) : null;
+    return body?.public && body.profile ? { handle: body.profile.handle, score: body.score ?? null } : null;
+  }
+
   async function loadPositions(): Promise<{ wallet: ConnectedWallet | null; positions: StakePositionView[] }> {
     const wallet = (await host.wallet?.current().catch(() => null)) ?? null;
     if (!wallet) return { wallet: null, positions: [] };
@@ -302,8 +322,11 @@ export function createRecordView(pane: HTMLElement, host: RecordHost): { render(
     const { summary } = record;
     const panel = host.wallet ? createGoPublicPanel({ api: host.api, wallet: host.wallet, layout: host.layout }) : null;
     void panel?.load().catch(() => undefined);
+    const publicInfo = await loadPublic(wallet);
+    if (current !== seq) return;
+    const header = buildRecordHeader({ summary, handle: publicInfo?.handle ?? null, publicScore: publicInfo?.score ?? null, stakes: stakesForSummary(positions, record.picks) });
     pane.replaceChildren(
-      refreshRow(),
+      headerNode(header, () => panel?.node.scrollIntoView({ block: "nearest" }), refreshRow()),
       ...(wallet ? [walletStats(wallet, positions)] : []),
       ...(panel ? [panel.node] : []),
       el("p", "record-headline", recordHeadline(summary)),

@@ -134,7 +134,10 @@ export async function unpublishRoute(context: SocialContext): Promise<Response> 
 export async function byAddressRoute(context: SocialContext): Promise<Response> {
   const address = parseAddress(new URL(context.request.url).searchParams.get("address"));
   const profile = await loadByAddress(context, address);
-  return socialJson(context, profile ? { public: true, profile: publicProfile(profile) } : { public: false });
+  if (!profile) return socialJson(context, { public: false });
+  // So the extension shows the same score as the public page.
+  const snapshot = await context.env.SOOTHIA_CACHE.get<{ periods: { all: { stats: { score: number } } } }>(statsKey(profile.handle), "json");
+  return socialJson(context, { public: true, profile: publicProfile(profile), score: snapshot?.periods.all.stats.score ?? null });
 }
 
 /** "alice.sui" or "@alice" to a usable handle, or null. Only the first label of a subname. */
