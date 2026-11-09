@@ -825,6 +825,9 @@ input[type="number"].input { font-family: var(--sth-font-mono); }
 .record-score { margin: 6px 0 0; font-size: 40px; font-weight: 600; line-height: 1; color: var(--sth-text); }
 .record-score-label { margin: 2px 0 0; font-size: 11px; letter-spacing: .08em; color: var(--sth-text-2); }
 .record-tally { margin: 6px 0 0; font-size: 13px; color: var(--sth-text); }
+.record-attention { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.record-attention-item { padding: 8px 10px; border: 1px solid rgba(175,169,236,.3); border-radius: 8px; background: var(--sth-raised); color: var(--sth-text); font: 500 12px/1.3 var(--sth-font-sans); text-align: left; cursor: pointer; }
+.record-attention-item:hover { background: var(--sth-raised-hover); }
 .go-public { padding: 10px; border: 1px solid var(--sth-hairline-soft, rgba(175,169,236,.14)); border-radius: 10px; }
 .go-public-handle { width: 100%; height: 32px; font-size: 13px; }
 .go-public-title { margin: 0; font-size: 14px; font-weight: 600; color: var(--sth-text); }

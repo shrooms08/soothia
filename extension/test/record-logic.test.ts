@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { RecallRecord, RecallRecordPick } from "../src/messages";
-import { buildRecordHeader, stakesForSummary } from "../src/record-logic";
+import { attentionItems, buildRecordHeader, kickoffOf, shortLesson, stakesForSummary } from "../src/record-logic";
 import type { StakePositionView } from "../src/stake-logic";
 
 const summary = (overrides: Partial<RecallRecord["summary"]> = {}): RecallRecord["summary"] => ({
@@ -91,4 +91,58 @@ test("with no wallet connected, the record's own stakes stand in", () => {
 
 test("wallet positions win when there are any", () => {
   assert.deepEqual(stakesForSummary([position({ poolId: "wallet" })], [stakedPick()]).map((item) => item.poolId), ["wallet"]);
+});
+
+const NOW = new Date(2026, 10, 21, 12, 0).getTime();
+const HOUR = 3_600_000;
+const openPick = (id: string, kickoffMs: number): RecallRecordPick => stakedPick({ id, stake: null, fixture: { home: "A", away: "B", subject: "home", startISO: new Date(kickoffMs).toISOString() } });
+const lesson = (at: number, text = "Your strong calls come in. More here.") => ({ key: "favourites", at: new Date(at).toISOString(), text, n: 6 });
+const attention = (overrides: Partial<Parameters<typeof attentionItems>[0]> = {}) => attentionItems({ stakes: [], picks: [], lessons: [], nowMs: NOW, ...overrides });
+
+test("nothing to do means an empty strip", () => {
+  assert.deepEqual(attention(), []);
+});
+
+test("claimable stakes go to Wallet, counted with the right word", () => {
+  assert.deepEqual(attention({ stakes: [position({ status: "claimable" })] }), [{ text: "1 stake ready to claim", section: "wallet" }]);
+  assert.equal(attention({ stakes: [position({ status: "claimable" }), position({ status: "refundable" }), position()] })[0].text, "2 stakes ready to claim");
+});
+
+test("stakes that can't be claimed yet don't count", () => {
+  assert.deepEqual(attention({ stakes: [position({ status: "challenge_window" }), position({ status: "lost" }), position({ status: "claimed" })] }), []);
+});
+
+test("calls kicking off today go to Calls", () => {
+  assert.deepEqual(attention({ picks: [openPick("p1", NOW + 2 * HOUR)] }), [{ text: "1 call settles today", section: "calls" }]);
+  assert.equal(attention({ picks: [openPick("p1", NOW + HOUR), openPick("p2", NOW - HOUR)] })[0].text, "2 calls settle today");
+});
+
+test("tomorrow's and already settled calls don't count", () => {
+  assert.deepEqual(attention({ picks: [openPick("p1", NOW + 24 * HOUR), { ...openPick("p2", NOW), status: "right" }] }), []);
+});
+
+test("a lesson from the last 48 hours goes to Lessons, in short", () => {
+  assert.deepEqual(attention({ lessons: [lesson(NOW - 47 * HOUR)] }), [{ text: "New lesson: Your strong calls come in", section: "lessons" }]);
+  assert.deepEqual(attention({ lessons: [lesson(NOW - 49 * HOUR)] }), []);
+});
+
+test("the newest recent lesson is the one shown", () => {
+  const items = attention({ lessons: [lesson(NOW - 10 * HOUR, "Older one."), lesson(NOW - HOUR, "Newest one.")] });
+  assert.equal(items[0].text, "New lesson: Newest one");
+});
+
+test("at most two items, most urgent first", () => {
+  const items = attention({ stakes: [position({ status: "claimable" })], picks: [openPick("p1", NOW + HOUR)], lessons: [lesson(NOW - HOUR)] });
+  assert.deepEqual(items.map((item) => item.section), ["wallet", "calls"]);
+});
+
+test("a lesson is cut at its first clause and kept short", () => {
+  assert.equal(shortLesson("You land 83% of calls while claiming 69%: you are 14 points underconfident."), "You land 83% of calls while claiming 69%");
+  assert.equal(shortLesson("Your confidence matches your hit rate (72% claimed, 80% landed). Keep calling it like this."), "Your confidence matches your hit rate (72% claimed, 80% landed)");
+  assert.equal(shortLesson(`${"x".repeat(80)}.`).length, 64);
+});
+
+test("a pick with no date has no kickoff", () => {
+  assert.equal(Number.isNaN(kickoffOf({ fixture: null })), true);
+  assert.equal(kickoffOf({ fixture: null, endTime: "2026-11-21T00:00:00.000Z" }), Date.parse("2026-11-21T00:00:00.000Z"));
 });

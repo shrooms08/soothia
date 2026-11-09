@@ -2,7 +2,7 @@
 import { button, el, externalLink, icon } from "./dom";
 import type { ApiError, ApiPath, ApiResponse, RecallCalled, RecallProof, RecallRecord, RecallRecordPick } from "./messages";
 import { createGoPublicPanel } from "./go-public";
-import { buildRecordHeader, stakesForSummary, type RecordHeader } from "./record-logic";
+import { attentionItems, buildRecordHeader, stakesForSummary, type AttentionItem, type RecordHeader, type RecordSection } from "./record-logic";
 import { leanSide, pickLean, proofText, recordHeadline, shortId, skipReasonText } from "./recall-logic";
 import {
   formatSui,
@@ -92,6 +92,13 @@ function headerNode(view: RecordHeader, onGoPublic: () => void, refresh: HTMLEle
   if (view.scoreNote) node.append(el("p", "note", view.scoreNote));
   if (view.summary) node.append(el("p", "record-tally", view.summary));
   return node;
+}
+
+function attentionStrip(items: AttentionItem[], open: (section: RecordSection) => void): HTMLElement[] {
+  if (items.length === 0) return [];
+  const strip = el("div", "record-attention");
+  strip.append(...items.map((item) => button(item.text, "record-attention-item", () => open(item.section))));
+  return [strip];
 }
 
 function walletStats(wallet: ConnectedWallet, positions: StakePositionView[]): HTMLElement {
@@ -327,6 +334,7 @@ export function createRecordView(pane: HTMLElement, host: RecordHost): { render(
     const header = buildRecordHeader({ summary, handle: publicInfo?.handle ?? null, publicScore: publicInfo?.score ?? null, stakes: stakesForSummary(positions, record.picks) });
     pane.replaceChildren(
       headerNode(header, () => panel?.node.scrollIntoView({ block: "nearest" }), refreshRow()),
+      ...attentionStrip(attentionItems({ stakes: stakesForSummary(positions, record.picks), picks: record.picks, lessons: record.lessons, nowMs: Date.now() }), () => undefined),
       ...(wallet ? [walletStats(wallet, positions)] : []),
       ...(panel ? [panel.node] : []),
       el("p", "record-headline", recordHeadline(summary)),
