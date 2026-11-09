@@ -25,5 +25,10 @@ STAKE_PACKAGE=
 STAKE_CONFIG=
 STAKE_ADMIN_CAP=
 STAKE_RESOLVER_CAP=
+# Soothia premium payment ids. Not secret. Set by scripts/pay/publish.ts.
+PAY_PACKAGE=
+PAY_CONFIG=
+PAY_ADMIN_CAP=
+PAY_UPGRADE_CAP=
 # Local CLI only: which record the scripts in scripts/recall read and write (a UUID).
 RECALL_INSTALL_ID=

@@ -47,6 +47,9 @@ STAKE_CONFIG = "0x7ba41f413b54f1f04b592694ad3304caa87df7cf9f1afda98b42c45362d2b3
 STAKE_RESOLVER_CAP = "0x8a8bc9de0047bd4d99fabb7e5c655c3f1d407c743ad1711f2a638861b81bae4e"
 # Only its id, to read who owns it. The AdminCap stays in the Slush wallet.
 STAKE_ADMIN_CAP = "0x6bb33f67cec908f6d38c53de4b6fe3e047392e08d6e7b2ec670462b22edb2cbf"
+# The soothia_pay package and its shared PayConfig, for premium calls. Not secret.
+PAY_PACKAGE = "0x69093f4bd2ec5d00c5780d8fd2e09adde6a4399146fed2bafc94071311d52a92"
+PAY_CONFIG = "0x7b14fd24baed71d4062f88c22d06c61f4785fc040c3e692ae335b1cde7807f1e"
 
 # Three sweeps share this schedule, each every 15 minutes: open picks at :00, staking pools at :05, public profiles at :10.
 [triggers]
