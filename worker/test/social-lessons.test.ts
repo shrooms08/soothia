@@ -1,8 +1,11 @@
 // The staking and social lessons, and that they dedupe like the others.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { LessonRecord, OutcomeRecord, PickRecord, StakeRecord } from "../src/recall/records";
+import type { LessonRecord, OutcomeRecord, PickRecord, StakeRecord, UnlockRecord } from "../src/recall/records";
 import { deriveLessons, newLessons, stakingAndSocialLessons } from "../src/recall/scoring";
+import type { ScoreboardFetcher } from "../src/recall/espn";
+import type { RecallStore } from "../src/recall/memory";
+import { resolveUser } from "../src/recall/resolve";
 
 const AT = "2026-11-09T12:00:00.000Z";
 const outcome = (pickId: string, hit: boolean): OutcomeRecord => ({ pickId, at: AT, question: "Q", category: "sports", entities: [], result: hit ? "YES" : "NO", pYes: 0.7, marketYes: null, brier: hit ? 0.09 : 0.49, marketBrier: null, hit, detail: "d", favourite: true });
@@ -110,4 +113,39 @@ test("stake size flipping its meaning writes even on a small move", () => {
   const better = lessonOf("stake_size", "Your bigger stakes land 62%, your smaller ones 60%. You size up well.");
   const worse = lessonOf("stake_size", "Your bigger stakes land 59%, your smaller ones 60%. You size up on the wrong calls.", 1);
   assert.equal(newLessons([better], [worse]).length, 1);
+});
+
+const unlock = (pickId: string, hit?: boolean): UnlockRecord => ({ pickId, handle: "ada", priceMist: "10000000", digest: `tx-${pickId}`, at: AT, fixture: { home: "A", away: "B", competition: null, startISO: AT, subject: "home" }, side: "YES", ...(hit === undefined ? {} : { hit }) });
+
+test("premium: bought calls against your own, once three have settled", () => {
+  const own = series("o", 1, 1);
+  const lesson = (unlocks: UnlockRecord[]) => keyed(stakingAndSocialLessons(own, { picks: [], stakes: [], unlocks }, AT), "premium");
+  assert.equal(lesson([unlock("a", true), unlock("b", true), unlock("c", false)])?.text, "Premium calls you bought hit 67%, your own calls 50%.");
+  assert.equal(lesson([unlock("a", true), unlock("b", true)]), undefined);
+  assert.equal(lesson([unlock("a", true), unlock("b", true), unlock("c")]), undefined);
+});
+
+test("premium: no calls of your own means nothing to compare", () => {
+  const unlocks = [unlock("a", true), unlock("b", true), unlock("c", false)];
+  assert.equal(keyed(stakingAndSocialLessons([], { picks: [], stakes: [], unlocks }, AT), "premium"), undefined);
+});
+
+test("premium: a small change is not a new lesson, and a big one is", () => {
+  const previous: LessonRecord = { key: "premium", at: AT, n: 3, text: "Premium calls you bought hit 67%, your own calls 50%." };
+  assert.deepEqual(newLessons([previous], [{ ...previous, n: 4, text: "Premium calls you bought hit 65%, your own calls 52%." }]), []);
+  assert.equal(newLessons([previous], [{ ...previous, n: 9, text: "Premium calls you bought hit 40%, your own calls 52%." }]).length, 1);
+});
+
+test("bought calls are marked after the match, a couple per run, and once only", async () => {
+  const KICK = "2026-11-08T15:00:00.000Z";
+  const on = (pickId: string, home: string, hit?: boolean): UnlockRecord => ({ ...unlock(pickId, hit), fixture: { home, away: "Arsenal", competition: null, startISO: KICK, subject: "away" } });
+  const records: UnlockRecord[] = [on("a", "Leeds"), on("b", "Fulham"), on("c", "Everton"), on("done", "Chelsea", true)];
+  const written: UnlockRecord[] = [];
+  const store = { list: async (kind: string) => (kind === "unlock" ? records : []), write: async (_kind: string, record: UnlockRecord) => (written.push(record), { jobId: "j" }) } as unknown as RecallStore;
+  const event = (home: string) => ({ espnId: home, startISO: KICK, statusName: "STATUS_FULL_TIME", state: "post", completed: true, home: { name: home, short: home, abbreviation: home, score: 0 }, away: { name: "Arsenal", short: "Arsenal", abbreviation: "ARS", score: 1 }, competition: "", url: "" });
+  const fetcher: ScoreboardFetcher = async (league) => ({ competition: "", events: league === "eng.1" ? ["Leeds", "Fulham", "Everton"].map(event) : [] });
+  await resolveUser(store, new Date("2026-11-09T12:00:00.000Z"), { fetcher });
+  assert.equal(written.length, 2);
+  assert.deepEqual(written.map((record) => record.hit), [true, true]);
+  assert.equal(written.some((record) => record.pickId === "done"), false);
 });

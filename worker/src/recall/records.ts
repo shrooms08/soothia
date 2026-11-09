@@ -80,7 +80,7 @@ export interface OutcomeRecord {
   favourite: boolean;
 }
 
-export type LessonKey = "calibration" | "favourites" | "vs_market" | "stakes" | "stake_size" | "consensus" | `entity:${string}` | `category:${string}` | `tail:${string}`;
+export type LessonKey = "calibration" | "favourites" | "vs_market" | "stakes" | "stake_size" | "consensus" | "premium" | `entity:${string}` | `category:${string}` | `tail:${string}`;
 
 /** A pattern Soothia has learned about the user's calls. */
 export interface LessonRecord {
@@ -154,6 +154,8 @@ export interface UnlockRecord {
   at: string;
   fixture: { home: string; away: string; competition: string | null; startISO: string; subject: "home" | "away" };
   side: Side;
+  /** Written once the match is over. */
+  hit?: boolean;
 }
 
 export interface RecordByKind {

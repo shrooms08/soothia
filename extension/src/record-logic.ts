@@ -115,7 +115,7 @@ const LESSON_RANK = (key: string): number => {
   if (key.startsWith("entity:")) return 0;
   if (key.startsWith("category:")) return 1;
   if (key.startsWith("tail:")) return 2;
-  if (key === "stakes" || key === "stake_size") return 3;
+  if (key === "stakes" || key === "stake_size" || key === "premium") return 3;
   if (key === "consensus") return 4;
   if (key === "favourites") return 5;
   if (key === "vs_market") return 6;

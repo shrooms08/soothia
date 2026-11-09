@@ -5,8 +5,8 @@
 import { fetchScoreboard, resolveFixture, sideForWinner, type ParsedScoreboard, type ScoreboardFetcher } from "./espn";
 import type { RecallStore } from "./memory";
 import { mergePicks } from "./picks";
-import type { LessonRecord, OutcomeRecord, PickRecord } from "./records";
-import { deriveLessons, newLessons, scoreOutcome, summarize } from "./scoring";
+import type { LessonRecord, OutcomeRecord, PickRecord, UnlockRecord } from "./records";
+import { deriveLessons, LESSON_MIN_CALLS, newLessons, scoreOutcome, summarize } from "./scoring";
 
 export interface ResolveOptions {
   /** Picks known outside Walrus, such as the CLI's local backup. */
@@ -49,6 +49,38 @@ function memoized(fetcher: ScoreboardFetcher): ScoreboardFetcher {
 }
 
 const message = (error: unknown): string => String((error as Error)?.message ?? error);
+
+/** Each unlock can need every league's board, and one run has a limited number of outbound calls. */
+const UNLOCK_SETTLES_PER_RUN = 2;
+const MATCH_LENGTH_MS = 3 * 3_600_000;
+
+/** Bought calls, one each, marking any whose match has finished. Only a bonus, so it never throws. */
+async function settleUnlocks(store: RecallStore, now: Date, fetcher: ScoreboardFetcher, log: (line: string) => void): Promise<UnlockRecord[]> {
+  const records = await store.list("unlock", true).catch(() => []);
+  const byPick = new Map<string, UnlockRecord>();
+  for (const record of records) {
+    // The store is append-only, so a settled copy sits beside the first one.
+    if (!byPick.has(record.pickId) || record.hit !== undefined) byPick.set(record.pickId, record);
+  }
+  if (byPick.size < LESSON_MIN_CALLS) return [...byPick.values()];
+
+  let settled = 0;
+  for (const unlock of byPick.values()) {
+    if (settled >= UNLOCK_SETTLES_PER_RUN) break;
+    if (unlock.hit !== undefined || Date.parse(unlock.fixture.startISO) + MATCH_LENGTH_MS > now.getTime()) continue;
+    try {
+      settled += 1;
+      const result = await resolveFixture(unlock.fixture, fetcher);
+      if (result.status !== "final") continue;
+      const marked = { ...unlock, hit: sideForWinner(unlock.fixture.subject, result.winner) === unlock.side };
+      await store.write("unlock", marked);
+      byPick.set(unlock.pickId, marked);
+    } catch (error) {
+      log(`Unlock not settled: ${message(error)}`);
+    }
+  }
+  return [...byPick.values()];
+}
 
 export async function resolveUser(store: RecallStore, now: Date, options: ResolveOptions = {}): Promise<ResolveResult> {
   const log = options.log ?? (() => undefined);
@@ -110,7 +142,8 @@ export async function resolveUser(store: RecallStore, now: Date, options: Resolv
   const outcomes = [...previousOutcomes, ...written];
   // Staking lessons are a bonus, so a failed read only means fewer of them this run.
   const stakes = await store.list("stake", true).catch(() => []);
-  const lessons = newLessons(previousLessons, deriveLessons(outcomes, now.toISOString(), { picks, stakes }));
+  const unlocks = await settleUnlocks(store, now, fetcher, log);
+  const lessons = newLessons(previousLessons, deriveLessons(outcomes, now.toISOString(), { picks, stakes, unlocks }));
   const savedLessons: LessonRecord[] = [];
   for (const lesson of lessons) {
     try {

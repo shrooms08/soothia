@@ -12,6 +12,7 @@ import {
   type SitePref,
   type Side,
   type StakeRecord,
+  type UnlockRecord,
 } from "./records";
 
 /** Brier score for one probability against what happened. */
@@ -156,12 +157,13 @@ function signedPoints(value: number): string {
 export interface LessonContext {
   picks: PickRecord[];
   stakes: StakeRecord[];
+  unlocks?: UnlockRecord[];
 }
 
-const hitPercent = (list: OutcomeRecord[]): number => Math.round((list.filter((outcome) => outcome.hit).length / list.length) * 100);
+const hitPercent = (list: { hit?: boolean }[]): number => Math.round((list.filter((outcome) => outcome.hit).length / list.length) * 100);
 
 /** What staking and following teach, each needing enough calls on both sides. */
-export function stakingAndSocialLessons(scored: OutcomeRecord[], { picks, stakes }: LessonContext, at: string): LessonRecord[] {
+export function stakingAndSocialLessons(scored: OutcomeRecord[], { picks, stakes, unlocks }: LessonContext, at: string): LessonRecord[] {
   const lessons: LessonRecord[] = [];
   const staked = new Map<string, bigint>();
   const counted = new Set<string>();
@@ -206,6 +208,11 @@ export function stakingAndSocialLessons(scored: OutcomeRecord[], { picks, stakes
   }
   if (against.length >= LESSON_MIN_CALLS) {
     lessons.push({ key: "consensus", at, n: against.length, text: `When you go against the people you follow, you're right ${hitPercent(against)}%.` });
+  }
+
+  const bought = (unlocks ?? []).filter((unlock) => unlock.hit !== undefined);
+  if (bought.length >= LESSON_MIN_CALLS && scored.length > 0) {
+    lessons.push({ key: "premium", at, n: bought.length, text: `Premium calls you bought hit ${hitPercent(bought)}%, your own calls ${hitPercent(scored)}%.` });
   }
   return lessons;
 }
@@ -332,6 +339,7 @@ const MEANINGS: [RegExp, string][] = [
   [/Stake size makes no difference/, "size_level"],
   [/^Tailing @/, "tail"],
   [/When you go against the people you follow/, "consensus"],
+  [/Premium calls you bought/, "premium"],
 ];
 
 /** What a lesson is saying, apart from its numbers. Read from the text so older lessons compare too. */
