@@ -16,6 +16,9 @@ export interface PickInput {
   endTime: string;
   source: { site: string; url: string };
   fixture?: PickFixture;
+  tailOf?: string;
+  tailFlipped?: boolean;
+  followedConsensus?: "with" | "against";
 }
 
 export interface BuildPickOptions {
@@ -107,7 +110,16 @@ export async function buildPick(input: PickInput, env: RecallEnv, options: Build
       }
     }
   }
-  return { ...unsigned, hash, commit, ...(commitSkipped ? { commitSkipped } : {}) };
+  return {
+    ...unsigned,
+    hash,
+    commit,
+    ...(commitSkipped ? { commitSkipped } : {}),
+    // Not part of the hash, which is fixed for picks already committed.
+    ...(input.tailOf ? { tailOf: input.tailOf } : {}),
+    ...(input.tailFlipped ? { tailFlipped: true } : {}),
+    ...(input.followedConsensus ? { followedConsensus: input.followedConsensus } : {}),
+  };
 }
 
 /**

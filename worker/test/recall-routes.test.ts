@@ -69,6 +69,20 @@ test("duplicates are caught by question and by fixture", () => {
   assert.equal(isDuplicatePick([unrelated], checked.input), false);
 });
 
+test("a tail names a handle, and a flip must be asked for", () => {
+  const fixture = { home: "A", away: "B", startISO: FUTURE, subject: "home" };
+  const tailed = validatePickBody({ ...good(), fixture, tailOf: "Ada_1" }, NOW);
+  assert.ok(tailed.ok);
+  assert.deepEqual(tailed.tail, { handle: "ada_1", flip: false });
+  const flipped = validatePickBody({ ...good(), fixture, tailOf: "ada", tailFlip: true }, NOW);
+  assert.ok(flipped.ok);
+  assert.equal(flipped.tail?.flip, true);
+  assert.equal(fieldOf({ ...good(), fixture, tailOf: "x" }), "tailOf");
+  const plain = validatePickBody(good(), NOW);
+  assert.ok(plain.ok);
+  assert.equal(plain.tail, undefined);
+});
+
 test("hostnames are checked", () => {
   for (const site of ["espn.com", "www.bbc.co.uk", "my-site.example.org"]) assert.equal(isHostname(site), true, site);
   for (const site of ["", "localhost", "https://espn.com", "espn.com/path", "a b.com", "-bad.com", "1.2.3.4", 7])

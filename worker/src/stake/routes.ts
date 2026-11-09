@@ -3,7 +3,8 @@
 // actually happened on chain before anything is recorded.
 
 import { isAdmin, json, readJsonObject, type Env } from "../http";
-import { fetchScoreboard, locateFixture, type LocatedFixture, type ScoreboardFetcher } from "../recall/espn";
+import { fetchScoreboard, type LocatedFixture, type ScoreboardFetcher } from "../recall/espn";
+import { checkUpcomingFixture, fixtureRefusalStatus } from "../recall/fixture-check";
 import type { RecallStore } from "../recall/memory";
 import { mergePicks } from "../recall/picks";
 import type { PickRecord, Side, StakeRecord } from "../recall/records";
@@ -145,12 +146,9 @@ function checkStakeLimits(config: StakeConfig, pool: StakePool | null, held: { s
  * final whistle, so the page's time never reaches the chain.
  */
 async function verifiedFixture(context: Context, fixture: PoolFixture): Promise<LocatedFixture> {
-  const { located } = await locateFixture(fixture, context.fetcher).catch(() => refuse(503, "espn_unavailable"));
-  if (!located) return refuse(400, "fixture_not_on_espn");
-  if (located.event.state !== "pre" || located.notPlayed) refuse(409, "fixture_not_open");
-  if (Date.parse(located.event.startISO) - context.nowMs <= MIN_KICKOFF_LEAD_MS) refuse(409, "too_close_to_kickoff");
-  if (new Date(Date.parse(fixture.startISO)).toISOString().slice(0, 10) !== located.event.startISO.slice(0, 10)) refuse(409, "fixture_date_mismatch");
-  return located;
+  const check = await checkUpcomingFixture(fixture, context.fetcher, context.nowMs);
+  if (!check.ok) return refuse(fixtureRefusalStatus(check.code), check.code);
+  return check.located;
 }
 
 function indexEntry(poolId: string, questionHash: string, pick: { fixture: PickRecord["fixture"] & object }, located?: LocatedFixture): PoolIndexEntry {

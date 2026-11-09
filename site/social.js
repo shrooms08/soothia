@@ -201,6 +201,11 @@
     const head = h("div", "social-call-head");
     head.append(h("span", "social-call-match", `${call.match.home} vs ${call.match.away}`), h("span", `social-chip ${call.status}`, call.status));
     item.append(head, h("p", "social-meta", `${call.lean} · ${call.confidence}%${call.match.competition ? ` · ${call.match.competition}` : ""}`));
+    if (call.tailOf) {
+      const source = h("a", "social-proof", `Tail of @${call.tailOf}`);
+      source.href = `/u/${encodeURIComponent(call.tailOf)}`;
+      item.append(source);
+    }
     const stake = stakeText(call.stake);
     if (stake) item.append(h("p", "social-meta", stake));
     if (call.proof) {

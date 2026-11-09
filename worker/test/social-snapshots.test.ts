@@ -190,6 +190,12 @@ test("a recent call shows what the page needs and nothing about where it was rea
   assert.equal(JSON.stringify(snapshot).includes("private-site"), false);
 });
 
+test("a tailed call says whose it copied", async () => {
+  const { snapshot } = await build({ picks: [pick("p1", { tailOf: "ada" })] });
+  assert.equal(snapshot.recent[0].tailOf, "ada");
+  assert.equal("tailOf" in (await build()).snapshot.recent[0], false);
+});
+
 test("non-fixture calls are not public", async () => {
   assert.equal((await build({ picks: [pick("p1", { fixture: undefined })] })).snapshot.recent.length, 0);
 });

@@ -11,8 +11,11 @@ import { buildPick, mergePicks, type PickInput } from "./picks";
 import type { PickFixture, PickRecord, PrefKind } from "./records";
 import { resolveUser } from "./resolve";
 import { insightsFor, latestBy, quietSites, shrinkFactor, summarize, type RelatedHit } from "./scoring";
+import { fetchScoreboard } from "./espn";
 import { commitConfigured, latestCheckpoint, memoryAccount, tatumConfigured, verifyCommit } from "./sui";
 import { SWEEP_PREFIX } from "./sweep";
+import { parseHandle } from "../social/context";
+import { applyTail, type TailRequest } from "../social/tail";
 import { consensusOf, followedCallsOn, loadFollowedItems, pushPickToFeed } from "../social/feed";
 import { callScore } from "../social/stats";
 import { stakeSummaries } from "../stake/positions";
@@ -45,12 +48,12 @@ function isWebUrl(value: unknown): value is string {
   }
 }
 
-export type PickValidation = { ok: true; input: PickInput } | { ok: false; field: string };
+export type PickValidation = { ok: true; input: PickInput; tail?: TailRequest } | { ok: false; field: string };
 
 /** Checks a POST /recall/pick body. */
 export function validatePickBody(body: Record<string, unknown>, nowMs: number): PickValidation {
   const fail = (field: string): PickValidation => ({ ok: false, field });
-  const { question, category, pYes, endTime, fixture, source } = body;
+  const { question, category, pYes, endTime, fixture, source, tailOf, tailFlip } = body;
   if (!shortString(question, MAX_QUESTION)) return fail("question");
   if (!shortString(category, 40)) return fail("category");
   if (typeof pYes !== "number" || !Number.isFinite(pYes) || pYes < 0.01 || pYes > 0.99) return fail("pYes");
@@ -75,8 +78,16 @@ export function validatePickBody(body: Record<string, unknown>, nowMs: number): 
     };
   }
 
+  let tail: TailRequest | undefined;
+  if (tailOf !== undefined) {
+    const handle = parseHandle(tailOf);
+    if (!handle) return fail("tailOf");
+    tail = { handle, flip: tailFlip === true };
+  }
+
   return {
     ok: true,
+    ...(tail ? { tail } : {}),
     input: {
       question: question.trim(),
       category,
@@ -239,7 +250,13 @@ async function createPick(request: Request, env: Env, userKey: string): Promise<
   const store = storeFor(env, userKey);
   // The cached list folds in recent writes, which the relayer has not stored yet.
   if (isDuplicatePick(mergePicks(await store.list("pick")), checked.input)) return json(request, { error: "duplicate_pick" }, 409);
-  const pick = await savePick(checked.input, env, userKey, store);
+  let input = checked.input;
+  if (checked.tail) {
+    const tailed = await applyTail(env, input, checked.tail, userKey, fetchScoreboard, Date.now());
+    if (!tailed.ok) return json(request, { error: tailed.code }, tailed.status);
+    input = tailed.input;
+  }
+  const pick = await savePick(input, env, userKey, store);
   await pushPickToFeed(env, userKey, pick);
   return json(request, pick);
 }

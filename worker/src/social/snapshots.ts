@@ -52,6 +52,7 @@ export interface PublicCall {
   status: "open" | "right" | "wrong";
   stake: { amountMist: string; result: FinalPosition["result"] | null; payoutMist: string | null } | null;
   proof: { digest: string; url: string } | null;
+  tailOf?: string;
 }
 
 export interface ProfileSnapshot {
@@ -211,6 +212,7 @@ export async function buildSnapshot(profile: ProfileIndex, previous: ProfileSnap
       status: outcome ? (outcome.hit ? "right" : "wrong") : "open",
       stake: pickStakes.length > 0 ? { amountMist: (final ? BigInt(final.amountMist) : recorded).toString(), result: final?.result ?? null, payoutMist: final?.payoutMist ?? null } : null,
       proof: pick.commit ? { digest: pick.commit.digest, url: `https://suivision.xyz/txblock/${encodeURIComponent(pick.commit.digest)}` } : null,
+      ...(pick.tailOf ? { tailOf: pick.tailOf } : {}),
     });
   }
 
