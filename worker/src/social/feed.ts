@@ -52,6 +52,19 @@ export function feedItemFor(pick: PickRecord): FeedItem | null {
   };
 }
 
+/** A public user's feed rebuilt from their record, for someone whose calls predate the feed. */
+export function seedFeedItems(picks: PickRecord[], stakesMistByPick: Map<string, bigint>): FeedItem[] {
+  return picks
+    .flatMap((pick) => {
+      const item = feedItemFor(pick);
+      if (!item) return [];
+      const stake = stakesMistByPick.get(pick.id);
+      return [stake ? { ...item, stakeMist: stake.toString() } : item];
+    })
+    .sort((a, b) => b.at.localeCompare(a.at))
+    .slice(0, MAX_RECENT);
+}
+
 async function publicProfileOf(env: Env, userKey: string): Promise<ProfileIndex | null> {
   const handle = await env.SOOTHIA_CACHE.get(userIndexKey(userKey));
   return handle ? env.SOOTHIA_CACHE.get<ProfileIndex>(handleKey(handle), "json") : null;

@@ -17,7 +17,8 @@ import { verifyCommit, type CommitProof } from "../recall/sui";
 import { cacheGet, cachePut, kvPut } from "../store";
 import { stakeSettings, tatumStakeChain, type StakeChain } from "../stake/chain";
 import { estimatedPayout, positionResult } from "../stake/math";
-import { BOARDS_KEY, HIDDEN_KEY, statsKey, type ProfileIndex } from "./context";
+import { BOARDS_KEY, HIDDEN_KEY, recentKey, statsKey, type ProfileIndex } from "./context";
+import { seedFeedItems, type FeedItem } from "./feed";
 import { BOARDS, PERIODS, rankBoard, statsForPeriod, type Board, type BoardRow, type CallEntry, type Period, type PeriodStats, type StakeEntry } from "./stats";
 
 const MAX_RECENT_CALLS = 50;
@@ -128,7 +129,7 @@ async function finalPosition(poolId: string, address: string, chain: NonNullable
 const isPublic = (pick: PickRecord, profile: ProfileIndex): boolean => profile.shareHistory || pick.at >= profile.publicSince;
 
 /** Builds one profile's snapshot, reusing what can't have changed. */
-export async function buildSnapshot(profile: ProfileIndex, previous: ProfileSnapshot | null, deps: SnapshotDeps, budget: Budget): Promise<ProfileSnapshot> {
+export async function buildSnapshot(profile: ProfileIndex, previous: ProfileSnapshot | null, deps: SnapshotDeps, budget: Budget): Promise<{ snapshot: ProfileSnapshot; feed: FeedItem[] }> {
   const nowMs = deps.now.getTime();
   const store = deps.store(profile.userKey);
   const [rawPicks, rawOutcomes, rawStakes] = (await Promise.all([store.list("pick", true), store.list("outcome", true), store.list("stake", true)])) as [
@@ -217,7 +218,8 @@ export async function buildSnapshot(profile: ProfileIndex, previous: ProfileSnap
   }
 
   recent.sort((a, b) => b.at.localeCompare(a.at));
-  return {
+  const staked = new Map([...stakesByPick].map(([pickId, list]) => [pickId, list.reduce((sum, stake) => sum + BigInt(stake.amountMist), 0n)]));
+  const snapshot: ProfileSnapshot = {
     handle: profile.handle,
     address: profile.address,
     publicSince: profile.publicSince,
@@ -228,6 +230,7 @@ export async function buildSnapshot(profile: ProfileIndex, previous: ProfileSnap
     proofs,
     finals,
   };
+  return { snapshot, feed: seedFeedItems(picks, staked) };
 }
 
 const withoutTime = <T extends { builtAt?: string; generatedAt?: string }>(value: T): string => JSON.stringify({ ...value, builtAt: "", generatedAt: "" });
@@ -277,8 +280,10 @@ export async function sweepSocial(env: Env, overrides: SweepSocialDeps = {}): Pr
       const profile = await kv.get<ProfileIndex>(`profile:${handle}`, "json");
       if (!profile) continue;
       const previous = await kv.get<ProfileSnapshot>(statsKey(handle), "json");
-      const next = await buildSnapshot(profile, previous, deps, budget);
+      const { snapshot: next, feed } = await buildSnapshot(profile, previous, deps, budget);
       rebuilt += 1;
+      // Calls made before the feed existed: fill it once, so followers see something.
+      if (feed.length > 0 && (await kv.get(recentKey(handle))) === null) await kvPut(env, recentKey(handle), JSON.stringify(feed));
       await cachePut(CURSOR_KEY, handle, CURSOR_TTL_SEC);
       if (!previous || withoutTime(previous) !== withoutTime(next)) {
         if (await kvPut(env, statsKey(handle), JSON.stringify(next))) written += 1;

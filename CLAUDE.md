@@ -15,7 +15,7 @@ Soothia is a Chrome MV3 extension (a floating orb on every page) where people ca
 
 ## Architecture
 
-- **Extension** (`extension/`): MV3, TypeScript, Vite. Build output in `extension/dist`. `WORKER_URL` (https://api.soothia.fun) is in `extension/src/config.ts`. Tabs are This page and My record.
+- **Extension** (`extension/`): MV3, TypeScript, Vite. Build output in `extension/dist`. `WORKER_URL` (https://api.soothia.fun) is in `extension/src/config.ts`. Tabs are This page, My record and Social.
 - **Worker** (`worker/`): Cloudflare Worker `soothia-proxy`, served at https://api.soothia.fun and https://soothia-proxy.heylana.workers.dev; both stay live. Routes: `POST /detect` (prose through Claude, or the page's fixture), `/recall/*`, `/stake/*`, `/social/*`, `GET /stats`, `GET /health`, and the static admin page at `/admin` (`worker/admin`, bundled into the gitignored `worker/public` by `worker/scripts/build-admin.mjs`, which needs `extension/node_modules`). Never rename the heylana workers.dev subdomain.
 - **Walrus Memory** (`worker/src/recall/memory.ts`): the source of truth for picks, outcomes, lessons and preferences. Writes are asynchronous and the store is append-only.
 - **Sui through Tatum** (`worker/src/recall/tatumGrpc.ts`, `sui.ts`): reads and commits go through Tatum's gRPC gateway with a fetch-only transport, so they also run in Workers. Do not add `@grpc/grpc-js`.
@@ -35,6 +35,7 @@ Soothia is a Chrome MV3 extension (a floating orb on every page) where people ca
 - `poolKey` in `worker/src/stake/identity.ts` names pools that are permanent on Sui. Never change its format.
 - A pool's close time comes from ESPN, never from a pick, because a pick's kickoff comes from the page.
 - A call is "proven before kickoff" against ESPN's kickoff, never the pick's, because a pick's kickoff comes from the page.
+- Only calls already public reach a feed (`recent:<handle>`): a stake must never make an earlier private call public.
 - An anchor shows a call was made after a checkpoint. Only a Sui commit shows it was made before kickoff.
 
 ## Commands

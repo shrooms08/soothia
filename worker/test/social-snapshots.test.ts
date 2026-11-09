@@ -116,7 +116,7 @@ function depsFor(options: DepsOptions = {}) {
 
 const build = (options: DepsOptions = {}, who: ProfileIndex = profile, previous: ProfileSnapshot | null = null, budget = 40) => {
   const { deps, counts } = depsFor(options);
-  return buildSnapshot(who, previous, deps, new Budget(budget)).then((snapshot) => ({ snapshot, counts }));
+  return buildSnapshot(who, previous, deps, new Budget(budget)).then(({ snapshot, feed }) => ({ snapshot, feed, counts }));
 };
 
 beforeEach(() => clearMemoryCache());
@@ -194,6 +194,13 @@ test("a tailed call says whose it copied", async () => {
   const { snapshot } = await build({ picks: [pick("p1", { tailOf: "ada" })] });
   assert.equal(snapshot.recent[0].tailOf, "ada");
   assert.equal("tailOf" in (await build()).snapshot.recent[0], false);
+});
+
+test("the seed feed holds public calls only, with their stakes", async () => {
+  const old = pick("old", { at: "2026-11-01T10:00:00.000Z" });
+  const { feed } = await build({ picks: [old, pick("p1")], outcomes: [], stakes: [stakeRecord("p1")] });
+  assert.deepEqual(feed.map((item) => item.pickId), ["p1"]);
+  assert.equal(feed[0].stakeMist, SUI.toString());
 });
 
 test("non-fixture calls are not public", async () => {
@@ -302,7 +309,20 @@ test("the sweep builds a snapshot and the boards", async () => {
   assert.deepEqual(result, { rebuilt: 1, written: 1, boardsWritten: true });
   assert.ok(data.has("socialstats:amy"));
   assert.ok(data.has("social:boards"));
-  assert.equal(puts.length, 2);
+  assert.deepEqual(puts.sort(), ["recent:amy", "social:boards", "socialstats:amy"]);
+});
+
+test("the sweep fills an empty feed once, and leaves a live one alone", async () => {
+  const { data, env, puts } = kvFake();
+  addProfile(data, profile);
+  const { deps } = depsFor();
+  await sweepSocial(env, deps);
+  assert.equal(JSON.parse(data.get("recent:amy")!)[0].pickId, "p1");
+  assert.equal(puts.filter((key) => key === "recent:amy").length, 1);
+  data.set("recent:amy", "[]");
+  await sweepSocial(env, { ...deps, now: new Date(NOW.getTime() + 1000) });
+  assert.equal(data.get("recent:amy"), "[]");
+  assert.equal(puts.filter((key) => key === "recent:amy").length, 1);
 });
 
 test("a second sweep with nothing new writes nothing to KV", async () => {
