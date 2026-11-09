@@ -4,7 +4,11 @@ import { button, el, externalLink, icon } from "./dom";
 import { SITE_URL } from "./go-public";
 import { createLeaderboardView } from "./leaderboard-view";
 import type { ApiError, ApiPath, ApiResponse } from "./messages";
-import { callLine, canTail, followedLine, handleLine, initials, matchLine, timeAgo, type ConsensusView, type FeedEntry, type FollowedCall, type TailSource } from "./social-logic";
+import { isLockedItem, premiumLine, unlockFailureText, type UnlockReceipt, type UnlockResult } from "./premium-logic";
+import { shortId } from "./recall-logic";
+import { callLine, canTail, followedLine, handleLine, initials, isLockedCall, matchLine, timeAgo, type ConsensusView, type FeedEntry, type FeedItem, type FollowedCall, type OpenFollowedCall, type TailSource } from "./social-logic";
+import { formatSui, walletErrorText } from "./stake-logic";
+import type { WalletSummary } from "./wallet-protocol";
 
 type SocialSection = "feed" | "board" | "following";
 const SECTIONS: [SocialSection, string][] = [
@@ -15,7 +19,8 @@ const SECTIONS: [SocialSection, string][] = [
 const SEARCH_DELAY_MS = 300;
 
 interface FollowingRow {
-  handle: string;
+  address: string;
+  handle: string | null;
   score: number | null;
   public: boolean;
 }
@@ -26,7 +31,14 @@ interface SearchRow {
   following: boolean;
 }
 
+/** Pays for a call and returns it. `choose` is asked when several wallets are installed. */
+export type UnlockCall = (pickId: string, priceMist: string, choose: (wallets: WalletSummary[]) => Promise<WalletSummary | null>) => Promise<UnlockResult>;
+
 export interface SocialHost {
+  /** Missing where there is no wallet to pay with. */
+  unlock?: UnlockCall;
+  /** Lets the agent wallet buy what it may. Resolves to how many it unlocked. */
+  runAgent?: () => Promise<number>;
   api<T>(path: ApiPath, body: unknown): Promise<ApiResponse<T | ApiError>>;
   layout(): void;
   state(kind: "empty" | "error" | "watching", text: string, ...extra: HTMLElement[]): HTMLElement;
@@ -51,24 +63,90 @@ function followError(code: string | undefined): string {
   }
 }
 
+function receiptLine(receipt: UnlockReceipt): HTMLElement {
+  const line = el("p", "note premium-receipt");
+  line.append(`Paid ${formatSui(receipt.priceMist, 4)} SUI · `, externalLink(shortId(receipt.digest), receipt.url, "link mono"));
+  return line;
+}
+
+/** The Unlock button, with its status and wallet choice. Calls `done` once the call is open. */
+function unlockControl(pickId: string, priceMist: string, unlock: UnlockCall, layout: () => void, done: (call: FeedItem, receipt: UnlockReceipt | null) => void): HTMLElement {
+  const node = el("div", "premium-unlock");
+  const note = el("p", "note");
+  note.setAttribute("aria-live", "polite");
+  const picker = el("div", "wallet-row wallet-picker");
+  picker.hidden = true;
+  const report = (text: string): void => {
+    note.textContent = text;
+    layout();
+  };
+  const choose = (wallets: WalletSummary[]): Promise<WalletSummary | null> =>
+    new Promise((resolve) => {
+      picker.replaceChildren(
+        ...wallets.map((wallet) =>
+          button(wallet.name, "button small", () => {
+            picker.hidden = true;
+            resolve(wallet);
+          }),
+        ),
+      );
+      picker.hidden = false;
+      report("Choose a wallet.");
+    });
+  const action: HTMLButtonElement = button("Unlock", "button small premium-button", () => {
+    void (async () => {
+      action.disabled = true;
+      report("Waiting for your wallet…");
+      const result = await unlock(pickId, priceMist, choose).catch((error: unknown) => ({ ok: false, code: "wallet", walletMessage: String((error as Error)?.message ?? error), maybePaid: false }) as UnlockResult);
+      if (result.ok) return done(result.call, result.receipt);
+      action.disabled = false;
+      report(unlockFailureText(result, (text) => walletErrorText(text, "Nothing was paid.").text));
+    })();
+  });
+  node.append(action, picker, note);
+  return node;
+}
+
 export function createSocialView(pane: HTMLElement, host: SocialHost): { render(): Promise<void> } {
   let current: SocialSection = "feed";
   let seq = 0;
   const nowMs = (): number => host.now?.() ?? Date.now();
 
-  function feedRow(entry: FeedEntry): HTMLElement {
+  function lockedRow(entry: FeedEntry, row: HTMLElement): HTMLElement {
+    const { item } = entry;
+    if (!isLockedItem(item)) return row;
+    row.append(el("p", "feed-call feed-premium", premiumLine(item.premium.priceMist)));
+    if (item.proof) row.append(externalLink("Proof on Sui", item.proof.url, "link ext"));
+    if (host.unlock && item.proof && canTail(item.fixture, nowMs())) {
+      row.append(
+        unlockControl(item.pickId, item.premium.priceMist, host.unlock, host.layout, (call, receipt) => {
+          row.replaceWith(feedRow({ ...entry, item: call }, receipt));
+          host.layout();
+        }),
+      );
+    } else if (!item.proof) {
+      row.append(el("p", "note", "Waiting for its proof on Sui."));
+    }
+    return row;
+  }
+
+  function feedRow(entry: FeedEntry, receipt: UnlockReceipt | null = null): HTMLElement {
     const { handle, score, item, myCall } = entry;
     const row = el("div", "feed-row");
     const top = el("div", "feed-top");
     top.append(profileLink(handleLine(handle, score), handle), el("span", "feed-time", timeAgo(Date.parse(item.at), nowMs())));
-    row.append(top, el("p", "feed-match", matchLine(item.fixture)), el("p", "feed-call", callLine(item.lean, item.confidence, item.stakeMist)));
+    row.append(top, el("p", "feed-match", matchLine(item.fixture)));
+    if (isLockedItem(item)) return lockedRow(entry, row);
+    row.append(el("p", "feed-call", callLine(item.lean, item.confidence, item.stakeMist)));
+    if (item.premium) row.append(el("p", "note feed-premium", "Premium call"));
+    if (receipt) row.append(receiptLine(receipt));
     if (item.tailOf) row.append(el("p", "note", `Tail of @${item.tailOf}`));
     if (myCall) row.append(el("p", "feed-mine", `You: ${callLine(myCall.side, myCall.confidence)}`));
     else if (canTail(item.fixture, nowMs())) row.append(button("Tail", "button small feed-tail", () => host.onTail(handle, item)));
     return row;
   }
 
-  async function renderFeed(slot: HTMLElement, mine: number): Promise<void> {
+  async function renderFeed(slot: HTMLElement, mine: number, agentNote = ""): Promise<void> {
     slot.replaceChildren(host.state("watching", "Loading your feed…"));
     host.layout();
     const response = await host.api<{ items: FeedEntry[] }>("/social/feed", {});
@@ -84,20 +162,24 @@ export function createSocialView(pane: HTMLElement, host: SocialHost): { render(
         refresh.prepend(icon("refresh"));
         const tools = el("div", "refresh-row");
         tools.append(refresh);
-        slot.replaceChildren(tools, ...items.map(feedRow));
+        slot.replaceChildren(tools, ...(agentNote ? [el("p", "note agent-note", agentNote)] : []), ...items.map((entry) => feedRow(entry)));
       }
     }
     host.layout();
+    if (agentNote || !response.ok || !host.runAgent) return;
+    // Once per load, so the redraw below can't start another run.
+    const bought = await host.runAgent();
+    if (bought > 0 && mine === seq) await renderFeed(slot, mine, `Your agent unlocked ${bought} call${bought === 1 ? "" : "s"}.`);
   }
 
   function followingRow(row: FollowingRow, reload: () => void): HTMLElement {
     const node = el("div", "follow-row");
-    const name = profileLink(handleLine(row.handle, row.score), row.handle);
+    const name = row.handle ? profileLink(handleLine(row.handle, row.score), row.handle) : el("span", "feed-handle mono", shortId(row.address));
     const note = el("span", "note", row.public ? "" : "No longer public");
     const unfollow = button("Unfollow", "button small", () => {
       void (async () => {
         unfollow.disabled = true;
-        const response = await host.api<unknown>("/social/unfollow", { handle: row.handle });
+        const response = await host.api<unknown>("/social/unfollow", { address: row.address });
         if (response.ok) reload();
         else {
           unfollow.disabled = false;
@@ -211,7 +293,7 @@ export function createSocialView(pane: HTMLElement, host: SocialHost): { render(
 }
 
 /** "@ada and @tunde called this · 2 say Arsenal win", opening to a list with Tail. */
-export function followedRow(calls: FollowedCall[], consensus: ConsensusView | null, onTail: ((call: FollowedCall) => void) | null, layout: () => void): HTMLElement {
+export function followedRow(calls: FollowedCall[], consensus: ConsensusView | null, onTail: ((call: OpenFollowedCall) => void) | null, layout: () => void, unlock?: UnlockCall): HTMLElement {
   const node = el("div", "followed");
   const head = button("", "followed-head", () => {
     list.hidden = !list.hidden;
@@ -226,8 +308,21 @@ export function followedRow(calls: FollowedCall[], consensus: ConsensusView | nu
   list.hidden = true;
   for (const call of calls) {
     const row = el("div", "followed-call");
-    row.append(el("span", "followed-who", `@${call.handle}`), el("span", "followed-lean", callLine(call.lean, call.confidence, call.stakeMist)));
-    if (onTail) row.append(button("Tail", "button small", () => onTail(call)));
+    if (isLockedCall(call)) {
+      const lean = el("span", "followed-lean", premiumLine(call.premium.priceMist));
+      row.append(el("span", "followed-who", `@${call.handle}`), lean);
+      if (unlock && call.proof) {
+        const control = unlockControl(call.pickId, call.premium.priceMist, unlock, layout, (open, receipt) => {
+          lean.textContent = callLine(open.lean, open.confidence, open.stakeMist);
+          control.replaceChildren(...(receipt ? [receiptLine(receipt)] : []));
+          layout();
+        });
+        row.append(control);
+      }
+    } else {
+      row.append(el("span", "followed-who", `@${call.handle}`), el("span", "followed-lean", callLine(call.lean, call.confidence, call.stakeMist)));
+      if (onTail) row.append(button("Tail", "button small", () => onTail(call)));
+    }
     list.append(row);
   }
   node.append(head, list);

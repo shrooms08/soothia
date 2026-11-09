@@ -364,6 +364,7 @@ async function stakeRecord(options: StakeHarnessOptions = {}) {
       current: async () => (options.wallet === undefined ? CONNECTED : options.wallet),
       connect: async () => null,
       signMessage: async () => ({ signature: "S" }),
+      signOnly: async () => ({ bytes: "B", signature: "S" }),
       sign: async (_wallet, txBytes, expected) => {
         signed.push([txBytes, expected]);
         return options.sign ? options.sign() : { digest: D };

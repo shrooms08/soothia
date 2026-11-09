@@ -7,12 +7,15 @@ import {
   API_ROUTES,
   DETECT_REQUEST,
   HEALTH_REQUEST,
+  AGENT_REQUEST,
   CHECK_TX,
+  PREMIUM_CALL,
   MUSIC_CONTROL,
   OPEN_WELCOME,
   RECALL_ID_KEY,
   SUI_WALLET_KEY,
   type MusicStatus,
+  type AgentAction,
   type ApiRequestMessage,
   type ApiResponse,
   type Claim,
@@ -24,6 +27,8 @@ import {
   type PageContext,
   type FixtureSignal,
 } from "./messages";
+import { createAgent } from "./agent";
+import type { PremiumCallResponse } from "./premium-logic";
 import { isRecallId } from "./recall-logic";
 
 const INSTALL_KEY = "soothia:installId";
@@ -59,11 +64,11 @@ async function installId(): Promise<string> {
   return created;
 }
 
-const RECORD_ROUTES = new Set(["/stake/build", "/stake/confirm", "/social/profile/publish", "/social/follow", "/social/unfollow", "/social/following", "/social/search", "/social/feed", "/social/feed/new"]);
+const RECORD_ROUTES = new Set(["/stake/build", "/stake/confirm", "/social/profile/publish", "/social/follow", "/social/unfollow", "/social/following", "/social/search", "/social/feed", "/social/feed/new", "/premium/eligible", "/premium/build"]);
 
 // A linked record's id acts as its password, so only routes that read the record get it.
 async function recallHeaders(path: string): Promise<Record<string, string>> {
-  if (!path.startsWith("/recall/") && !RECORD_ROUTES.has(path)) return {};
+  if (!path.startsWith("/recall/") && !path.startsWith("/premium/call/") && !RECORD_ROUTES.has(path)) return {};
   const stored: unknown = (await chrome.storage.local.get(RECALL_ID_KEY))[RECALL_ID_KEY];
   return isRecallId(stored) ? { "X-Soothia-Recall": stored } : {};
 }
@@ -171,6 +176,40 @@ async function relay(message: ApiRequestMessage): Promise<ApiResponse> {
     return { ok: response.ok, status: response.status, body: await response.json().catch(() => null) };
   } catch {
     return { ok: false, status: 0, body: null };
+  }
+}
+
+const PICK_ID = /^[A-Za-z0-9_-]{1,100}$/;
+
+/** One x402 request. The headers are handed back, because they carry the payment terms. */
+async function fetchPremiumCall(pickId: unknown, payment?: unknown): Promise<PremiumCallResponse> {
+  if (typeof pickId !== "string" || !PICK_ID.test(pickId)) return { status: 0, required: null, body: null };
+  try {
+    const path = `/premium/call/${pickId}`;
+    const response = await fetch(`${WORKER_URL}${path}`, {
+      headers: { "X-Soothia-Install": await installId(), ...(await recallHeaders(path)), ...(typeof payment === "string" ? { "PAYMENT-SIGNATURE": payment } : {}) },
+      signal: AbortSignal.timeout(28_000),
+    });
+    return { status: response.status, required: response.headers.get("PAYMENT-REQUIRED"), body: await response.json().catch(() => null) };
+  } catch {
+    return { status: 0, required: null, body: null };
+  }
+}
+
+const agent = createAgent({ relay: (path, body) => relay({ type: API_REQUEST, path, body }), fetchCall: fetchPremiumCall });
+
+function agentAction(action: AgentAction, settings: unknown): Promise<unknown> {
+  switch (action) {
+    case "status":
+      return agent.status();
+    case "create":
+      return agent.create();
+    case "settings":
+      return agent.saveSettings(settings);
+    case "withdraw":
+      return agent.withdraw();
+    case "run":
+      return agent.run();
   }
 }
 
@@ -333,6 +372,14 @@ function handleMessage(
       return true;
     case CHECK_TX:
       respondSafely(verifyForSigning(message as unknown as CheckTxMessage), sendResponse, { ok: false, reason: "The transaction could not be checked." });
+      return true;
+    case PREMIUM_CALL:
+      if (sender.id !== chrome.runtime.id) return undefined;
+      respondSafely(fetchPremiumCall((message as { pickId?: unknown }).pickId, (message as { payment?: unknown }).payment), sendResponse, { status: 0, required: null, body: null });
+      return true;
+    case AGENT_REQUEST:
+      if (sender.id !== chrome.runtime.id) return undefined;
+      respondSafely(agentAction(message.action as AgentAction, (message as { settings?: unknown }).settings), sendResponse, null);
       return true;
     case MUSIC_CONTROL:
       // The welcome page asks the background to make sure the player exists.

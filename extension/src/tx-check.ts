@@ -5,11 +5,14 @@
 import { bcs } from "@mysten/sui/bcs";
 import { Transaction } from "@mysten/sui/transactions";
 import { fromBase64, normalizeSuiAddress } from "@mysten/sui/utils";
-import { STAKE_CONFIG, STAKE_PACKAGE } from "./config";
+import { PAY_CONFIG, PAY_PACKAGE, STAKE_CONFIG, STAKE_PACKAGE } from "./config";
 
 export type ExpectedTx =
   | { kind: "stake"; poolId: string; side: boolean; amountMist: string; pickHash?: string }
-  | { kind: "claim"; poolId: string };
+  | { kind: "claim"; poolId: string }
+  | { kind: "pay"; nonce: string; recipient: string; priceMist: string }
+  | { kind: "fund"; recipient: string; amountMist: string }
+  | { kind: "withdraw"; recipient: string };
 
 export type TxVerdict = { ok: true } | { ok: false; reason: string };
 
@@ -17,6 +20,9 @@ const BASE64 = /^[A-Za-z0-9+/]+={0,2}$/;
 const CLOCK = normalizeSuiAddress("0x6");
 const STAKE_ARGUMENTS = 6;
 const HASH_BYTES = 32;
+const PAY_ARGUMENTS = 4;
+/** More gas than a payment or a transfer could need, so a bad build can't lock up the balance. */
+const MAX_GAS_BUDGET = 20_000_000n;
 
 type Data = ReturnType<Transaction["getData"]>;
 type Input = Data["inputs"][number];
@@ -88,6 +94,67 @@ function checkStake(data: Data, expected: Extract<ExpectedTx, { kind: "stake" }>
   refuseIf(data.inputs.length !== STAKE_ARGUMENTS, "It carries extra inputs.");
 }
 
+function checkGasBudget(data: Data): void {
+  const { budget } = data.gasData;
+  refuseIf(budget === null || budget === undefined || BigInt(budget) > MAX_GAS_BUDGET, "It allows too much gas.");
+}
+
+function checkAmount(data: Data, command: Data["commands"][number], expected: string): void {
+  const split = command.SplitCoins;
+  if (!split) throw new Refusal("The first step is not a coin split.");
+  refuseIf(split.coin.$kind !== "GasCoin", "It does not come from your SUI balance.");
+  refuseIf(split.amounts.length !== 1, "It splits more than one coin.");
+  const bytes = pureBytes(data, split.amounts[0], "The amount");
+  refuseIf(bytes.length !== 8, "The amount is malformed.");
+  refuseIf(bcs.u64().parse(bytes) !== expected, "The amount differs from what you chose.");
+}
+
+function checkRecipient(data: Data, argument: Argument | undefined, expected: string): void {
+  const bytes = pureBytes(data, argument, "The recipient");
+  refuseIf(bytes.length !== 32 || !sameAddress(bcs.Address.parse(bytes), expected), "It pays someone else.");
+}
+
+const isSplitCoin = (argument: Argument): boolean => (argument.$kind === "NestedResult" && argument.NestedResult[0] === 0 && argument.NestedResult[1] === 0) || (argument.$kind === "Result" && argument.Result === 0);
+
+function checkPay(data: Data, expected: Extract<ExpectedTx, { kind: "pay" }>): void {
+  refuseIf(data.commands.length !== 2, "It does more than split a coin and pay.");
+  refuseIf(data.inputs.length !== PAY_ARGUMENTS, "It carries extra inputs.");
+  checkGasBudget(data);
+  checkAmount(data, data.commands[0], expected.priceMist);
+  const call = data.commands[1].MoveCall;
+  if (!call) throw new Refusal("Expected a call to pay.");
+  refuseIf(!sameAddress(call.package, PAY_PACKAGE), "It calls a contract that is not Soothia's.");
+  refuseIf(call.module !== "pay" || call.function !== "pay", "It calls something other than pay.");
+  refuseIf((call.typeArguments ?? []).length !== 0, "It has unexpected type arguments.");
+  refuseIf(call.arguments.length !== PAY_ARGUMENTS, "The pay call has the wrong arguments.");
+  const [config, nonce, recipient, coin] = call.arguments;
+  refuseIf(!sameAddress(sharedObjectId(data, config, "The config"), PAY_CONFIG), "It uses a different config.");
+  const nonceBytes = bcs.vector(bcs.u8()).parse(pureBytes(data, nonce, "The nonce"));
+  refuseIf(nonceBytes.map((byte) => byte.toString(16).padStart(2, "0")).join("") !== expected.nonce, "It is tied to a different payment.");
+  checkRecipient(data, recipient, expected.recipient);
+  refuseIf(!isSplitCoin(coin), "The payment does not use the split coin.");
+}
+
+function checkFund(data: Data, expected: Extract<ExpectedTx, { kind: "fund" }>): void {
+  refuseIf(data.commands.length !== 2, "It does more than split a coin and send it.");
+  refuseIf(data.inputs.length !== 2, "It carries extra inputs.");
+  checkGasBudget(data);
+  checkAmount(data, data.commands[0], expected.amountMist);
+  const transfer = data.commands[1].TransferObjects;
+  if (!transfer) throw new Refusal("Expected a transfer.");
+  refuseIf(transfer.objects.length !== 1 || !isSplitCoin(transfer.objects[0]), "It does not send the split coin.");
+  checkRecipient(data, transfer.address, expected.recipient);
+}
+
+function checkWithdraw(data: Data, expected: Extract<ExpectedTx, { kind: "withdraw" }>): void {
+  refuseIf(data.commands.length !== 1 || data.inputs.length !== 1, "It does more than send the balance.");
+  checkGasBudget(data);
+  const transfer = data.commands[0].TransferObjects;
+  if (!transfer) throw new Refusal("Expected a transfer.");
+  refuseIf(transfer.objects.length !== 1 || transfer.objects[0].$kind !== "GasCoin", "It does not send the whole balance.");
+  checkRecipient(data, transfer.address, expected.recipient);
+}
+
 function checkClaim(data: Data, expected: Extract<ExpectedTx, { kind: "claim" }>): void {
   refuseIf(data.commands.length !== 1, "It does more than claim.");
   const call = checkTarget(data.commands[0], "claim");
@@ -107,6 +174,9 @@ export function checkTransaction(txBytes: unknown, expected: ExpectedTx, sender:
     refuseIf(Boolean(data.gasData.owner) && !sameAddress(data.gasData.owner as string, sender), "Someone else would pay its gas.");
     if (expected.kind === "stake") checkStake(data, expected);
     else if (expected.kind === "claim") checkClaim(data, expected);
+    else if (expected.kind === "pay") checkPay(data, expected);
+    else if (expected.kind === "fund") checkFund(data, expected);
+    else if (expected.kind === "withdraw") checkWithdraw(data, expected);
     else throw new Refusal("Unknown transaction type.");
     return { ok: true };
   } catch (error) {

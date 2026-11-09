@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { JSDOM } from "jsdom";
 import type { ApiResponse } from "../src/messages";
-import { badgeText, cachedFeedCount, callLine, canTail, FEED_CHECK_MS, followedLine, handleLine, initials, matchLine, pageFollowedCount, tailSheetFor, timeAgo, type FeedEntry, type FollowedCall } from "../src/social-logic";
+import { badgeText, cachedFeedCount, callLine, canTail, FEED_CHECK_MS, followedLine, handleLine, initials, matchLine, pageFollowedCount, tailSheetFor, timeAgo, type FeedEntry, type OpenFollowedCall } from "../src/social-logic";
 
 const { window } = new JSDOM("<!doctype html><body></body>");
 Object.assign(globalThis, { document: window.document });
@@ -19,7 +19,7 @@ const entry = (overrides: Partial<FeedEntry> = {}): FeedEntry => ({
   myCall: null,
   ...overrides,
 });
-const call = (handle: string, overrides: Partial<FollowedCall> = {}): FollowedCall => ({ handle, lean: "Arsenal win", confidence: 70, stakeMist: null, side: "YES", pickId: "x", fixture, at: "x", ...overrides });
+const call = (handle: string, overrides: Partial<OpenFollowedCall> = {}): OpenFollowedCall => ({ handle, lean: "Arsenal win", confidence: 70, stakeMist: null, side: "YES", pickId: "x", fixture, at: "x", ...overrides });
 
 test("time ago reads simply", () => {
   assert.equal(timeAgo(NOW - 5000, NOW), "just now");
@@ -172,7 +172,7 @@ test("Leaderboard shows the existing board", async () => {
 });
 
 test("Following lists people with scores and Unfollow", async () => {
-  const s = social({ "/social/feed": ok({ items: [] }), "/social/following": ok({ following: [{ handle: "ada", score: 612, public: true }, { handle: "bob", score: null, public: false }] }), "/social/unfollow": ok({ ok: true }) });
+  const s = social({ "/social/feed": ok({ items: [] }), "/social/following": ok({ following: [{ address: "0xada", handle: "ada", score: 612, public: true }, { address: "0xb0b", handle: null, score: null, public: false }] }), "/social/unfollow": ok({ ok: true }) });
   await s.view.render();
   s.named("Following").click();
   await tick();
@@ -180,7 +180,7 @@ test("Following lists people with scores and Unfollow", async () => {
   assert.match(s.pane.textContent!, /No longer public/);
   s.named("Unfollow").click();
   await tick();
-  assert.deepEqual(s.asked.find(([path]) => path === "/social/unfollow")?.[1], { handle: "ada" });
+  assert.deepEqual(s.asked.find(([path]) => path === "/social/unfollow")?.[1], { address: "0xada" });
 });
 
 test("search finds people and Follow follows", async () => {
@@ -217,7 +217,7 @@ test("a follow that fails says why and stays usable", async () => {
 });
 
 test("the tile line opens to a list, each with Tail", () => {
-  const tailed: FollowedCall[] = [];
+  const tailed: OpenFollowedCall[] = [];
   const consensus = { lean: "Arsenal win", count: 2, total: 2, text: "" };
   const node = followedRow([call("ada"), call("tunde")], consensus, (item) => tailed.push(item), () => undefined);
   assert.equal(node.querySelector(".followed-text")!.textContent, "@ada and @tunde called this · 2 say Arsenal win");

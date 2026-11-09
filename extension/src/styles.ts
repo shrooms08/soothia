@@ -871,6 +871,30 @@ input[type="number"].input { font-family: var(--sth-font-mono); }
 .followed-who { flex: none; font-weight: 600; color: var(--sth-text); }
 .followed-lean { flex: 1 1 auto; min-width: 0; }
 .followed-call .button.small { flex: none; margin: 0; }
+.feed-premium { color: var(--sth-orb-mid); font-weight: 600; }
+.premium-unlock { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.premium-unlock .button.small { margin: 4px 0 0; }
+.premium-unlock .note { margin: 0; }
+.premium-receipt { margin: 2px 0 0; display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.followed-call .premium-unlock { flex: none; align-items: flex-end; }
+.followed-call .premium-unlock .button.small { margin: 0; }
+.premium-field { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.premium-choices { display: flex; flex-direction: column; gap: 6px; }
+.premium-choices[hidden] { display: none; }
+.premium-prices { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.premium-price { margin: 0; }
+.premium-price.selected { border-color: var(--sth-orb-mid); color: var(--sth-orb-mid); }
+.premium-custom { flex: 1 1 96px; min-width: 96px; height: 30px; font-size: 12px; }
+.agent-switch { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--sth-text); cursor: pointer; }
+.agent-check { width: 16px; height: 16px; margin: 0; accent-color: var(--sth-orb-mid); }
+.agent-body, .agent-info { display: flex; flex-direction: column; gap: 6px; }
+.agent-info .note, .agent-info .warn { margin: 0; }
+.agent-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.agent-row .button.small { margin: 0; }
+.agent-input { flex: 0 1 96px; width: 96px; height: 30px; font-size: 12px; }
+.agent-body > .button.small { align-self: flex-start; margin: 0; }
+.agent-note { margin: 0; color: var(--sth-orb-mid); }
+.agent-receipt { display: flex; flex-direction: column; gap: 2px; padding: 4px 0; font-size: 11px; color: var(--sth-text-2); overflow-wrap: anywhere; border-bottom: 1px solid rgba(175,169,236,.14); }
 .tail-label { margin: 0 0 6px; font-size: 12px; font-weight: 600; color: var(--sth-orb-mid); }
 .go-public { padding: 10px; border: 1px solid var(--sth-hairline-soft, rgba(175,169,236,.14)); border-radius: 10px; }
 .go-public-handle { width: 100%; height: 32px; font-size: 13px; }

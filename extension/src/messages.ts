@@ -125,6 +125,11 @@ export const API_ROUTES = {
   "/social/search": "GET",
   "/social/feed": "GET",
   "/social/feed/new": "GET",
+  "/premium/eligible": "GET",
+  "/premium/build": "POST",
+  "/premium/balance": "GET",
+  "/premium/transfer/build": "POST",
+  "/premium/transfer/execute": "POST",
 } as const;
 export type ApiPath = keyof typeof API_ROUTES;
 
@@ -158,6 +163,17 @@ export const RECORD_SECTION_KEY = "soothia.recordSection";
 
 // Content script -> background: check a transaction before any wallet is asked to sign it.
 export const CHECK_TX = "soothia:v1:check-tx";
+
+// Content script -> background: one x402 request for a premium call.
+export const PREMIUM_CALL = "soothia:v1:premium-call";
+
+// Content script -> background: the agent wallet. Its key never leaves the background.
+export const AGENT_REQUEST = "soothia:v1:agent";
+export const AGENT_KEY = "soothia.agentKey";
+export const AGENT_SETTINGS_KEY = "soothia.agentSettings";
+export const AGENT_SPEND_KEY = "soothia.agentSpend";
+export const AGENT_RECEIPTS_KEY = "soothia.agentReceipts";
+export type AgentAction = "status" | "create" | "settings" | "withdraw" | "run";
 
 export interface RecallCalled {
   /** "Arsenal win", or "Arsenal doesn't win (Chelsea win or draw)". */
@@ -198,6 +214,7 @@ export interface RecallPickBody {
   fixture?: { home: string; away: string; competition?: string; startISO: string; subject: "home" | "away" };
   tailOf?: string;
   tailFlip?: boolean;
+  premium?: { priceMist: string };
 }
 
 export interface RecallSavedPick {
@@ -207,6 +224,7 @@ export interface RecallSavedPick {
   commit: { digest: string; network: string } | null;
   commitSkipped?: CommitSkipReason;
   fixture?: { home: string; away: string; startISO: string; subject: "home" | "away" };
+  premium?: { priceMist: string };
 }
 
 export interface RecallLesson {

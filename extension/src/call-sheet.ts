@@ -3,6 +3,7 @@
 // and no money from the user.
 import { button, el, externalLink } from "./dom";
 import type { ApiError, ApiPath, ApiResponse, FixtureSignal, RecallCalled, RecallSavedPick, Tile } from "./messages";
+import { parsePremiumPrice, PREMIUM_PRICES, premiumLine } from "./premium-logic";
 import type { TailPrefill } from "./social-logic";
 import {
   calledFromPick,
@@ -59,6 +60,8 @@ export function openCallSheet(host: CallHost): Sheet {
   let bias: number | null = null;
   let busy = false;
   let disposed = false;
+  let premiumOn = false;
+  let premiumPrice = PREMIUM_PRICES[0];
 
   const form = el("div", "form");
   const outcome = el("div", "outcome");
@@ -109,6 +112,46 @@ export function openCallSheet(host: CallHost): Sheet {
   form.append(el("p", "question", claim.question), sides);
   form.append(sliderField, nudge);
 
+  const premiumField = el("div", "field premium-field");
+  premiumField.hidden = true;
+  const premiumToggle = el("input", "agent-check");
+  premiumToggle.type = "checkbox";
+  premiumToggle.setAttribute("aria-label", "Make it premium");
+  const premiumLabel = el("label", "agent-switch");
+  premiumLabel.append(premiumToggle, el("span", "", "Make it premium"));
+  const priceRow = el("div", "premium-prices");
+  const priceButtons = new Map<string, HTMLButtonElement>();
+  for (const price of PREMIUM_PRICES) {
+    const node = button(price, "button small premium-price", () => {
+      premiumPrice = price;
+      customPrice.value = "";
+      render();
+    });
+    priceButtons.set(price, node);
+    priceRow.append(node);
+  }
+  const customPrice = el("input", "input premium-custom");
+  customPrice.type = "text";
+  customPrice.inputMode = "decimal";
+  customPrice.placeholder = "Custom, up to 0.5";
+  customPrice.setAttribute("aria-label", "Custom price in SUI, up to 0.5");
+  customPrice.addEventListener("input", () => render());
+  priceRow.append(customPrice);
+  const premiumNote = el("p", "note", "Hidden until kickoff. You keep 90%.");
+  const premiumChoices = el("div", "premium-choices");
+  premiumChoices.append(priceRow, premiumNote);
+  premiumField.append(premiumLabel, premiumChoices);
+  premiumToggle.addEventListener("change", () => {
+    premiumOn = premiumToggle.checked;
+    render();
+  });
+  form.append(premiumField);
+
+  /** The price to send, or null when the custom box holds something unusable. */
+  function chosenPrice(): bigint | null {
+    return parsePremiumPrice(customPrice.value.trim() || premiumPrice);
+  }
+
   const status = el("p", "line status-line");
   status.setAttribute("aria-live", "polite");
   const lockButton = button("Lock my call", "button buy wide", () => void lock());
@@ -134,6 +177,11 @@ export function openCallSheet(host: CallHost): Sheet {
       sideNode.setAttribute("aria-checked", String(kind === side));
     }
     lockButton.dataset.side = side;
+    premiumChoices.hidden = !premiumOn;
+    for (const [price, priceNode] of priceButtons) priceNode.classList.toggle("selected", customPrice.value.trim() === "" && price === premiumPrice);
+    const badPrice = premiumOn && chosenPrice() === null;
+    premiumNote.textContent = badPrice ? "Prices run from 0.01 to 0.5 SUI." : "Hidden until kickoff. You keep 90%.";
+    if (!busy && !closed) lockButton.disabled = badPrice;
     value.textContent = `${side.toUpperCase()} ${percent}%`;
     if (host.shrink < 1) {
       const suggested = suggestedPercent(percent, host.shrink);
@@ -158,7 +206,9 @@ export function openCallSheet(host: CallHost): Sheet {
     } else {
       outcome.append(el("p", "question", "Saved to Walrus. The Sui proof didn't go through this time."));
     }
-    if (host.offerBack && pick.commit) {
+    if (pick.premium) outcome.append(el("p", "note", `${premiumLine(pick.premium.priceMist)}. Hidden until kickoff.`));
+    // A stake is public on Sui and names its side, which would give the call away.
+    if (host.offerBack && pick.commit && !pick.premium) {
       const called = calledFromPick(pick);
       outcome.append(button("Back it", "button primary wide", () => host.offerBack?.(called)));
     }
@@ -168,10 +218,12 @@ export function openCallSheet(host: CallHost): Sheet {
 
   async function lock(): Promise<void> {
     if (busy || closed) return;
+    const premiumMist = premiumOn ? chosenPrice() : undefined;
+    if (premiumMist === null) return;
     busy = true;
     lockButton.disabled = true;
     setStatus("Locking your call…");
-    const response = await host.api<RecallSavedPick>("/recall/pick", callBody(host.tile, side, percent, host.page, host.fixture, prefill ? { tailOf: prefill.tailOf, flip: side !== prefill.side } : undefined));
+    const response = await host.api<RecallSavedPick>("/recall/pick", callBody(host.tile, side, percent, host.page, host.fixture, prefill ? { tailOf: prefill.tailOf, flip: side !== prefill.side } : undefined, premiumMist));
     busy = false;
     if (response.ok && response.body) {
       const pick = response.body as RecallSavedPick;
@@ -194,6 +246,17 @@ export function openCallSheet(host: CallHost): Sheet {
   if (closed) {
     lockButton.disabled = true;
     status.textContent = "This match has started, so calls are closed.";
+  }
+  // Only a first-hand call on a match can be premium, and only by someone who qualifies.
+  if (!closed && !prefill && claim.fromFixture && host.fixture) {
+    void host
+      .api<{ eligible: boolean }>("/premium/eligible", {})
+      .then((response) => {
+        if (disposed || !response.ok || !(response.body as { eligible?: boolean } | null)?.eligible) return;
+        premiumField.hidden = false;
+        render();
+      })
+      .catch(() => undefined);
   }
   if (host.shrink < 1) {
     void host

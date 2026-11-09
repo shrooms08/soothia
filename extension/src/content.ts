@@ -15,6 +15,9 @@ import {
   type SoundName,
 } from "./sfx";
 import {
+  AGENT_REQUEST,
+  PREMIUM_CALL,
+  type AgentAction,
   API_REQUEST,
   DETECT_REQUEST,
   HEALTH_REQUEST,
@@ -42,7 +45,7 @@ import {
   type RecallRecord,
 } from "./messages";
 import { readPage, type ReadInfo } from "./reader";
-import { badgeText, cachedFeedCount, FEED_CHECK_MS, pageFollowedCount, tailSheetFor, type FeedCheck, type FollowedCall, type TailSource } from "./social-logic";
+import { badgeText, cachedFeedCount, FEED_CHECK_MS, pageFollowedCount, tailSheetFor, type FeedCheck, type OpenFollowedCall, type TailSource } from "./social-logic";
 import type { TailPrefill } from "./social-logic";
 import { createSocialView, followedRow } from "./social-view";
 import { calledRow, createRecordView } from "./record-view";
@@ -62,6 +65,9 @@ import { guarded, installGuards, isContextDead, safe } from "./guard";
 import { createStakeRow, type StakeRow } from "./stake-row";
 import { stakeTileIds } from "./stake-logic";
 import { createWalletAccess } from "./wallet-access";
+import type { AgentRun } from "./agent";
+import { runUnlock, type AgentSettings, type PremiumCallResponse, type UnlockResult } from "./premium-logic";
+import type { WalletSummary } from "./wallet-protocol";
 import { checkInBackground, createWalletBridge } from "./wallet-client";
 import { chromeWalletStorage, createWalletSettings } from "./wallet-settings";
 import { CARD_GAP, CARD_WIDTH, EDGE_PADDING, HOST_STYLES, ORB_MARGIN, ORB_SIZE, STYLES } from "./styles";
@@ -262,13 +268,14 @@ async function mount(): Promise<void> {
   recordPane.hidden = true;
   const socialPane = el("div", "body");
   socialPane.hidden = true;
-  const socialView = createSocialView(socialPane, { api, layout, state: stateBlock, onTail: (handle, source) => openSocialTail(handle, source) });
+  const socialView = createSocialView(socialPane, { api, layout, state: stateBlock, onTail: (handle, source) => openSocialTail(handle, source), unlock: unlockCall, runAgent });
   const recordView = createRecordView(recordPane, {
     api,
     layout,
     get wallet() {
       return walletAccess;
     },
+    agent: agentRequest,
     linkRecord: () => recallFieldNode(),
     loadSection: async () => (await chrome.storage.local.get(RECORD_SECTION_KEY))[RECORD_SECTION_KEY],
     saveSection: (section) => {
@@ -629,7 +636,7 @@ async function mount(): Promise<void> {
         // Both questions on a match share one crowd, so the line appears once.
         if (!followedShown && insight?.followedCalls?.length) {
           followedShown = true;
-          followed = followedRow(insight.followedCalls, insight.consensus ?? null, insight.called ? null : (call: FollowedCall) => openPageTail(call), layout);
+          followed = followedRow(insight.followedCalls, insight.consensus ?? null, insight.called ? null : (call: OpenFollowedCall) => openPageTail(call), layout, unlockCall);
         }
         return tileNode(tile, insight, () => openCall(tile), { api, layout }, row, followed);
       }),
@@ -651,7 +658,31 @@ async function mount(): Promise<void> {
     layout();
   }
 
-  function openPageTail(call: FollowedCall): void {
+  /** Pays for a premium call from the connected wallet, connecting one if needed. */
+  async function unlockCall(pickId: string, priceMist: string, choose: (wallets: WalletSummary[]) => Promise<WalletSummary | null>): Promise<UnlockResult> {
+    const wallet = (await walletAccess.current()) ?? (await walletAccess.connect(choose));
+    if (!wallet) return { ok: false, code: "wallet", walletMessage: "No wallet was connected.", maybePaid: false };
+    return runUnlock({
+      expectedPriceMist: priceMist,
+      fetchCall: (payment) => chrome.runtime.sendMessage({ type: PREMIUM_CALL, pickId, payment }) as Promise<PremiumCallResponse>,
+      build: async () => {
+        const built = await api<{ transaction: string }>("/premium/build", { pickId, sender: wallet.address });
+        if (!built.ok || !built.body) throw new Error((built.body as ApiError | null)?.error ?? "unavailable");
+        return (built.body as { transaction: string }).transaction;
+      },
+      sign: (txBytes, expected) => walletAccess.signOnly(wallet, txBytes, expected),
+    });
+  }
+
+  function agentRequest<T>(action: AgentAction, settings?: AgentSettings): Promise<T | null> {
+    return (chrome.runtime.sendMessage({ type: AGENT_REQUEST, action, settings }) as Promise<T | null>).catch(() => null);
+  }
+
+  async function runAgent(): Promise<number> {
+    return (await agentRequest<AgentRun>("run"))?.unlocked.length ?? 0;
+  }
+
+  function openPageTail(call: OpenFollowedCall): void {
     const { tile, prefill } = tailSheetFor(call.handle, call);
     openCall(tile, { prefill, offerBack: (called) => openBack(called) });
   }

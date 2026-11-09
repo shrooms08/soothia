@@ -7,6 +7,7 @@ import {
   getWallets,
   isWalletWithRequiredFeatureSet,
   signAndExecuteTransaction,
+  signTransaction,
   StandardConnect,
   StandardDisconnect,
   SUI_MAINNET_CHAIN,
@@ -14,6 +15,7 @@ import {
   type StandardDisconnectFeature,
   type SuiSignAndExecuteTransactionFeature,
   type SuiSignPersonalMessageFeature,
+  type SuiSignTransactionFeature,
   type Wallet,
   type WalletAccount,
   type WalletWithFeatures,
@@ -22,7 +24,7 @@ import type { WalletSummary } from "./wallet-protocol";
 
 const SIGN_FEATURE = "sui:signAndExecuteTransaction";
 
-type SuiWallet = WalletWithFeatures<StandardConnectFeature & SuiSignAndExecuteTransactionFeature & Partial<StandardDisconnectFeature> & Partial<SuiSignPersonalMessageFeature>>;
+type SuiWallet = WalletWithFeatures<StandardConnectFeature & SuiSignAndExecuteTransactionFeature & Partial<StandardDisconnectFeature> & Partial<SuiSignPersonalMessageFeature> & Partial<SuiSignTransactionFeature>>;
 
 const walletId = (wallet: Wallet): string => wallet.id ?? wallet.name;
 
@@ -80,6 +82,19 @@ export async function signPersonalMessage(id: string, address: string, message: 
   const account = await accountFor(wallet, address);
   const { signature } = await feature.signPersonalMessage({ message: new TextEncoder().encode(message), account, chain: SUI_MAINNET_CHAIN });
   return { signature };
+}
+
+/** Asks the wallet to sign these bytes without sending them. The Worker broadcasts the result. */
+export async function signOnly(id: string, address: string, txBytes: string): Promise<{ bytes: string; signature: string }> {
+  const wallet = findWallet(id);
+  const account = await accountFor(wallet, address);
+  const transaction = Transaction.from(txBytes);
+  const { bytes, signature } = await signTransaction(wallet, {
+    transaction: { toJSON: () => transaction.toJSON() },
+    account,
+    chain: SUI_MAINNET_CHAIN,
+  });
+  return { bytes, signature };
 }
 
 /** Asks the wallet to sign and send these exact bytes from `address`. */

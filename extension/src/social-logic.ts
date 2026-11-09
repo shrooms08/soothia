@@ -25,22 +25,49 @@ export interface FeedItem extends TailSource {
   stakeMist?: string;
   at: string;
   tailOf?: string;
+  premium?: { priceMist: string };
+  proof?: { digest: string; url: string };
+}
+
+/** A premium call before kickoff: the match, the price and the proof, and no side. */
+export interface LockedFeedItem {
+  pickId: string;
+  fixture: Omit<FeedFixture, "subject">;
+  at: string;
+  premium: { priceMist: string };
+  proof?: { digest: string; url: string };
+  locked: true;
 }
 
 export interface FeedEntry {
   handle: string;
   score: number | null;
-  item: FeedItem;
+  item: FeedItem | LockedFeedItem;
   myCall: { side: string; confidence: number; pickId: string } | null;
 }
 
-export interface FollowedCall extends TailSource {
+export interface OpenFollowedCall extends TailSource {
   handle: string;
   lean: string;
   stakeMist: string | null;
   pickId: string;
   at: string;
+  premium?: { priceMist: string };
 }
+
+export interface LockedFollowedCall {
+  handle: string;
+  pickId: string;
+  fixture: Omit<FeedFixture, "subject">;
+  at: string;
+  premium: { priceMist: string };
+  proof?: { digest: string; url: string };
+  locked: true;
+}
+
+export type FollowedCall = OpenFollowedCall | LockedFollowedCall;
+
+export const isLockedCall = (call: FollowedCall): call is LockedFollowedCall => (call as LockedFollowedCall).locked === true;
 
 export interface ConsensusView {
   lean: string;

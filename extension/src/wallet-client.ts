@@ -14,7 +14,7 @@ export interface WalletBridge {
   call(method: WalletMethod, params?: Record<string, unknown>): Promise<unknown>;
 }
 
-const timeoutFor = (method: WalletMethod): number => (method === "connect" || method === "signAndExecute" || method === "signPersonalMessage" ? APPROVAL_TIMEOUT_MS : LIST_TIMEOUT_MS);
+const timeoutFor = (method: WalletMethod): number => (method === "connect" || method === "signAndExecute" || method === "signPersonalMessage" || method === "signTransaction" ? APPROVAL_TIMEOUT_MS : LIST_TIMEOUT_MS);
 
 export function createWalletBridge(scriptUrl: () => string, win: Window = window, doc: Document = document): WalletBridge {
   const nonce = crypto.randomUUID();
@@ -90,6 +90,16 @@ export type TxChecker = (txBytes: string, expected: ExpectedTx) => Promise<TxVer
 
 /** Asks the background service worker, where the page cannot reach the check. */
 export const checkInBackground: TxChecker = (txBytes, expected) => chrome.runtime.sendMessage({ type: CHECK_TX, txBytes, expected });
+
+/** Signs without executing. What comes back is checked too, as that is what gets broadcast. */
+export async function signOnlyChecked(bridge: WalletBridge, check: TxChecker, wallet: ConnectedWallet, txBytes: string, expected: ExpectedTx): Promise<{ bytes: string; signature: string }> {
+  const verdict = await check(txBytes, expected);
+  if (!verdict?.ok) throw new Error(verdict?.reason ?? "The transaction could not be checked.");
+  const signed = (await bridge.call("signTransaction", { walletId: wallet.walletId, address: wallet.address, txBytes })) as { bytes: string; signature: string };
+  const after = await check(signed.bytes, expected);
+  if (!after?.ok) throw new Error(after?.reason ?? "The signed transaction could not be checked.");
+  return signed;
+}
 
 /**
  * The only way a transaction reaches a wallet from the extension: the bytes are

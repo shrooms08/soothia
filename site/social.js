@@ -152,7 +152,7 @@
 
   // ---- Profile ----
 
-  function statsGrid(stats) {
+  function statsGrid(stats, earningsMist) {
     const grid = h("div", "social-stats");
     grid.append(
       statCell("Call Score", String(stats.score)),
@@ -168,6 +168,7 @@
       statCell("ROI", roi(stats.roiPercent)),
       statCell("won / lost stakes", `${stats.wonStakes} / ${stats.lostStakes}`),
     );
+    if (earningsMist !== undefined) grid.append(statCell("Premium earnings", sui(earningsMist)));
     return grid;
   }
 
@@ -196,7 +197,26 @@
     return `Staked ${amount}`;
   }
 
+  function proofLink(call) {
+    const link = h("a", "social-proof", "Proof on Sui");
+    link.href = call.proof.url;
+    link.target = "_blank";
+    link.rel = "noopener";
+    return link;
+  }
+
+  /** A premium call before kickoff: the API sends no side, so there is none to show. */
+  function lockedCallRow(call) {
+    const item = h("li", "social-call");
+    const head = h("div", "social-call-head");
+    head.append(h("span", "social-call-match", `${call.match.home} vs ${call.match.away}`), h("span", "social-chip open", "locked"));
+    item.append(head, h("p", "social-meta", `Premium · ${sui(call.premium.priceMist)}. Unlock in Soothia, or see it at kickoff.`));
+    if (call.proof) item.append(proofLink(call));
+    return item;
+  }
+
   function callRow(call) {
+    if (call.locked) return lockedCallRow(call);
     const item = h("li", "social-call");
     const head = h("div", "social-call-head");
     head.append(h("span", "social-call-match", `${call.match.home} vs ${call.match.away}`), h("span", `social-chip ${call.status}`, call.status));
@@ -208,13 +228,7 @@
     }
     const stake = stakeText(call.stake);
     if (stake) item.append(h("p", "social-meta", stake));
-    if (call.proof) {
-      const link = h("a", "social-proof", "Proof on Sui");
-      link.href = call.proof.url;
-      link.target = "_blank";
-      link.rel = "noopener";
-      item.append(link);
-    }
+    if (call.proof) item.append(proofLink(call));
     return item;
   }
 
@@ -258,7 +272,7 @@
         renderPeriod();
       });
       const stats = body.periods[period];
-      gridSlot.replaceChildren(statsGrid(stats));
+      gridSlot.replaceChildren(statsGrid(stats, period === "all" ? body.premiumEarningsMist : undefined));
       bestSlot.textContent = stats.bestMultiplier ? `Best multiplier ${times(stats.bestMultiplier.value)} on ${stats.bestMultiplier.match}` : "";
     };
     renderPeriod();

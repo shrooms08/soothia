@@ -59,6 +59,7 @@ async function open(options: Options = {}) {
   let backs = 0;
   const access: WalletAccess = {
     signMessage: async () => ({ signature: "S" }),
+    signOnly: async () => ({ bytes: "B", signature: "S" }),
     current: async () => current,
     connect: async (choose) => {
       connects += 1;

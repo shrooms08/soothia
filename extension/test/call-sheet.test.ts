@@ -73,10 +73,10 @@ test("locking sends the chosen side as pYes, with the match", async () => {
   setSlider(q<HTMLInputElement>(".call-slider"), 75);
   assert.equal(q(".call-value").textContent, "NO 75%");
   await lock();
-  assert.equal(sent[0].path, "/recall/pick");
-  assert.equal(sent[0].body.pYes, 0.25);
-  assert.equal(sent[0].body.fixture?.subject, "home");
-  assert.equal(sent[0].body.source.site, "espn.com");
+  const pick = sent.find(({ path }) => path === "/recall/pick")!;
+  assert.equal(pick.body.pYes, 0.25);
+  assert.equal(pick.body.fixture?.subject, "home");
+  assert.equal(pick.body.source.site, "espn.com");
 });
 
 test("a committed call shows the Sui link", async () => {

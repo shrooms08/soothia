@@ -47,6 +47,7 @@ async function panel(options: Options = {}) {
       return current;
     },
     sign: async () => ({ digest: "D" }),
+    signOnly: async () => ({ bytes: "B", signature: "S" }),
     signMessage: async (_wallet, message) => {
       signed.push(message);
       return options.sign ? options.sign() : { signature: "SIG" };

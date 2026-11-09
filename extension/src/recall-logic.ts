@@ -74,6 +74,7 @@ export function callBody(
   page: { site: string; url: string },
   fixture: FixtureSignal | null,
   tail?: { tailOf: string; flip: boolean },
+  premiumMist?: bigint,
 ): RecallPickBody {
   return {
     question: claim.question,
@@ -93,6 +94,7 @@ export function callBody(
         }
       : {}),
     ...(tail ? { tailOf: tail.tailOf, ...(tail.flip ? { tailFlip: true } : {}) } : {}),
+    ...(premiumMist !== undefined ? { premium: { priceMist: premiumMist.toString() } } : {}),
   };
 }
 
@@ -181,6 +183,12 @@ export function callErrorMessage(status: number, body: ApiError | null): { text:
       return { text: "This doesn't match the call you're tailing.", retry: false };
     case "cannot_tail_self":
       return { text: "That's your own call.", retry: false };
+    case "tail_locked":
+      return { text: "That call is locked until kickoff. Unlock it first.", retry: false };
+    case "premium_not_eligible":
+      return { text: "Premium calls need a public profile, a Call Score of 550 and 10 settled calls.", retry: false };
+    case "premium_needs_match":
+      return { text: "Only a call on a match can be premium.", retry: false };
     case "fixture_not_open":
     case "too_close_to_kickoff":
       return { text: "This match has started or is about to, so calls are closed.", retry: false };

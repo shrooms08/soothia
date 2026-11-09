@@ -22,6 +22,7 @@ import {
   type RecordSection,
 } from "./record-logic";
 import { formatSui, isClaimable, signedSui, stakeErrorText, walletErrorText, walletSummary, type StakeErrorBody, type StakePositionView } from "./stake-logic";
+import { createAgentSection, type AgentRequest } from "./agent-view";
 import type { WalletAccess } from "./wallet-access";
 import type { ConnectedWallet, WalletSummary } from "./wallet-protocol";
 
@@ -34,6 +35,8 @@ export interface RecordHost {
   unquiet(site: string): Promise<boolean>;
   /** Missing where the record is shown without a wallet. */
   wallet?: WalletAccess;
+  /** The agent wallet's controls. */
+  agent?: AgentRequest;
   /** The Link record field, for the Me section. */
   linkRecord?(): HTMLElement;
   loadSection?(): Promise<unknown>;
@@ -385,6 +388,7 @@ export function createRecordView(pane: HTMLElement, host: RecordHost): { render(
     const nodes: HTMLElement[] = [];
     if (claims.length > 0) nodes.push(section("Ready to claim", ...claims.map((position) => claimRow(position, wallet))));
     nodes.push(section(`Wallet ${shortId(wallet.address)}`, walletStats(positions)));
+    if (host.agent && host.wallet) nodes.push(createAgentSection({ agent: host.agent, api: host.api, wallet: host.wallet, connected: wallet, layout: host.layout }));
     if (positions.length === 0) {
       nodes.push(el("p", "note", "No stakes from this wallet yet."));
     } else {
