@@ -40,3 +40,49 @@ test("everything else comes from static assets, with the headers added", async (
   assert.deepEqual(seen, ["/"]);
   assert.ok(response.headers.get("X-Frame-Options"));
 });
+
+function assetsWith(html) {
+  const seen = [];
+  return {
+    seen,
+    env: {
+      ASSETS: {
+        fetch: async (request) => {
+          seen.push(new URL(request.url).pathname);
+          return new Response(html, { headers: { ETag: "template", "Content-Type": "text/html" } });
+        },
+      },
+    },
+  };
+}
+
+test("/u/<handle> serves the profile page with the handle written in", async () => {
+  const { env, seen } = assetsWith('<title>@__HANDLE__</title><body data-handle="__HANDLE__">');
+  const response = await site.fetch(new Request("https://soothia.fun/u/Arsenal_Fan"), env);
+  assert.equal(response.status, 200);
+  assert.equal(await response.text(), '<title>@arsenal_fan</title><body data-handle="arsenal_fan">');
+  assert.deepEqual(seen, ["/profile"]);
+  assert.equal(response.headers.get("ETag"), null);
+  assert.ok(response.headers.get("Content-Security-Policy"));
+});
+
+test("a malformed handle never reaches the page", async () => {
+  for (const path of ["/u/a", "/u/%3Cscript%3E", "/u/has%20space", "/u/" + "a".repeat(21), "/u/%E0%A4%A", "/u/ok_name/more"]) {
+    const { env, seen } = assetsWith("__HANDLE__");
+    await site.fetch(new Request(`https://soothia.fun${path}`), env);
+    assert.equal(seen.includes("/profile"), false, path);
+  }
+});
+
+test("the bare template redirects to the leaderboard", async () => {
+  const { env } = assetsWith("x");
+  const response = await site.fetch(new Request("https://soothia.fun/profile"), env);
+  assert.equal(response.status, 302);
+  assert.equal(response.headers.get("Location"), "https://soothia.fun/leaderboard");
+});
+
+test("/leaderboard is an ordinary page", async () => {
+  const { env, seen } = assetsWith("board");
+  assert.equal(await (await site.fetch(new Request("https://soothia.fun/leaderboard"), env)).text(), "board");
+  assert.deepEqual(seen, ["/leaderboard"]);
+});

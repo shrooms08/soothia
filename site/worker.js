@@ -34,12 +34,41 @@ export function withSecurityHeaders(response) {
   return out;
 }
 
+const HANDLE = /^[a-z0-9_]{3,20}$/;
+
+function handleFromPath(pathname) {
+  const raw = /^\/u\/([^/]+)\/?$/.exec(pathname)?.[1];
+  if (!raw) return null;
+  try {
+    const handle = decodeURIComponent(raw).toLowerCase();
+    return HANDLE.test(handle) ? handle : null;
+  } catch {
+    return null;
+  }
+}
+
+/** /u/<handle>: the one profile page, with the handle written in so link previews name it. */
+async function profilePage(handle, url, env) {
+  const asset = await env.ASSETS.fetch(new Request(new URL("/profile", url)));
+  if (!asset.ok) return asset;
+  const headers = new Headers(asset.headers);
+  // The asset's ETag describes the template, not this person's page.
+  headers.delete("ETag");
+  headers.set("Cache-Control", "public, max-age=300");
+  return new Response((await asset.text()).replaceAll("__HANDLE__", handle), { status: 200, headers });
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (url.hostname === "www.soothia.fun") {
       return withSecurityHeaders(Response.redirect(`${SITE}${url.pathname}${url.search}`, 301));
     }
+    if (url.pathname === "/profile" || url.pathname === "/profile.html") {
+      return withSecurityHeaders(Response.redirect(`${url.origin}/leaderboard`, 302));
+    }
+    const handle = handleFromPath(url.pathname);
+    if (handle) return withSecurityHeaders(await profilePage(handle, url, env));
     return withSecurityHeaders(await env.ASSETS.fetch(request));
   },
 };

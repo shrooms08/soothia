@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Leaderboard · Soothia</title>
+    <meta name="description" content="Who calls matches best? Calls proven on Sui before kickoff, scored after the final whistle." />
+    <meta name="theme-color" content="#000000" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/img/favicon-32.png" />
+    <link rel="apple-touch-icon" href="/img/icon-128.png" />
+    <link rel="canonical" href="https://soothia.fun/leaderboard" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://soothia.fun/leaderboard" />
+    <meta property="og:title" content="Soothia leaderboard" />
+    <meta property="og:description" content="Who calls matches best? Calls proven on Sui before kickoff, scored after the final whistle." />
+    <meta property="og:image" content="https://soothia.fun/img/og-image.png" />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Soothia leaderboard" />
+    <meta name="twitter:description" content="Who calls matches best? Calls proven on Sui before kickoff, scored after the final whistle." />
+    <meta name="twitter:image" content="https://soothia.fun/img/og-image.png" />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body data-page="leaderboard">
+    <header class="nav">
+      <a class="lockup" href="/" aria-label="Soothia home"><span class="wordmark">Soothia</span></a>
+      <nav class="nav-links" aria-label="Sections"><a href="/#install">Get Soothia</a></nav>
+    </header>
+    <main class="social">
+      <h1 class="social-title">Leaderboard</h1>
+      <p class="social-lede">Only calls proven on Sui before kickoff count.</p>
+      <div class="social-tabs" id="boards" role="tablist" aria-label="Boards"></div>
+      <div class="social-tabs social-periods" id="periods" role="tablist" aria-label="Period"></div>
+      <div class="social-filters">
+        <label>League <select id="league"><option value="">All leagues</option></select></label>
+        <label>Team <select id="team"><option value="">All teams</option></select></label>
+      </div>
+      <p class="social-status" id="status" role="status">Loading…</p>
+      <ol class="social-rows" id="rows"></ol>
+      <a class="btn primary social-get" href="/#install">Get Soothia</a>
+    </main>
+    <script src="/config.js"></script>
+    <script src="/social.js"></script>
+  </body>
+</html>
