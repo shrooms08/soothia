@@ -6,6 +6,14 @@ All notable changes to Soothia. The format follows [Keep a Changelog](https://ke
 
 Total Recall: calls proven on Sui and remembered on Walrus Memory, lessons from the record, SUI staking, public profiles and following, and premium calls paid over x402. Extension 0.16.0. Tagged `v1.0.0-total-recall`.
 
+### Changed
+
+- Extension 0.16.3: the card's settings show only "Scan this page again", one wallet line ("Wallet: Slush 0x8e0e…bb6a · Disconnect", or Connect), and a Developer link that holds debug info, Link record, the replays and the proxy status. "Can't reach Soothia right now." appears outside Developer only when offline.
+
+### Fixed
+
+- Link record in settings looked empty while a record was linked: the field was filled only if it was already on the page, and the settings copy isn't yet when the saved id loads. A linked record now shows as "Linked · 208c…fb9f" with Change and Clear, never the full id.
+
 ### Security
 
 - Audit of 10 Nov 2026 in `docs/security-audit.md`: 0 Critical, 5 High, 11 Medium, 9 Low, 14 Info.

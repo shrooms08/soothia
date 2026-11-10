@@ -131,7 +131,11 @@ function settings(wallets: { id: string; name: string }[], saved: unknown = unde
   const buttons = () => [...view.root.querySelectorAll("button")].filter((node) => !node.hidden);
   const named = (name: string) => buttons().find((node) => node.textContent === name);
   const note = () => view.root.querySelector(".wallet-note")?.textContent ?? "";
-  return { view, store, calls, buttons, named, note };
+  const line = () => {
+    const node = view.root.querySelector<HTMLElement>(".wallet-line");
+    return node && !node.hidden ? (node.textContent ?? "") : "";
+  };
+  return { view, store, calls, buttons, named, note, line };
 }
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -144,7 +148,7 @@ test("one wallet connects straight away and is saved", async () => {
   s.named("Connect Sui wallet")!.click();
   await tick();
   assert.deepEqual(s.store.value, { address: ADDRESS, walletId: "slush", walletName: "Slush", site: "" });
-  assert.equal(s.note(), `Connected to Slush: ${shortAddress(ADDRESS)}`);
+  assert.equal(s.line(), `Wallet: Slush ${shortAddress(ADDRESS)} · Disconnect`);
   assert.ok(s.named("Disconnect"));
   assert.equal(s.named("Connect Sui wallet"), undefined);
 });
@@ -182,7 +186,7 @@ test("a rejected connection saves nothing and shows why", async () => {
 test("a saved wallet shows on load and can be disconnected", async () => {
   const s = settings([SLUSH], { address: ADDRESS, walletId: "slush", walletName: "Slush" });
   await s.view.load();
-  assert.match(s.note(), /^Connected to Slush/);
+  assert.match(s.line(), /^Wallet: Slush /);
   s.named("Disconnect")!.click();
   await tick();
   assert.equal(s.store.value, undefined);

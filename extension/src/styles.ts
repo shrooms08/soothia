@@ -796,6 +796,15 @@ input[type="number"].input { font-family: var(--sth-font-mono); }
 .toggle { display: flex; align-items: center; gap: 8px; padding: 3px 0; color: var(--sth-text-2); cursor: pointer; }
 .toggle-box { margin: 0; accent-color: var(--sth-orb-edge); }
 .recall-field { margin: 8px 0; }
+.recall-status { flex: 1 1 auto; min-width: 0; color: var(--sth-text-2); font: 400 12px/1.4 var(--sth-font-mono); }
+.wallet-line { margin: 4px 0 6px; color: var(--sth-text-2); font: 400 12px/1.6 var(--sth-font-mono); overflow-wrap: anywhere; }
+.wallet-line .link { min-height: 0; padding: 0; font: inherit; }
+.settings-offline { margin: 4px 0 8px; }
+.developer { margin-top: 6px; }
+.developer-summary { display: inline-flex; align-items: center; gap: 6px; list-style: none; cursor: pointer; color: var(--sth-text-3); font-size: 11px; user-select: none; -webkit-user-select: none; }
+.developer-summary::-webkit-details-marker { display: none; }
+.developer-summary:hover { color: var(--sth-text-2); }
+.developer-body { padding: 6px 0 0 10px; border-left: 1px solid rgba(175,169,236,.14); margin-top: 4px; }
 .stake-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 8px; }
 .stake-line { margin: 0; font-size: 12px; color: var(--sth-text-2); }
 .stake-row .button.small { flex: none; margin: 0; }

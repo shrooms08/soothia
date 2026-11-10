@@ -73,6 +73,8 @@ import { describeFixture, findFixture } from "./fixture";
 import { guarded, installGuards, isContextDead, safe } from "./guard";
 import { createStakeRow, type StakeRow } from "./stake-row";
 import { stakeTileIds } from "./stake-logic";
+import { createRecallField } from "./recall-field";
+import { createSettingsSection } from "./settings-view";
 import { createWalletAccess } from "./wallet-access";
 import { isWalletSite, untrustedSiteBridge } from "./wallet-site";
 import type { AgentRun } from "./agent";
@@ -333,9 +335,8 @@ async function mount(): Promise<void> {
     }
     layout();
   }
-  const debug = el("details", "debug");
   const scanInfo = el("dl", "scan");
-  const scanAgain = el("button", "button small", "Scan again");
+  const scanAgain = el("button", "button small", "Scan this page again");
   scanAgain.type = "button";
 
   function toggle(label: string): { row: HTMLElement; box: HTMLInputElement } {
@@ -358,53 +359,31 @@ async function mount(): Promise<void> {
 
   const showDebugToggle = toggle("Show debug info");
 
-  // Link record: view and add to a record made elsewhere, such as with the CLI.
-  // The same field appears in settings and in My record's Me section.
+  // Link record. The settings copy lives as long as the card; My record makes a new one each time.
   let linkedRecallId = "";
-  const linkedInputs = new Set<HTMLInputElement>();
-  function recallFieldNode(): HTMLElement {
-    const input = el("input", "input recall-input");
-    input.type = "text";
-    input.placeholder = "Recall ID";
-    input.spellcheck = false;
-    input.autocomplete = "off";
-    input.value = linkedRecallId;
-    linkedInputs.add(input);
-    const note = el("p", "note");
-    async function save(value: string): Promise<void> {
-      if (value && !isRecallId(value)) {
-        note.textContent = "That isn't a valid Recall ID.";
-        layout();
-        return;
-      }
-      try {
-        if (value) await chrome.storage.local.set({ [RECALL_ID_KEY]: value });
-        else await chrome.storage.local.remove(RECALL_ID_KEY);
-      } catch {
-        note.textContent = "Couldn't save that. Reload this tab and try again.";
-        layout();
-        return;
-      }
-      setLinkedRecallId(value);
-      note.textContent = value ? "Record linked." : "Record unlinked.";
-      onRecallIdentityChanged();
-      layout();
+  const shownRecallFields = new Set<{ node: HTMLElement; refresh(): void }>();
+  async function saveRecallId(value: string): Promise<string> {
+    try {
+      if (value) await chrome.storage.local.set({ [RECALL_ID_KEY]: value });
+      else await chrome.storage.local.remove(RECALL_ID_KEY);
+    } catch {
+      throw new Error("Couldn't save that. Reload this tab and try again.");
     }
-    const row = el("div", "recall-row");
-    row.append(
-      input,
-      button("Save", "button small", () => void save(input.value.trim())),
-      button("Clear", "button small", () => void save("")),
-    );
-    const field = el("div", "field recall-field");
-    field.append(el("span", "field-label", "Link record"), row, note);
-    return field;
+    setLinkedRecallId(value);
+    onRecallIdentityChanged();
+    return value ? "Record linked." : "Record unlinked.";
+  }
+  function recallFieldNode(): HTMLElement {
+    const field = createRecallField({ linked: () => linkedRecallId, save: saveRecallId, layout });
+    shownRecallFields.add(field);
+    return field.node;
   }
   function setLinkedRecallId(value: string): void {
     linkedRecallId = value;
-    for (const input of linkedInputs) {
-      if (input.isConnected) input.value = value;
-      else linkedInputs.delete(input);
+    // The settings field is never dropped: it is built before the card is on the page.
+    for (const field of shownRecallFields) {
+      if (field.node.isConnected || field.node === recallField) field.refresh();
+      else shownRecallFields.delete(field);
     }
   }
   const recallField = recallFieldNode();
@@ -419,18 +398,14 @@ async function mount(): Promise<void> {
     if (!card.hidden) layout();
   });
 
-  const summary = el("summary", "debug-summary", "settings");
-  summary.append(el("span", "debug-version", extensionVersion()));
-  debug.append(
-    summary,
-    scanInfo,
+  const settings = createSettingsSection({
+    version: extensionVersion(),
     scanAgain,
-    showDebugToggle.row,
-    recallField,
-    walletSettings.root,
-    replayRow,
-    proxyRow.row,
-  );
+    wallet: walletSettings.root,
+    developer: [showDebugToggle.row, scanInfo, recallField, replayRow, proxyRow.row],
+  });
+  const debug = settings.root;
+  settings.developer.addEventListener("toggle", layout);
   function applyDebugVisibility(): void {
     const show = showDebugToggle.box.checked;
     scanInfo.hidden = !show;
@@ -578,6 +553,8 @@ async function mount(): Promise<void> {
       online = false;
     }
     proxyRow.set(online ? "Proxy: online" : "Proxy: offline", online ? "good" : "bad");
+    settings.setOnline(online);
+    if (!card.hidden) layout();
   }
 
   // ---- Claims ----

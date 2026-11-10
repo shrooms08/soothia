@@ -114,17 +114,22 @@ export function createWalletSettings(bridge: WalletBridge, storage: WalletStorag
   }
 
   const connectButton = button("Connect Sui wallet", "button small", () => void chooseWallet(connectAndSave));
-  const disconnectButton = button("Disconnect", "button small", () => void disconnect());
+  const disconnectButton = button("Disconnect", "link wallet-disconnect", () => void disconnect());
   const testButton = button("Test wallet", "button small", () => void chooseWallet(testWallet));
   testButton.hidden = true;
-  actions.append(connectButton, disconnectButton, testButton);
-  root.append(el("span", "field-label", "Sui wallet"), actions, picker, status);
+  // One line: "Wallet: Slush 0x8e0e…bb6a · Disconnect", or the Connect button.
+  const line = el("p", "wallet-line");
+  const lineText = el("span", "wallet-line-text");
+  line.append(lineText, el("span", "wallet-line-dot", " · "), disconnectButton);
+  actions.append(connectButton, testButton);
+  root.append(line, actions, picker, status);
 
   function render(): void {
     hidePicker();
     connectButton.hidden = connected !== null;
-    disconnectButton.hidden = connected === null;
-    show(connected ? `Connected to ${connected.walletName}: ${shortAddress(connected.address)}` : "");
+    line.hidden = connected === null;
+    lineText.textContent = connected ? `Wallet: ${connected.walletName} ${shortAddress(connected.address)}` : "";
+    show("");
   }
 
   return {
