@@ -13,7 +13,7 @@ Length: about 2:50. Two Chrome profiles: **Main** (your Slush wallet, @minos) an
 
 **A day or an hour before**
 
-1. Deploy is done and both profiles run Soothia 0.16.0 (`chrome://extensions`, press reload on Soothia in each profile).
+1. Deploy is done and both profiles run Soothia 0.16.1 (`chrome://extensions`, press reload on Soothia in each profile).
 2. Main's Slush wallet holds at least 0.2 SUI (0.1 to stake, plus gas).
 3. Demo's Phantom holds at least 0.1 SUI. It was sent 0.15 SUI on 9 Nov.
 4. In **Demo**, set up the agent: orb > **My record** > **Wallet** > **Agent** > **Create agent wallet** > enter `0.05` > **Fund from my wallet** > approve in Phantom > tick **Auto-unlock** > set **Daily budget** to `0.05` > **Save settings**.

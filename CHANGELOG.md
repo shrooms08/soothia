@@ -6,6 +6,10 @@ All notable changes to Soothia. The format follows [Keep a Changelog](https://ke
 
 Total Recall: calls proven on Sui and remembered on Walrus Memory, lessons from the record, SUI staking, public profiles and following, and premium calls paid over x402. Extension 0.16.0. Tagged `v1.0.0-total-recall`.
 
+### Fixed
+
+- Extension 0.16.1: the hidden attribute now always wins over a class's display rule inside the shadow root. "Make it premium" showed for callers who aren't eligible, and empty wallet pickers kept their space.
+
 ### Added
 
 - Docs for judges: a rewritten README, `docs/total-recall.md`, `docs/numbers.md` (written by `worker/scripts/numbers.ts` from Walrus, Sui through Tatum, and KV), a blog post, a demo script, an X thread and a submission checklist.

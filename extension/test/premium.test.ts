@@ -542,6 +542,12 @@ function sheet(eligible: boolean, overrides: Partial<CallHost> = {}) {
   return { opened, sent, q, toggle, lock };
 }
 
+test("hidden always wins over a class's display rule, so Make it premium stays hidden", async () => {
+  const { STYLES } = await import("../src/styles");
+  assert.match(STYLES, /\[hidden\] \{ display: none !important; \}/);
+  assert.match(STYLES, /\.premium-field \{ display: flex/);
+});
+
 test("Make it premium appears only for someone eligible", async () => {
   const no = sheet(false);
   await tick();

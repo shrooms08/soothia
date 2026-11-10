@@ -33,6 +33,9 @@ const CHEVRON =
   "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'%3E%3Cpath d='M2 4l3 3 3-3' stroke='%23A9A5BD' stroke-width='1.4' fill='none'/%3E%3C/svg%3E\")";
 
 export const STYLES = `
+/* A class's display rule must never beat the hidden attribute. */
+[hidden] { display: none !important; }
+
 :host {
   all: initial;
 
