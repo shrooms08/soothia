@@ -68,7 +68,11 @@ export const ResolvedBcs = bcs.struct("Resolved", {
   evidence: bcs.vector(bcs.u8()),
 });
 
-export const FeeCollectedBcs = bcs.struct("FeeCollected", { pool: bcs.Address, treasury: bcs.Address, amount: bcs.u64() });
+export const FeeCollectedBcs = bcs.struct("FeeCollected", {
+  pool: bcs.Address,
+  treasury: bcs.Address,
+  amount: bcs.u64(),
+});
 
 export const ClaimedBcs = bcs.struct("Claimed", { pool: bcs.Address, claimer: bcs.Address, amount: bcs.u64() });
 
@@ -174,7 +178,11 @@ export async function readConfig(client: SuiGrpcClient, configId: string): Promi
 }
 
 /** The position of `owner` in a pool, or null when they have not staked. */
-export async function readPosition(client: SuiGrpcClient, pool: Pick<StakePool, "positionsTableId">, owner: string): Promise<StakePosition | null> {
+export async function readPosition(
+  client: SuiGrpcClient,
+  pool: Pick<StakePool, "positionsTableId">,
+  owner: string,
+): Promise<StakePosition | null> {
   try {
     const { dynamicField } = await client.core.getDynamicField({
       parentId: pool.positionsTableId,

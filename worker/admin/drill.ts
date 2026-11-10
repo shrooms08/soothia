@@ -2,7 +2,16 @@
 // in sessionStorage so a reload does not lose the pool.
 
 import { api, digestLink, failureText, make, page, setStatus } from "./core";
-import { DRILL_MESSAGES, DRILL_STEPS, drillStepEnabled, emptyDrill, formatLeft, suiAmount, type DrillState, type DrillStep } from "./logic";
+import {
+  DRILL_MESSAGES,
+  DRILL_STEPS,
+  drillStepEnabled,
+  emptyDrill,
+  formatLeft,
+  suiAmount,
+  type DrillState,
+  type DrillStep,
+} from "./logic";
 
 const STATE_KEY = "soothia-admin-drill";
 const COUNTDOWN_MS = 1_000;
@@ -89,8 +98,14 @@ export function startDrill(root: HTMLElement): void {
     resolve: () => workerStep("/stake/admin/drill/resolve"),
     overturn: () => signBuilt("/stake/admin/overturn/build", needPool()),
     refund: async () => {
-      const refund = await api<{ digest: string; amountMist: string; fullRefund: boolean }>("/stake/admin/drill/refund", needPool());
-      return { digest: refund.digest, note: `${suiAmount(refund.amountMist)} back${refund.fullRefund ? ", the full stake." : ", which is NOT the full stake."}` };
+      const refund = await api<{ digest: string; amountMist: string; fullRefund: boolean }>(
+        "/stake/admin/drill/refund",
+        needPool(),
+      );
+      return {
+        digest: refund.digest,
+        note: `${suiAmount(refund.amountMist)} back${refund.fullRefund ? ", the full stake." : ", which is NOT the full stake."}`,
+      };
     },
     restore: () => signBuilt("/stake/admin/config/build", PRODUCTION_DELAYS),
   };
@@ -137,7 +152,10 @@ export function startDrill(root: HTMLElement): void {
   }
 
   section.append(make("h2", "4. Overturn drill"));
-  const hint = make("p", "Uses real SUI: 0.1 SUI staked and refunded, plus gas. New real pools are paused from Shorten delays until Restore delays.");
+  const hint = make(
+    "p",
+    "Uses real SUI: 0.1 SUI staked and refunded, plus gas. New real pools are paused from Shorten delays until Restore delays.",
+  );
   hint.className = "hint";
   section.append(hint, poolLine);
 
@@ -165,7 +183,12 @@ export function startDrill(root: HTMLElement): void {
   }
 
   reset.addEventListener("click", () => {
-    if (!window.confirm("Forget this drill's progress? Nothing on chain changes. If the delays are still shortened, press Restore delays.")) return;
+    if (
+      !window.confirm(
+        "Forget this drill's progress? Nothing on chain changes. If the delays are still shortened, press Restore delays.",
+      )
+    )
+      return;
     state = emptyDrill();
     save();
     for (const result of results.values()) setStatus(result, "");

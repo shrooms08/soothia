@@ -31,7 +31,9 @@ export async function execute(context: StakeContext, tx: Transaction, gasBudget 
     include: { effects: true, objectTypes: true, events: true },
   });
   if (result.$kind === "FailedTransaction") {
-    throw new Error(`transaction ${result.FailedTransaction.digest} failed: ${JSON.stringify(result.FailedTransaction.status.error).slice(0, 400)}`);
+    throw new Error(
+      `transaction ${result.FailedTransaction.digest} failed: ${JSON.stringify(result.FailedTransaction.status.error).slice(0, 400)}`,
+    );
   }
   await context.client.core.waitForTransaction({ result, timeout: SETTLE_MS }).catch(() => undefined);
   return result.Transaction;

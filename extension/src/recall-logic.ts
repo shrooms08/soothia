@@ -129,7 +129,8 @@ export function recordHeadline(summary: RecallRecord["summary"]): string {
   const parts = [`${summary.picks} ${summary.picks === 1 ? "call" : "calls"}`, `${summary.hits} right`];
   if (summary.resolved > 0) parts.push(`${Math.round((summary.hits / summary.resolved) * 100)}% hit rate`);
   if (summary.brier !== null) {
-    const market = summary.vsMarketCalls > 0 && summary.marketBrier !== null ? ` vs market ${summary.marketBrier.toFixed(3)}` : "";
+    const market =
+      summary.vsMarketCalls > 0 && summary.marketBrier !== null ? ` vs market ${summary.marketBrier.toFixed(3)}` : "";
     parts.push(`Brier ${summary.brier.toFixed(3)}${market}`);
   }
   return parts.join(" · ");
@@ -239,7 +240,11 @@ export function shortId(id: string): string {
 export type QuietPending = Record<string, { quiet: boolean; at: number }>;
 
 /** The server's quiet list with recent local changes applied. Expired changes are dropped. */
-export function mergeQuietSites(server: string[], pending: QuietPending, now: number): { sites: string[]; pending: QuietPending } {
+export function mergeQuietSites(
+  server: string[],
+  pending: QuietPending,
+  now: number,
+): { sites: string[]; pending: QuietPending } {
   const live = Object.fromEntries(Object.entries(pending).filter(([, change]) => now - change.at < QUIET_PENDING_MS));
   const sites = new Set(server.map((site) => site.toLowerCase()));
   for (const [site, change] of Object.entries(live)) {

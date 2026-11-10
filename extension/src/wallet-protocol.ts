@@ -5,8 +5,17 @@
 export const WALLET_CHANNEL = "soothia:v1:wallet";
 export const BRIDGE_READY_ID = "ready";
 
-export type WalletMethod = "list" | "connect" | "disconnect" | "getAccounts" | "signAndExecute" | "signPersonalMessage" | "signTransaction";
-const METHODS: readonly string[] = ["list", "connect", "disconnect", "getAccounts", "signAndExecute", "signPersonalMessage", "signTransaction"];
+export type WalletMethod =
+  "list" | "connect" | "disconnect" | "getAccounts" | "signAndExecute" | "signPersonalMessage" | "signTransaction";
+const METHODS: readonly string[] = [
+  "list",
+  "connect",
+  "disconnect",
+  "getAccounts",
+  "signAndExecute",
+  "signPersonalMessage",
+  "signTransaction",
+];
 
 export interface WalletRequest {
   channel: typeof WALLET_CHANNEL;
@@ -48,11 +57,22 @@ interface WindowLike {
   location: { origin: string };
 }
 
-function envelope(event: MessageLike, win: WindowLike, nonce: string, direction: string): Record<string, unknown> | null {
+function envelope(
+  event: MessageLike,
+  win: WindowLike,
+  nonce: string,
+  direction: string,
+): Record<string, unknown> | null {
   if (event.source !== win || event.origin !== win.location.origin) return null;
   const data = event.data as Record<string, unknown> | null;
   if (typeof data !== "object" || data === null) return null;
-  if (data.channel !== WALLET_CHANNEL || data.direction !== direction || data.nonce !== nonce || typeof data.id !== "string") return null;
+  if (
+    data.channel !== WALLET_CHANNEL ||
+    data.direction !== direction ||
+    data.nonce !== nonce ||
+    typeof data.id !== "string"
+  )
+    return null;
   return data;
 }
 

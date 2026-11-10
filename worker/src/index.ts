@@ -46,7 +46,8 @@ async function limited(
 }
 
 // connect-src stays open because a wallet's injected code may call its own servers from this page.
-const ADMIN_CSP = "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https: wss:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
+const ADMIN_CSP =
+  "default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https: wss:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'";
 const ADMIN_FILES: Record<string, string> = {
   "/admin": "/admin/index.html",
   "/admin/admin.js": "/admin/admin.js",
@@ -84,7 +85,10 @@ async function route(request: Request, env: Env): Promise<Response> {
 
   if (path.startsWith("/social/")) {
     const writes = request.method === "POST";
-    return (await limited(request, writes ? "social-write" : "social", writes ? LIMITS.socialWrite : LIMITS.social)) ?? socialRoute(request, env, path);
+    return (
+      (await limited(request, writes ? "social-write" : "social", writes ? LIMITS.socialWrite : LIMITS.social)) ??
+      socialRoute(request, env, path)
+    );
   }
 
   if (path.startsWith("/premium/")) {

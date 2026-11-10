@@ -24,7 +24,11 @@ const OTHER_POOL = `0x${"bc".repeat(32)}`;
 const HASH = "cd".repeat(32);
 const DIGEST = "8teWqYrBWopnhq2Wy22BQq1uvzepDoUzDzdRA6oE8iY";
 const ADMIN = "x".repeat(32);
-const SETTINGS: StakeSettings = { packageId: `0x${"01".repeat(32)}`, configId: `0x${"02".repeat(32)}`, resolverCap: `0x${"03".repeat(32)}` };
+const SETTINGS: StakeSettings = {
+  packageId: `0x${"01".repeat(32)}`,
+  configId: `0x${"02".repeat(32)}`,
+  resolverCap: `0x${"03".repeat(32)}`,
+};
 
 const CONFIG: StakeConfig = {
   id: SETTINGS.configId,
@@ -94,7 +98,9 @@ function fakeKv(fail: { get?: boolean; put?: boolean } = {}) {
       data.delete(key);
     },
     list: async ({ prefix }: { prefix: string }) => ({
-      keys: [...data.entries()].filter(([name]) => name.startsWith(prefix)).map(([name, entry]) => ({ name, metadata: entry.metadata })),
+      keys: [...data.entries()]
+        .filter(([name]) => name.startsWith(prefix))
+        .map(([name, entry]) => ({ name, metadata: entry.metadata })),
       list_complete: true,
     }),
   };
@@ -116,10 +122,12 @@ function espnEvent(overrides: Partial<ScoreboardEvent> = {}): ScoreboardEvent {
   };
 }
 
-const boardWith = (...events: ScoreboardEvent[]): ScoreboardFetcher => async (league): Promise<ParsedScoreboard> => ({
-  competition: "",
-  events: league === "eng.1" ? events : [],
-});
+const boardWith =
+  (...events: ScoreboardEvent[]): ScoreboardFetcher =>
+  async (league): Promise<ParsedScoreboard> => ({
+    competition: "",
+    events: league === "eng.1" ? events : [],
+  });
 
 interface Harness {
   deps: StakeDeps;
@@ -197,8 +205,18 @@ function harness(options: Options = {}): Harness {
   };
 }
 
-function call(h: Harness, method: string, path: string, body?: unknown, headers: Record<string, string> = { "X-Soothia-Install": INSTALL }): Promise<Response> {
-  const request = new Request(`https://api.soothia.fun${path}`, { method, headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+function call(
+  h: Harness,
+  method: string,
+  path: string,
+  body?: unknown,
+  headers: Record<string, string> = { "X-Soothia-Install": INSTALL },
+): Promise<Response> {
+  const request = new Request(`https://api.soothia.fun${path}`, {
+    method,
+    headers,
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
   return stakeRoute(request, h.env, path.split("?")[0], h.deps);
 }
 
@@ -233,7 +251,9 @@ test("a pool that does not exist yet reports the kickoff and the limits", async 
 });
 
 test("an open pool reports live totals and multipliers after the fee", async () => {
-  const { body } = await result(call(harness({ poolId: POOL }), "POST", "/stake/pool", { fixture: FIXTURE, subject: "away" }));
+  const { body } = await result(
+    call(harness({ poolId: POOL }), "POST", "/stake/pool", { fixture: FIXTURE, subject: "away" }),
+  );
   assert.equal(body.exists, true);
   assert.equal(body.poolId, POOL);
   assert.equal(body.yesTotal, "4000000000");
@@ -244,8 +264,17 @@ test("an open pool reports live totals and multipliers after the fee", async () 
 });
 
 test("a resolved pool also says when claims open", async () => {
-  const pool = openPool({ status: "resolved", outcomeYes: true, yesTotal: 4n * SUI, noTotal: 2n * SUI, resolvedAtMs: 100n, feeAmount: 60_000_000n });
-  const { body } = await result(call(harness({ poolId: POOL, pool }), "POST", "/stake/pool", { fixture: FIXTURE, subject: "away" }));
+  const pool = openPool({
+    status: "resolved",
+    outcomeYes: true,
+    yesTotal: 4n * SUI,
+    noTotal: 2n * SUI,
+    resolvedAtMs: 100n,
+    feeAmount: 60_000_000n,
+  });
+  const { body } = await result(
+    call(harness({ poolId: POOL, pool }), "POST", "/stake/pool", { fixture: FIXTURE, subject: "away" }),
+  );
   assert.equal(body.claimOpensAtMs, 21_600_100);
 });
 
@@ -262,17 +291,33 @@ test("a reversed listing of the same question reads the same pool", async () => 
   const h = harness({ chain: { findPoolId: async (_config, hash) => (hashes.push(hash), null) } });
   await call(h, "POST", "/stake/pool", { fixture: FIXTURE, subject: "away" });
   clearMemoryCache();
-  await call(h, "POST", "/stake/pool", { fixture: { ...FIXTURE, home: "Arsenal", away: "Newcastle United" }, subject: "home" });
+  await call(h, "POST", "/stake/pool", {
+    fixture: { ...FIXTURE, home: "Arsenal", away: "Newcastle United" },
+    subject: "home",
+  });
   assert.equal(hashes.length, 2);
   assert.equal(hashes[0], hashes[1]);
 });
 
 test("the pool route checks its input and the install header", async () => {
   const h = harness();
-  assert.equal((await result(call(h, "POST", "/stake/pool", { fixture: FIXTURE, subject: "draw" }))).body.error, "invalid_subject");
-  assert.equal((await result(call(h, "POST", "/stake/pool", { fixture: { home: "A" }, subject: "home" }))).body.error, "invalid_fixture");
-  assert.equal((await result(call(h, "POST", "/stake/pool", { fixture: { ...FIXTURE, away: "Newcastle" }, subject: "home" }))).body.error, "invalid_fixture");
-  assert.equal((await result(call(h, "POST", "/stake/pool", { fixture: FIXTURE, subject: "home" }, {}))).body.error, "missing_install");
+  assert.equal(
+    (await result(call(h, "POST", "/stake/pool", { fixture: FIXTURE, subject: "draw" }))).body.error,
+    "invalid_subject",
+  );
+  assert.equal(
+    (await result(call(h, "POST", "/stake/pool", { fixture: { home: "A" }, subject: "home" }))).body.error,
+    "invalid_fixture",
+  );
+  assert.equal(
+    (await result(call(h, "POST", "/stake/pool", { fixture: { ...FIXTURE, away: "Newcastle" }, subject: "home" }))).body
+      .error,
+    "invalid_fixture",
+  );
+  assert.equal(
+    (await result(call(h, "POST", "/stake/pool", { fixture: FIXTURE, subject: "home" }, {}))).body.error,
+    "missing_install",
+  );
 });
 
 // ---- /stake/build ----
@@ -295,7 +340,9 @@ test("the first stake creates the pool and returns a transaction for the staker"
 });
 
 test("a page's later kickoff never reaches the chain: the pool closes at ESPN's", async () => {
-  const late = pick({ fixture: { home: "Newcastle United", away: "Arsenal", startISO: "2026-11-21T23:59:00.000Z", subject: "away" } });
+  const late = pick({
+    fixture: { home: "Newcastle United", away: "Arsenal", startISO: "2026-11-21T23:59:00.000Z", subject: "away" },
+  });
   const h = harness({ picks: [late] });
   assert.equal((await build(h)).status, 200);
   assert.equal(h.created[0].closeMs, BigInt(KICKOFF_MS));
@@ -329,7 +376,23 @@ const refusals: [string, Options, Record<string, unknown>, string][] = [
   ["unknown pick", { picks: [] }, {}, "pick_not_found"],
   ["no fixture", { picks: [pick({ fixture: undefined })] }, {}, "not_a_fixture_pick"],
   ["no commit", { picks: [pick({ commit: null })] }, {}, "pick_not_committed"],
-  ["kickoff too near", { picks: [pick({ fixture: { home: "Newcastle United", away: "Arsenal", startISO: new Date(NOW + 119_000).toISOString(), subject: "away" } })] }, {}, "too_close_to_kickoff"],
+  [
+    "kickoff too near",
+    {
+      picks: [
+        pick({
+          fixture: {
+            home: "Newcastle United",
+            away: "Arsenal",
+            startISO: new Date(NOW + 119_000).toISOString(),
+            subject: "away",
+          },
+        }),
+      ],
+    },
+    {},
+    "too_close_to_kickoff",
+  ],
   ["bad amount", {}, { amountMist: "1.5" }, "invalid_amount"],
   ["zero amount", {}, { amountMist: "0" }, "invalid_amount"],
   ["bad sender", {}, { sender: "0x12" }, "invalid_sender"],
@@ -339,9 +402,28 @@ const refusals: [string, Options, Record<string, unknown>, string][] = [
   ["not on ESPN", { fetcher: boardWith() }, {}, "fixture_not_on_espn"],
   ["already started", { fetcher: boardWith(espnEvent({ state: "in" })) }, {}, "fixture_not_open"],
   ["postponed", { fetcher: boardWith(espnEvent({ statusName: "STATUS_POSTPONED" })) }, {}, "fixture_not_open"],
-  ["ESPN says a different day", { fetcher: boardWith(espnEvent({ startISO: "2026-11-22T17:30:00.000Z" })) }, {}, "fixture_date_mismatch"],
-  ["ESPN says kickoff is near", { fetcher: boardWith(espnEvent({ startISO: new Date(NOW + 60_000).toISOString() })) }, {}, "too_close_to_kickoff"],
-  ["ESPN is down", { fetcher: async () => { throw new Error("down"); } }, {}, "espn_unavailable"],
+  [
+    "ESPN says a different day",
+    { fetcher: boardWith(espnEvent({ startISO: "2026-11-22T17:30:00.000Z" })) },
+    {},
+    "fixture_date_mismatch",
+  ],
+  [
+    "ESPN says kickoff is near",
+    { fetcher: boardWith(espnEvent({ startISO: new Date(NOW + 60_000).toISOString() })) },
+    {},
+    "too_close_to_kickoff",
+  ],
+  [
+    "ESPN is down",
+    {
+      fetcher: async () => {
+        throw new Error("down");
+      },
+    },
+    {},
+    "espn_unavailable",
+  ],
   ["resolver nearly out of gas", { resolverBalance: RESOLVER_MIN_BALANCE_MIST - 1n }, {}, "resolver_low_balance"],
   ["KV cannot be read", { kvFail: { get: true } }, {}, "kv_unavailable"],
   ["KV cannot be written", { kvFail: { put: true } }, {}, "kv_unavailable"],
@@ -373,7 +455,10 @@ test("build refuses against an existing pool", async () => {
 });
 
 test("adding to your own side within the limit is allowed", async () => {
-  assert.equal((await build(harness({ poolId: POOL, position: { side: true, amount: 4n * SUI, claimed: false } }))).status, 200);
+  assert.equal(
+    (await build(harness({ poolId: POOL, position: { side: true, amount: 4n * SUI, claimed: false } }))).status,
+    200,
+  );
 });
 
 test("the daily pool cap stops creation", async () => {
@@ -386,7 +471,9 @@ test("the daily pool cap stops creation", async () => {
 });
 
 test("while a drill has the delays shortened, no real pool can be created", async () => {
-  const h = harness({ chain: { readConfig: async () => ({ ...CONFIG, minResolveDelayMs: 0n, challengeMs: 900_000n }) } });
+  const h = harness({
+    chain: { readConfig: async () => ({ ...CONFIG, minResolveDelayMs: 0n, challengeMs: 900_000n }) },
+  });
   const { status, body } = await build(h);
   assert.equal(status, 503);
   assert.equal(body.error, "staking_paused");
@@ -395,7 +482,10 @@ test("while a drill has the delays shortened, no real pool can be created", asyn
 });
 
 test("while the delays are shortened, staking in an existing pool still works", async () => {
-  const h = harness({ poolId: POOL, chain: { readConfig: async () => ({ ...CONFIG, minResolveDelayMs: 0n, challengeMs: 900_000n }) } });
+  const h = harness({
+    poolId: POOL,
+    chain: { readConfig: async () => ({ ...CONFIG, minResolveDelayMs: 0n, challengeMs: 900_000n }) },
+  });
   assert.equal((await build(h)).status, 200);
 });
 
@@ -467,8 +557,10 @@ const staked = (overrides: Partial<StakedEvent> = {}): StakedEvent => ({
   ...overrides,
 });
 
-const confirm = (h: Harness, overrides: Record<string, unknown> = {}) => result(call(h, "POST", "/stake/confirm", { pickId: "p1", digest: DIGEST, ...overrides }));
-const confirmable = (events: StakedEvent[], extra: Options = {}): Harness => harness({ poolId: POOL, transaction: { succeeded: true, staked: events }, ...extra });
+const confirm = (h: Harness, overrides: Record<string, unknown> = {}) =>
+  result(call(h, "POST", "/stake/confirm", { pickId: "p1", digest: DIGEST, ...overrides }));
+const confirmable = (events: StakedEvent[], extra: Options = {}): Harness =>
+  harness({ poolId: POOL, transaction: { succeeded: true, staked: events }, ...extra });
 
 test("a matching event writes the stake and both indexes", async () => {
   const h = confirmable([staked()]);
@@ -528,7 +620,10 @@ test("a confirmation seen before does not link again", async () => {
 test("a different address links too", async () => {
   const h = confirmable([staked()]);
   await confirm(h);
-  (h.deps.chain as StakeChain).readStakeTransaction = async () => ({ succeeded: true, staked: [staked({ staker: OTHER_POOL, sender: OTHER_POOL })] });
+  (h.deps.chain as StakeChain).readStakeTransaction = async () => ({
+    succeeded: true,
+    staked: [staked({ staker: OTHER_POOL, sender: OTHER_POOL })],
+  });
   await confirm(h, { digest: DIGEST.replace("8", "9") });
   assert.equal(h.prefs.length, 2);
 });
@@ -545,7 +640,10 @@ test("a wallet link that fails does not fail the stake", async () => {
   assert.equal(status, 200);
   assert.equal(body.duplicate, false);
   assert.equal(h.written.length, 1);
-  assert.equal([...h.data.keys()].some((key) => key.startsWith("walletlink:")), false);
+  assert.equal(
+    [...h.data.keys()].some((key) => key.startsWith("walletlink:")),
+    false,
+  );
 });
 
 test("confirm rejects anything that does not match the pick", async () => {
@@ -566,7 +664,10 @@ test("confirm rejects anything that does not match the pick", async () => {
 });
 
 test("confirm reports a failed or unknown transaction, and bad input", async () => {
-  assert.equal((await confirm(harness({ poolId: POOL, transaction: { succeeded: false, staked: [staked()] } }))).body.error, "transaction_failed");
+  assert.equal(
+    (await confirm(harness({ poolId: POOL, transaction: { succeeded: false, staked: [staked()] } }))).body.error,
+    "transaction_failed",
+  );
   const unknown = await confirm(harness({ poolId: POOL, transaction: null }));
   assert.equal(unknown.status, 404);
   assert.equal(unknown.body.error, "transaction_not_found");
@@ -632,16 +733,28 @@ test("the balance comes back as MIST text, for a full address only", async () =>
   const { body } = await result(call(harness({ balance: 153_574_000n }), "GET", `/stake/balance?address=${SENDER}`));
   assert.deepEqual(body, { address: SENDER, balanceMist: "153574000" });
   assert.equal((await result(call(harness(), "GET", "/stake/balance?address=0x12"))).body.error, "invalid_address");
-  assert.equal((await result(call(harness(), "GET", `/stake/balance?address=${SENDER}`, undefined, {}))).body.error, "missing_install");
+  assert.equal(
+    (await result(call(harness(), "GET", `/stake/balance?address=${SENDER}`, undefined, {}))).body.error,
+    "missing_install",
+  );
 });
 
 // ---- /stake/claim/build ----
 
 const claim = (h: Harness) => result(call(h, "POST", "/stake/claim/build", { poolId: POOL, sender: SENDER }));
-const RESOLVED = { status: "resolved", outcomeYes: true, yesTotal: 4n * SUI, noTotal: 2n * SUI, feeAmount: 60_000_000n } as const;
+const RESOLVED = {
+  status: "resolved",
+  outcomeYes: true,
+  yesTotal: 4n * SUI,
+  noTotal: 2n * SUI,
+  feeAmount: 60_000_000n,
+} as const;
 
 test("a winner past the window gets a claim transaction", async () => {
-  const h = harness({ pool: openPool({ ...RESOLVED, resolvedAtMs: BigInt(NOW - 21_600_000) }), position: { side: true, amount: SUI, claimed: false } });
+  const h = harness({
+    pool: openPool({ ...RESOLVED, resolvedAtMs: BigInt(NOW - 21_600_000) }),
+    position: { side: true, amount: SUI, claimed: false },
+  });
   const { body } = await claim(h);
   assert.equal(body.txBytes, "BYTES");
   assert.deepEqual(body.summary, { poolId: POOL, status: "claimable", amountMist: "1485000000" });
@@ -659,7 +772,11 @@ test("claims are refused with the reason", async () => {
   const win = { side: true, amount: SUI, claimed: false };
   const window = await claim(harness({ pool: inWindow, position: win }));
   assert.equal(window.status, 409);
-  assert.deepEqual(window.body, { error: "not_claimable", status: "challenge_window", claimOpensAtMs: NOW - 1 + 21_600_000 });
+  assert.deepEqual(window.body, {
+    error: "not_claimable",
+    status: "challenge_window",
+    claimOpensAtMs: NOW - 1 + 21_600_000,
+  });
   assert.equal((await claim(harness({ pool: after, position: { ...win, side: false } }))).body.status, "lost");
   assert.equal((await claim(harness({ pool: after, position: { ...win, claimed: true } }))).body.status, "claimed");
   assert.equal((await claim(harness({ position: win }))).body.status, "open");
@@ -685,10 +802,21 @@ test("the admin list does not exist without the token", async () => {
 
 test("the admin list shows pools in their window with time left", async () => {
   const opens = NOW + 3_600_000;
-  const pool = openPool({ ...RESOLVED, resolvedAtMs: BigInt(opens - 21_600_000), evidence: "Newcastle United 1-2 Arsenal (ESPN, full time)" });
+  const pool = openPool({
+    ...RESOLVED,
+    resolvedAtMs: BigInt(opens - 21_600_000),
+    evidence: "Newcastle United 1-2 Arsenal (ESPN, full time)",
+  });
   const h = harness({ pool });
   h.data.set(`stakepool:${POOL}`, {
-    value: JSON.stringify({ poolId: POOL, home: "Newcastle United", away: "Arsenal", startISO: KICKOFF, subject: "away", questionHash: HASH }),
+    value: JSON.stringify({
+      poolId: POOL,
+      home: "Newcastle United",
+      away: "Arsenal",
+      startISO: KICKOFF,
+      subject: "away",
+      questionHash: HASH,
+    }),
     metadata: { phase: "resolved", dueMs: opens },
   });
   h.data.set(`stakepool:${OTHER_POOL}`, { value: "{}", metadata: { phase: "open", dueMs: NOW } });
@@ -714,7 +842,14 @@ test("the admin list shows pools in their window with time left", async () => {
 test("unknown stake paths are 404, and missing settings are a 503", async () => {
   assert.equal((await call(harness(), "GET", "/stake/nope")).status, 404);
   const h = harness();
-  const { status, body } = await result(stakeRoute(new Request("https://x/stake/pool", { method: "POST", headers: { "X-Soothia-Install": INSTALL }, body: "{}" }), h.env, "/stake/pool", {}));
+  const { status, body } = await result(
+    stakeRoute(
+      new Request("https://x/stake/pool", { method: "POST", headers: { "X-Soothia-Install": INSTALL }, body: "{}" }),
+      h.env,
+      "/stake/pool",
+      {},
+    ),
+  );
   assert.equal(status, 503);
   assert.equal(body.error, "stake_not_configured");
 });
@@ -722,7 +857,12 @@ test("unknown stake paths are 404, and missing settings are a 503", async () => 
 test("the Worker rate limits stake routes by IP", async () => {
   const { env } = harness();
   const ctx = { waitUntil: () => undefined } as unknown as ExecutionContext;
-  const hit = () => worker.fetch(new Request("https://x/stake/nope", { headers: { "CF-Connecting-IP": "9.9.9.9" } }) as never, env, ctx);
+  const hit = () =>
+    worker.fetch(
+      new Request("https://x/stake/nope", { headers: { "CF-Connecting-IP": "9.9.9.9" } }) as never,
+      env,
+      ctx,
+    );
   for (let i = 0; i < 30; i++) assert.equal((await hit()).status, 404);
   assert.equal((await hit()).status, 429);
 });

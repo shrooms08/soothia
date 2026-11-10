@@ -39,7 +39,9 @@ export function readDevVars(): Record<string, string> {
 export function setDevVar(name: string, value: string): void {
   const text = readFileSync(DEV_VARS, "utf8");
   const line = new RegExp(`^${name}=.*$`, "m");
-  const next = line.test(text) ? text.replace(line, `${name}=${value}`) : `${text.replace(/\n*$/, "\n")}${name}=${value}\n`;
+  const next = line.test(text)
+    ? text.replace(line, `${name}=${value}`)
+    : `${text.replace(/\n*$/, "\n")}${name}=${value}\n`;
   writeFileSync(DEV_VARS, next);
 }
 
@@ -112,7 +114,10 @@ export function appendLocalPick(pick: PickRecord): void {
 }
 
 /** Walrus and the local backup combined, with one record per pick. */
-export async function loadPicks(store: RecallStore, env: CliEnv): Promise<{ walrus: PickRecord[]; merged: PickRecord[]; walrusOk: boolean }> {
+export async function loadPicks(
+  store: RecallStore,
+  env: CliEnv,
+): Promise<{ walrus: PickRecord[]; merged: PickRecord[]; walrusOk: boolean }> {
   let walrus: PickRecord[] = [];
   let walrusOk = true;
   try {
@@ -130,7 +135,9 @@ export function fixtureKey(fixture: { home: string; away: string; startISO: stri
 }
 
 export function timeIn(date: Date, timeZone: string): string {
-  return new Intl.DateTimeFormat("en-GB", { timeZone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(date);
+  return new Intl.DateTimeFormat("en-GB", { timeZone, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(
+    date,
+  );
 }
 
 /** "3h 12m". */

@@ -2,7 +2,15 @@
 
 import { button, el } from "./dom";
 import type { ApiError, ApiPath, ApiResponse, RecallCalled } from "./messages";
-import { backedLine, backsYes, canTopUp, poolIsOpenForStakes, poolLine, type PoolView, type StakePositionView } from "./stake-logic";
+import {
+  backedLine,
+  backsYes,
+  canTopUp,
+  poolIsOpenForStakes,
+  poolLine,
+  type PoolView,
+  type StakePositionView,
+} from "./stake-logic";
 import type { WalletAccess } from "./wallet-access";
 
 export interface StakeRowHost {
@@ -29,9 +37,13 @@ export function createStakeRow(host: StakeRowHost, called: RecallCalled): StakeR
   async function heldMist(): Promise<bigint> {
     const wallet = await host.wallet.current();
     if (!wallet) return 0n;
-    const response = await host.api<{ positions: StakePositionView[] }>("/stake/positions", { address: wallet.address });
+    const response = await host.api<{ positions: StakePositionView[] }>("/stake/positions", {
+      address: wallet.address,
+    });
     if (!response.ok || !response.body) return 0n;
-    const found = (response.body as { positions: StakePositionView[] }).positions.find((position) => position.pickId === called.pickId);
+    const found = (response.body as { positions: StakePositionView[] }).positions.find(
+      (position) => position.pickId === called.pickId,
+    );
     return found ? BigInt(found.amountMist) : 0n;
   }
 
@@ -40,7 +52,10 @@ export function createStakeRow(host: StakeRowHost, called: RecallCalled): StakeR
     const { fixture } = called;
     if (!fixture) return;
     const [response, held] = await Promise.all([
-      host.api<PoolView>("/stake/pool", { fixture: { home: fixture.home, away: fixture.away, startISO: fixture.startISO }, subject: fixture.subject }),
+      host.api<PoolView>("/stake/pool", {
+        fixture: { home: fixture.home, away: fixture.away, startISO: fixture.startISO },
+        subject: fixture.subject,
+      }),
       heldMist().catch(() => 0n),
     ]);
     if (current !== seq) return;

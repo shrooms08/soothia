@@ -43,13 +43,21 @@ export interface Eligibility {
 export async function premiumEligibility(env: Env, userKey: string): Promise<Eligibility> {
   const kv = env.SOOTHIA_CACHE;
   const handle = await kv.get(userIndexKey(userKey));
-  const [profile, hidden] = await Promise.all([handle ? kv.get<ProfileIndex>(handleKey(handle), "json") : null, kv.get<{ handle: string }[]>(HIDDEN_KEY, "json")]);
+  const [profile, hidden] = await Promise.all([
+    handle ? kv.get<ProfileIndex>(handleKey(handle), "json") : null,
+    kv.get<{ handle: string }[]>(HIDDEN_KEY, "json"),
+  ]);
   // Someone taken off the public pages has no public score to sell on.
-  if (!profile || hidden?.some((entry) => entry.handle === profile.handle)) return { eligible: false, handle: null, address: null, score: null, settled: 0, reason: "not_public" };
-  const snapshot = await kv.get<{ periods: { all: { stats: { score: number; settled: number } } } }>(statsKey(profile.handle), "json");
+  if (!profile || hidden?.some((entry) => entry.handle === profile.handle))
+    return { eligible: false, handle: null, address: null, score: null, settled: 0, reason: "not_public" };
+  const snapshot = await kv.get<{ periods: { all: { stats: { score: number; settled: number } } } }>(
+    statsKey(profile.handle),
+    "json",
+  );
   const score = snapshot?.periods.all.stats.score ?? null;
   const settled = snapshot?.periods.all.stats.settled ?? 0;
-  const reason = settled < MIN_PREMIUM_SETTLED ? "too_few_settled" : (score ?? 0) < MIN_PREMIUM_SCORE ? "score_too_low" : null;
+  const reason =
+    settled < MIN_PREMIUM_SETTLED ? "too_few_settled" : (score ?? 0) < MIN_PREMIUM_SCORE ? "score_too_low" : null;
   return { eligible: reason === null, handle: profile.handle, address: profile.address, score, settled, reason };
 }
 
@@ -60,7 +68,8 @@ export function parsePriceMist(value: unknown): bigint | null {
   return price >= MIN_PRICE_MIST && price <= MAX_PRICE_MIST ? price : null;
 }
 
-export const isHidden = (premium: { priceMist: string } | undefined, startISO: string, nowMs: number): boolean => premium !== undefined && nowMs < Date.parse(startISO);
+export const isHidden = (premium: { priceMist: string } | undefined, startISO: string, nowMs: number): boolean =>
+  premium !== undefined && nowMs < Date.parse(startISO);
 
 export interface Seller {
   handle: string;
@@ -68,20 +77,33 @@ export interface Seller {
   kickoffMs: number;
 }
 
-export type PremiumCheck = { ok: true; input: PickInput; seller: Seller } | { ok: false; status: number; body: Record<string, unknown> };
+export type PremiumCheck =
+  { ok: true; input: PickInput; seller: Seller } | { ok: false; status: number; body: Record<string, unknown> };
 
 /** Whether this call may be premium, with the kickoff replaced by ESPN's: it decides when the call reveals. */
-export async function preparePremium(env: Env, userKey: string, input: PickInput, priceMist: bigint, fetcher: ScoreboardFetcher, nowMs: number): Promise<PremiumCheck> {
+export async function preparePremium(
+  env: Env,
+  userKey: string,
+  input: PickInput,
+  priceMist: bigint,
+  fetcher: ScoreboardFetcher,
+  nowMs: number,
+): Promise<PremiumCheck> {
   if (!input.fixture) return { ok: false, status: 400, body: { error: "premium_needs_match" } };
   const eligibility = await premiumEligibility(env, userKey);
-  if (!eligibility.eligible) return { ok: false, status: 403, body: { error: "premium_not_eligible", reason: eligibility.reason } };
+  if (!eligibility.eligible)
+    return { ok: false, status: 403, body: { error: "premium_not_eligible", reason: eligibility.reason } };
   const check = await checkUpcomingFixture(input.fixture, fetcher, nowMs);
   if (!check.ok) return { ok: false, status: fixtureRefusalStatus(check.code), body: { error: check.code } };
   const { startISO } = check.located.event;
   return {
     ok: true,
     input: { ...input, fixture: { ...input.fixture, startISO }, premium: { priceMist: priceMist.toString() } },
-    seller: { handle: eligibility.handle as string, address: eligibility.address as string, kickoffMs: Date.parse(startISO) },
+    seller: {
+      handle: eligibility.handle as string,
+      address: eligibility.address as string,
+      kickoffMs: Date.parse(startISO),
+    },
   };
 }
 

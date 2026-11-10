@@ -14,6 +14,10 @@ export default tseslint.config(
       "site/fonts/",
       "site/img/",
       "design/applied/",
+      // Saved ESPN pages' own scripts, kept locally and not in git.
+      "extension/test/fixtures/",
+      "move/*/build/",
+      "worker/public/",
     ],
   },
   js.configs.recommended,
@@ -37,6 +41,11 @@ export default tseslint.config(
     // The proxy Worker: service-worker style globals plus Node compatibility for Buffer.
     files: ["worker/**/*.ts"],
     languageOptions: { globals: { ...globals.serviceworker, ...globals.node } },
+  },
+  {
+    // Tests read untyped JSON responses and build loose fakes.
+    files: ["**/test/**/*.ts"],
+    rules: { "@typescript-eslint/no-explicit-any": "off" },
   },
   {
     // Plain browser scripts on the landing site.

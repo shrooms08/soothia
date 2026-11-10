@@ -19,18 +19,23 @@ function ownerText(owner: { $kind: string; AddressOwner?: string }): string {
 }
 
 async function publish(context: StakeContext): Promise<void> {
-  const build = JSON.parse(readFileSync(join(WORKER_ROOT, "..", "move", "soothia_pay", "publish.json"), "utf8")) as { modules: string[]; dependencies: string[] };
+  const build = JSON.parse(readFileSync(join(WORKER_ROOT, "..", "move", "soothia_pay", "publish.json"), "utf8")) as {
+    modules: string[];
+    dependencies: string[];
+  };
   const tx = new Transaction();
   const upgradeCap = tx.publish({ modules: build.modules, dependencies: build.dependencies });
   tx.transferObjects([upgradeCap], context.sender);
   const result = await execute(context, tx, PUBLISH_GAS_BUDGET);
   const created = result.effects.changedObjects.filter((change) => change.idOperation === "Created");
   const packageId = created.find((change) => change.outputState === "PackageWrite")?.objectId;
-  const ofType = (suffix: string): string | undefined => created.find((change) => result.objectTypes[change.objectId]?.endsWith(suffix))?.objectId;
+  const ofType = (suffix: string): string | undefined =>
+    created.find((change) => result.objectTypes[change.objectId]?.endsWith(suffix))?.objectId;
   const config = ofType("::pay::PayConfig");
   const adminCap = ofType("::pay::AdminCap");
   const cap = ofType("::package::UpgradeCap");
-  if (!packageId || !config || !adminCap || !cap) throw new Error(`published, but could not find every id. Digest ${result.digest}`);
+  if (!packageId || !config || !adminCap || !cap)
+    throw new Error(`published, but could not find every id. Digest ${result.digest}`);
   setDevVar("PAY_PACKAGE", packageId);
   setDevVar("PAY_CONFIG", config);
   setDevVar("PAY_ADMIN_CAP", adminCap);
@@ -44,16 +49,25 @@ async function main(context: StakeContext): Promise<void> {
 
   const vars = readDevVars();
   const caps = [vars.PAY_ADMIN_CAP.trim(), vars.PAY_UPGRADE_CAP.trim()];
-  const owners = await Promise.all(caps.map(async (objectId) => ownerText((await context.client.core.getObject({ objectId })).object.owner)));
+  const owners = await Promise.all(
+    caps.map(async (objectId) => ownerText((await context.client.core.getObject({ objectId })).object.owner)),
+  );
   if (owners.every((owner) => owner === context.sender)) {
     const tx = new Transaction();
-    tx.transferObjects(caps.map((cap) => tx.object(cap)), SLUSH);
+    tx.transferObjects(
+      caps.map((cap) => tx.object(cap)),
+      SLUSH,
+    );
     const result = await execute(context, tx);
     console.log(`Handover: ${result.digest}\n  ${explorerTx(result.digest)}`);
   }
 
   console.log(`\nPAY_PACKAGE=${vars.PAY_PACKAGE.trim()}\nhttps://suivision.xyz/package/${vars.PAY_PACKAGE.trim()}`);
-  const rows: [string, string][] = [["PayConfig", vars.PAY_CONFIG.trim()], ["AdminCap", caps[0]], ["UpgradeCap", caps[1]]];
+  const rows: [string, string][] = [
+    ["PayConfig", vars.PAY_CONFIG.trim()],
+    ["AdminCap", caps[0]],
+    ["UpgradeCap", caps[1]],
+  ];
   console.log("\nOwners, read back from chain:");
   for (const [name, objectId] of rows) {
     const { object } = await context.client.core.getObject({ objectId });

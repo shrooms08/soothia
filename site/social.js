@@ -107,7 +107,11 @@
             h("span", "social-rank", String(row.rank)),
             name,
             h("span", "social-value", valueText(row)),
-            h("span", "social-meta", `Score ${row.score} · ${row.calls} calls · ${percent(row.hitRate)} right · streak ${row.streak}`),
+            h(
+              "span",
+              "social-meta",
+              `Score ${row.score} · ${row.calls} calls · ${percent(row.hitRate)} right · streak ${row.streak}`,
+            ),
           );
           return item;
         }),
@@ -129,7 +133,9 @@
         fillSelect(league, body.filters.leagues, "All leagues", state.league);
         fillSelect(team, body.filters.teams, "All teams", state.team);
         renderRows(body.rows);
-        status.textContent = body.rows.length ? "" : `Nobody qualifies yet. ${BOARDS.find(([value]) => value === state.board)[2]}`;
+        status.textContent = body.rows.length
+          ? ""
+          : `Nobody qualifies yet. ${BOARDS.find(([value]) => value === state.board)[2]}`;
       } catch {
         if (current !== seq) return;
         rows.replaceChildren();
@@ -181,7 +187,10 @@
     for (const name of names) {
       const stats = group[name];
       const item = h("li", "");
-      item.append(h("span", "", name), h("span", "social-meta", `${stats.settled} settled · ${percent(stats.hitRate)} right · score ${stats.score}`));
+      item.append(
+        h("span", "", name),
+        h("span", "social-meta", `${stats.settled} settled · ${percent(stats.hitRate)} right · score ${stats.score}`),
+      );
       list.append(item);
     }
     section.append(list);
@@ -209,8 +218,14 @@
   function lockedCallRow(call) {
     const item = h("li", "social-call");
     const head = h("div", "social-call-head");
-    head.append(h("span", "social-call-match", `${call.match.home} vs ${call.match.away}`), h("span", "social-chip open", "locked"));
-    item.append(head, h("p", "social-meta", `Premium · ${sui(call.premium.priceMist)}. Unlock in Soothia, or see it at kickoff.`));
+    head.append(
+      h("span", "social-call-match", `${call.match.home} vs ${call.match.away}`),
+      h("span", "social-chip open", "locked"),
+    );
+    item.append(
+      head,
+      h("p", "social-meta", `Premium · ${sui(call.premium.priceMist)}. Unlock in Soothia, or see it at kickoff.`),
+    );
     if (call.proof) item.append(proofLink(call));
     return item;
   }
@@ -219,8 +234,18 @@
     if (call.locked) return lockedCallRow(call);
     const item = h("li", "social-call");
     const head = h("div", "social-call-head");
-    head.append(h("span", "social-call-match", `${call.match.home} vs ${call.match.away}`), h("span", `social-chip ${call.status}`, call.status));
-    item.append(head, h("p", "social-meta", `${call.lean} · ${call.confidence}%${call.match.competition ? ` · ${call.match.competition}` : ""}`));
+    head.append(
+      h("span", "social-call-match", `${call.match.home} vs ${call.match.away}`),
+      h("span", `social-chip ${call.status}`, call.status),
+    );
+    item.append(
+      head,
+      h(
+        "p",
+        "social-meta",
+        `${call.lean} · ${call.confidence}%${call.match.competition ? ` · ${call.match.competition}` : ""}`,
+      ),
+    );
     if (call.tailOf) {
       const source = h("a", "social-proof", `Tail of @${call.tailOf}`);
       source.href = `/u/${encodeURIComponent(call.tailOf)}`;
@@ -273,7 +298,9 @@
       });
       const stats = body.periods[period];
       gridSlot.replaceChildren(statsGrid(stats, period === "all" ? body.premiumEarningsMist : undefined));
-      bestSlot.textContent = stats.bestMultiplier ? `Best multiplier ${times(stats.bestMultiplier.value)} on ${stats.bestMultiplier.match}` : "";
+      bestSlot.textContent = stats.bestMultiplier
+        ? `Best multiplier ${times(stats.bestMultiplier.value)} on ${stats.bestMultiplier.match}`
+        : "";
     };
     renderPeriod();
 
@@ -285,7 +312,14 @@
       list.append(...body.calls.map(callRow));
       calls.append(list);
     }
-    root.replaceChildren(periodTabs, gridSlot, bestSlot, ...breakdown("Leagues", body.breakdowns.leagues), ...breakdown("Teams", body.breakdowns.teams), calls);
+    root.replaceChildren(
+      periodTabs,
+      gridSlot,
+      bestSlot,
+      ...breakdown("Leagues", body.breakdowns.leagues),
+      ...breakdown("Teams", body.breakdowns.teams),
+      calls,
+    );
   }
 
   if (document.body.dataset.page === "leaderboard") leaderboard();

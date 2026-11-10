@@ -64,7 +64,19 @@ async function installId(): Promise<string> {
   return created;
 }
 
-const RECORD_ROUTES = new Set(["/stake/build", "/stake/confirm", "/social/profile/publish", "/social/follow", "/social/unfollow", "/social/following", "/social/search", "/social/feed", "/social/feed/new", "/premium/eligible", "/premium/build"]);
+const RECORD_ROUTES = new Set([
+  "/stake/build",
+  "/stake/confirm",
+  "/social/profile/publish",
+  "/social/follow",
+  "/social/unfollow",
+  "/social/following",
+  "/social/search",
+  "/social/feed",
+  "/social/feed/new",
+  "/premium/eligible",
+  "/premium/build",
+]);
 
 // A linked record's id acts as its password, so only routes that read the record get it.
 async function recallHeaders(path: string): Promise<Record<string, string>> {
@@ -187,16 +199,27 @@ async function fetchPremiumCall(pickId: unknown, payment?: unknown): Promise<Pre
   try {
     const path = `/premium/call/${pickId}`;
     const response = await fetch(`${WORKER_URL}${path}`, {
-      headers: { "X-Soothia-Install": await installId(), ...(await recallHeaders(path)), ...(typeof payment === "string" ? { "PAYMENT-SIGNATURE": payment } : {}) },
+      headers: {
+        "X-Soothia-Install": await installId(),
+        ...(await recallHeaders(path)),
+        ...(typeof payment === "string" ? { "PAYMENT-SIGNATURE": payment } : {}),
+      },
       signal: AbortSignal.timeout(28_000),
     });
-    return { status: response.status, required: response.headers.get("PAYMENT-REQUIRED"), body: await response.json().catch(() => null) };
+    return {
+      status: response.status,
+      required: response.headers.get("PAYMENT-REQUIRED"),
+      body: await response.json().catch(() => null),
+    };
   } catch {
     return { status: 0, required: null, body: null };
   }
 }
 
-const agent = createAgent({ relay: (path, body) => relay({ type: API_REQUEST, path, body }), fetchCall: fetchPremiumCall });
+const agent = createAgent({
+  relay: (path, body) => relay({ type: API_REQUEST, path, body }),
+  fetchCall: fetchPremiumCall,
+});
 
 function agentAction(action: AgentAction, settings: unknown): Promise<unknown> {
   switch (action) {
@@ -371,15 +394,26 @@ function handleMessage(
       );
       return true;
     case CHECK_TX:
-      respondSafely(verifyForSigning(message as unknown as CheckTxMessage), sendResponse, { ok: false, reason: "The transaction could not be checked." });
+      respondSafely(verifyForSigning(message as unknown as CheckTxMessage), sendResponse, {
+        ok: false,
+        reason: "The transaction could not be checked.",
+      });
       return true;
     case PREMIUM_CALL:
       if (sender.id !== chrome.runtime.id) return undefined;
-      respondSafely(fetchPremiumCall((message as { pickId?: unknown }).pickId, (message as { payment?: unknown }).payment), sendResponse, { status: 0, required: null, body: null });
+      respondSafely(
+        fetchPremiumCall((message as { pickId?: unknown }).pickId, (message as { payment?: unknown }).payment),
+        sendResponse,
+        { status: 0, required: null, body: null },
+      );
       return true;
     case AGENT_REQUEST:
       if (sender.id !== chrome.runtime.id) return undefined;
-      respondSafely(agentAction(message.action as AgentAction, (message as { settings?: unknown }).settings), sendResponse, null);
+      respondSafely(
+        agentAction(message.action as AgentAction, (message as { settings?: unknown }).settings),
+        sendResponse,
+        null,
+      );
       return true;
     case MUSIC_CONTROL:
       // The welcome page asks the background to make sure the player exists.

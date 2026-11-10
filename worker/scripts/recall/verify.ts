@@ -35,11 +35,15 @@ async function main(): Promise<number> {
     }
     const gap = Date.parse(pick.fixture.startISO) - proof.timestampMs;
     if (gap <= 0) {
-      console.log(`${pick.id} ${match}: PROBLEM: committed ${at}, ${formatGap(gap)} AFTER kickoff ${pick.fixture.startISO}`);
+      console.log(
+        `${pick.id} ${match}: PROBLEM: committed ${at}, ${formatGap(gap)} AFTER kickoff ${pick.fixture.startISO}`,
+      );
       continue;
     }
     proven += 1;
-    console.log(`${pick.id} ${match}: PROVEN: committed ${at}, kickoff ${pick.fixture.startISO}, ${formatGap(gap)} before`);
+    console.log(
+      `${pick.id} ${match}: PROVEN: committed ${at}, kickoff ${pick.fixture.startISO}, ${formatGap(gap)} before`,
+    );
   }
   console.log(`\nProven: ${proven} of ${committed.length} committed picks (${merged.length} picks in total).`);
   return proven === committed.length ? 0 : 1;

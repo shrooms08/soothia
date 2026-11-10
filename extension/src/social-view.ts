@@ -6,7 +6,22 @@ import { createLeaderboardView } from "./leaderboard-view";
 import type { ApiError, ApiPath, ApiResponse } from "./messages";
 import { isLockedItem, premiumLine, unlockFailureText, type UnlockReceipt, type UnlockResult } from "./premium-logic";
 import { shortId } from "./recall-logic";
-import { callLine, canTail, followedLine, handleLine, initials, isLockedCall, matchLine, timeAgo, type ConsensusView, type FeedEntry, type FeedItem, type FollowedCall, type OpenFollowedCall, type TailSource } from "./social-logic";
+import {
+  callLine,
+  canTail,
+  followedLine,
+  handleLine,
+  initials,
+  isLockedCall,
+  matchLine,
+  timeAgo,
+  type ConsensusView,
+  type FeedEntry,
+  type FeedItem,
+  type FollowedCall,
+  type OpenFollowedCall,
+  type TailSource,
+} from "./social-logic";
 import { formatSui, walletErrorText } from "./stake-logic";
 import type { WalletSummary } from "./wallet-protocol";
 
@@ -32,7 +47,11 @@ interface SearchRow {
 }
 
 /** Pays for a call and returns it. `choose` is asked when several wallets are installed. */
-export type UnlockCall = (pickId: string, priceMist: string, choose: (wallets: WalletSummary[]) => Promise<WalletSummary | null>) => Promise<UnlockResult>;
+export type UnlockCall = (
+  pickId: string,
+  priceMist: string,
+  choose: (wallets: WalletSummary[]) => Promise<WalletSummary | null>,
+) => Promise<UnlockResult>;
 
 export interface SocialHost {
   /** Missing where there is no wallet to pay with. */
@@ -46,7 +65,8 @@ export interface SocialHost {
   now?: () => number;
 }
 
-const profileLink = (text: string, handle: string): HTMLElement => externalLink(text, `${SITE_URL}/u/${encodeURIComponent(handle)}`, "link feed-handle");
+const profileLink = (text: string, handle: string): HTMLElement =>
+  externalLink(text, `${SITE_URL}/u/${encodeURIComponent(handle)}`, "link feed-handle");
 
 function followError(code: string | undefined): string {
   switch (code) {
@@ -65,12 +85,21 @@ function followError(code: string | undefined): string {
 
 function receiptLine(receipt: UnlockReceipt): HTMLElement {
   const line = el("p", "note premium-receipt");
-  line.append(`Paid ${formatSui(receipt.priceMist, 4)} SUI · `, externalLink(shortId(receipt.digest), receipt.url, "link mono"));
+  line.append(
+    `Paid ${formatSui(receipt.priceMist, 4)} SUI · `,
+    externalLink(shortId(receipt.digest), receipt.url, "link mono"),
+  );
   return line;
 }
 
 /** The Unlock button, with its status and wallet choice. Calls `done` once the call is open. */
-function unlockControl(pickId: string, priceMist: string, unlock: UnlockCall, layout: () => void, done: (call: FeedItem, receipt: UnlockReceipt | null) => void): HTMLElement {
+function unlockControl(
+  pickId: string,
+  priceMist: string,
+  unlock: UnlockCall,
+  layout: () => void,
+  done: (call: FeedItem, receipt: UnlockReceipt | null) => void,
+): HTMLElement {
   const node = el("div", "premium-unlock");
   const note = el("p", "note");
   note.setAttribute("aria-live", "polite");
@@ -97,7 +126,15 @@ function unlockControl(pickId: string, priceMist: string, unlock: UnlockCall, la
     void (async () => {
       action.disabled = true;
       report("Waiting for your wallet…");
-      const result = await unlock(pickId, priceMist, choose).catch((error: unknown) => ({ ok: false, code: "wallet", walletMessage: String((error as Error)?.message ?? error), maybePaid: false }) as UnlockResult);
+      const result = await unlock(pickId, priceMist, choose).catch(
+        (error: unknown) =>
+          ({
+            ok: false,
+            code: "wallet",
+            walletMessage: String((error as Error)?.message ?? error),
+            maybePaid: false,
+          }) as UnlockResult,
+      );
       if (result.ok) return done(result.call, result.receipt);
       action.disabled = false;
       report(unlockFailureText(result, (text) => walletErrorText(text, "Nothing was paid.").text));
@@ -134,7 +171,10 @@ export function createSocialView(pane: HTMLElement, host: SocialHost): { render(
     const { handle, score, item, myCall } = entry;
     const row = el("div", "feed-row");
     const top = el("div", "feed-top");
-    top.append(profileLink(handleLine(handle, score), handle), el("span", "feed-time", timeAgo(Date.parse(item.at), nowMs())));
+    top.append(
+      profileLink(handleLine(handle, score), handle),
+      el("span", "feed-time", timeAgo(Date.parse(item.at), nowMs())),
+    );
     row.append(top, el("p", "feed-match", matchLine(item.fixture)));
     if (isLockedItem(item)) return lockedRow(entry, row);
     row.append(el("p", "feed-call", callLine(item.lean, item.confidence, item.stakeMist)));
@@ -142,7 +182,8 @@ export function createSocialView(pane: HTMLElement, host: SocialHost): { render(
     if (receipt) row.append(receiptLine(receipt));
     if (item.tailOf) row.append(el("p", "note", `Tail of @${item.tailOf}`));
     if (myCall) row.append(el("p", "feed-mine", `You: ${callLine(myCall.side, myCall.confidence)}`));
-    else if (canTail(item.fixture, nowMs())) row.append(button("Tail", "button small feed-tail", () => host.onTail(handle, item)));
+    else if (canTail(item.fixture, nowMs()))
+      row.append(button("Tail", "button small feed-tail", () => host.onTail(handle, item)));
     return row;
   }
 
@@ -152,29 +193,48 @@ export function createSocialView(pane: HTMLElement, host: SocialHost): { render(
     const response = await host.api<{ items: FeedEntry[] }>("/social/feed", {});
     if (mine !== seq) return;
     if (!response.ok || !response.body) {
-      slot.replaceChildren(host.state("error", "Couldn't load your feed.", button("Try again", "button", () => void render())));
+      slot.replaceChildren(
+        host.state(
+          "error",
+          "Couldn't load your feed.",
+          button("Try again", "button", () => void render()),
+        ),
+      );
     } else {
       const { items } = response.body as { items: FeedEntry[] };
       if (items.length === 0) {
-        slot.replaceChildren(host.state("empty", "Follow people to see their calls here.", button("Find people", "button", () => void select("following"))));
+        slot.replaceChildren(
+          host.state(
+            "empty",
+            "Follow people to see their calls here.",
+            button("Find people", "button", () => void select("following")),
+          ),
+        );
       } else {
         const refresh = button("Refresh", "link", () => void render());
         refresh.prepend(icon("refresh"));
         const tools = el("div", "refresh-row");
         tools.append(refresh);
-        slot.replaceChildren(tools, ...(agentNote ? [el("p", "note agent-note", agentNote)] : []), ...items.map((entry) => feedRow(entry)));
+        slot.replaceChildren(
+          tools,
+          ...(agentNote ? [el("p", "note agent-note", agentNote)] : []),
+          ...items.map((entry) => feedRow(entry)),
+        );
       }
     }
     host.layout();
     if (agentNote || !response.ok || !host.runAgent) return;
     // Once per load, so the redraw below can't start another run.
     const bought = await host.runAgent();
-    if (bought > 0 && mine === seq) await renderFeed(slot, mine, `Your agent unlocked ${bought} call${bought === 1 ? "" : "s"}.`);
+    if (bought > 0 && mine === seq)
+      await renderFeed(slot, mine, `Your agent unlocked ${bought} call${bought === 1 ? "" : "s"}.`);
   }
 
   function followingRow(row: FollowingRow, reload: () => void): HTMLElement {
     const node = el("div", "follow-row");
-    const name = row.handle ? profileLink(handleLine(row.handle, row.score), row.handle) : el("span", "feed-handle mono", shortId(row.address));
+    const name = row.handle
+      ? profileLink(handleLine(row.handle, row.score), row.handle)
+      : el("span", "feed-handle mono", shortId(row.address));
     const note = el("span", "note", row.public ? "" : "No longer public");
     const unfollow = button("Unfollow", "button small", () => {
       void (async () => {
@@ -241,7 +301,11 @@ export function createSocialView(pane: HTMLElement, host: SocialHost): { render(
       const response = await host.api<{ results: SearchRow[] }>("/social/search", { q: query });
       if (mineSearch !== searchSeq) return;
       const found = response.ok && response.body ? (response.body as { results: SearchRow[] }).results : [];
-      results.replaceChildren(...(found.length > 0 ? found.map((row) => searchRow(row, reload)) : [el("p", "note", response.ok ? "No one by that name." : "Couldn't search just now.")]));
+      results.replaceChildren(
+        ...(found.length > 0
+          ? found.map((row) => searchRow(row, reload))
+          : [el("p", "note", response.ok ? "No one by that name." : "Couldn't search just now.")]),
+      );
       host.layout();
     }
 
@@ -258,7 +322,11 @@ export function createSocialView(pane: HTMLElement, host: SocialHost): { render(
       list.replaceChildren(el("p", "note", "Couldn't load who you follow."));
     } else {
       const { following } = response.body as { following: FollowingRow[] };
-      list.replaceChildren(...(following.length > 0 ? following.map((row) => followingRow(row, reload)) : [el("p", "note", "You aren't following anyone yet.")]));
+      list.replaceChildren(
+        ...(following.length > 0
+          ? following.map((row) => followingRow(row, reload))
+          : [el("p", "note", "You aren't following anyone yet.")]),
+      );
     }
     host.layout();
   }
@@ -293,7 +361,13 @@ export function createSocialView(pane: HTMLElement, host: SocialHost): { render(
 }
 
 /** "@ada and @tunde called this · 2 say Arsenal win", opening to a list with Tail. */
-export function followedRow(calls: FollowedCall[], consensus: ConsensusView | null, onTail: ((call: OpenFollowedCall) => void) | null, layout: () => void, unlock?: UnlockCall): HTMLElement {
+export function followedRow(
+  calls: FollowedCall[],
+  consensus: ConsensusView | null,
+  onTail: ((call: OpenFollowedCall) => void) | null,
+  layout: () => void,
+  unlock?: UnlockCall,
+): HTMLElement {
   const node = el("div", "followed");
   const head = button("", "followed-head", () => {
     list.hidden = !list.hidden;
@@ -320,7 +394,10 @@ export function followedRow(calls: FollowedCall[], consensus: ConsensusView | nu
         row.append(control);
       }
     } else {
-      row.append(el("span", "followed-who", `@${call.handle}`), el("span", "followed-lean", callLine(call.lean, call.confidence, call.stakeMist)));
+      row.append(
+        el("span", "followed-who", `@${call.handle}`),
+        el("span", "followed-lean", callLine(call.lean, call.confidence, call.stakeMist)),
+      );
       if (onTail) row.append(button("Tail", "button small", () => onTail(call)));
     }
     list.append(row);

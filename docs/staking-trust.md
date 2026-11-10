@@ -18,13 +18,13 @@ Notice for the UI:
 
 ## Who holds which key
 
-| Key | Held by | What it is for |
-|---|---|---|
-| AdminCap | Your Slush wallet | Changes settings for future pools. Overturns a wrong result. |
-| Staking UpgradeCap | Your Slush wallet | Can upgrade the staking contract. |
-| soothia_recall UpgradeCap | Your Slush wallet | Can upgrade the call-commit contract. |
-| ResolverCap | `RESOLVER_KEY` | Creates pools, resolves them, voids open ones. |
-| Gas wallet (`MEMWAL_KEY`) | The Worker | Pays for commits of people's calls. Holds no staking power. |
+| Key                       | Held by           | What it is for                                               |
+| ------------------------- | ----------------- | ------------------------------------------------------------ |
+| AdminCap                  | Your Slush wallet | Changes settings for future pools. Overturns a wrong result. |
+| Staking UpgradeCap        | Your Slush wallet | Can upgrade the staking contract.                            |
+| soothia_recall UpgradeCap | Your Slush wallet | Can upgrade the call-commit contract.                        |
+| ResolverCap               | `RESOLVER_KEY`    | Creates pools, resolves them, voids open ones.               |
+| Gas wallet (`MEMWAL_KEY`) | The Worker        | Pays for commits of people's calls. Holds no staking power.  |
 
 `RESOLVER_KEY` and the gas wallet will both be stored on the Worker. The AdminCap and the UpgradeCaps are not, so a leak of the Worker's keys cannot reach them.
 
@@ -82,15 +82,15 @@ If you change the treasury address, the fee goes to whichever address is set whe
 
 ## The caps
 
-| Limit | Value |
-|---|---|
-| Smallest stake | 0.1 SUI |
-| Most one person can stake in a pool | 5 SUI |
-| Most a pool can hold | 50 SUI |
-| Fee | 1% (maximum 5%) |
+| Limit                                | Value                          |
+| ------------------------------------ | ------------------------------ |
+| Smallest stake                       | 0.1 SUI                        |
+| Most one person can stake in a pool  | 5 SUI                          |
+| Most a pool can hold                 | 50 SUI                         |
+| Fee                                  | 1% (maximum 5%)                |
 | Wait before a result can be recorded | 2 hours 15 minutes after close |
-| Challenge window | 6 hours |
-| Refund if never resolved | 7 days after close |
+| Challenge window                     | 6 hours                        |
+| Refund if never resolved             | 7 days after close             |
 
 Whoever holds the AdminCap can change these limits within the maximums above. Pools keep the fee and the two delays they started with, but the stake limits and the refund period always use the current settings.
 

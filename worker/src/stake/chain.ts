@@ -10,8 +10,26 @@ import { toBase64 } from "@mysten/sui/utils";
 import type { RecallEnv } from "../recall/env";
 import { bytesToHex, commitKeypair, hexToBytes, resolverKeypair, tatumConfigured } from "../recall/sui";
 import { tatumSuiClient } from "../recall/tatumGrpc";
-import { ClaimedBcs, PoolCreatedBcs, readConfig, readPool, readPosition, StakedBcs, type StakeConfig, type StakePool, type StakePosition } from "./readers";
-import { buildClaim, buildCollectFee, buildCreatePool, buildResolve, buildStake, buildVoid, type StakeIds } from "./transactions";
+import {
+  ClaimedBcs,
+  PoolCreatedBcs,
+  readConfig,
+  readPool,
+  readPosition,
+  StakedBcs,
+  type StakeConfig,
+  type StakePool,
+  type StakePosition,
+} from "./readers";
+import {
+  buildClaim,
+  buildCollectFee,
+  buildCreatePool,
+  buildResolve,
+  buildStake,
+  buildVoid,
+  type StakeIds,
+} from "./transactions";
 
 const WORKER_GAS_BUDGET = 20_000_000;
 const SETTLE_MS = 30_000;
@@ -66,7 +84,8 @@ export function stakeSettings(env: RecallEnv): StakeSettings | null {
   return { packageId, configId, resolverCap };
 }
 
-const isNotFound = (error: unknown): boolean => /not.?found|does not exist/i.test(String((error as Error)?.message ?? error));
+const isNotFound = (error: unknown): boolean =>
+  /not.?found|does not exist/i.test(String((error as Error)?.message ?? error));
 
 export function tatumStakeChain(env: RecallEnv, settings: StakeSettings): StakeChain {
   const client = tatumSuiClient(env.TATUM_API_KEY.trim());
@@ -95,7 +114,13 @@ export function tatumStakeChain(env: RecallEnv, settings: StakeSettings): StakeC
       try {
         const { dynamicField } = await client.core.getDynamicField({
           parentId: config.registryTableId,
-          name: { type: "vector<u8>", bcs: bcs.vector(bcs.u8()).serialize(Array.from(hexToBytes(questionHash))).toBytes() },
+          name: {
+            type: "vector<u8>",
+            bcs: bcs
+              .vector(bcs.u8())
+              .serialize(Array.from(hexToBytes(questionHash)))
+              .toBytes(),
+          },
         });
         return bcs.Address.parse(dynamicField.value.bcs);
       } catch (error) {
@@ -146,14 +171,18 @@ export function tatumStakeChain(env: RecallEnv, settings: StakeSettings): StakeC
     },
 
     async createPool(questionHash, closeMs) {
-      const result = await asResolver(buildCreatePool(settings, { resolverCap: settings.resolverCap, questionHash, closeMs }));
+      const result = await asResolver(
+        buildCreatePool(settings, { resolverCap: settings.resolverCap, questionHash, closeMs }),
+      );
       const created = result.events.find((event) => event.eventType === `${settings.packageId}::pool::PoolCreated`);
       if (!created) throw new Error(`pool created without an event: ${result.digest}`);
       return { poolId: PoolCreatedBcs.parse(created.bcs).pool, digest: result.digest };
     },
 
     async resolvePool(poolId, outcomeYes, evidence) {
-      return (await asResolver(buildResolve(settings, { resolverCap: settings.resolverCap, poolId, outcomeYes, evidence }))).digest;
+      return (
+        await asResolver(buildResolve(settings, { resolverCap: settings.resolverCap, poolId, outcomeYes, evidence }))
+      ).digest;
     },
 
     async voidPool(poolId) {

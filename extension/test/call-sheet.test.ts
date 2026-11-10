@@ -138,9 +138,16 @@ test("a fixture claim with no upcoming match cannot be locked", async () => {
 });
 
 const PREFILL = { side: "no" as const, percent: 70, tailOf: "ada" };
-const SAVED: RecallSavedPick = { id: "p1", at: "x", pYes: 0.3, commit: { digest: "d", network: "mainnet" }, fixture: { home: "Arsenal", away: "Chelsea", startISO: "2026-11-21T15:00:00.000Z", subject: "home" } };
+const SAVED: RecallSavedPick = {
+  id: "p1",
+  at: "x",
+  pYes: 0.3,
+  commit: { digest: "d", network: "mainnet" },
+  fixture: { home: "Arsenal", away: "Chelsea", startISO: "2026-11-21T15:00:00.000Z", subject: "home" },
+};
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
-const named = (node: Element, label: string) => [...node.querySelectorAll("button")].find((item) => item.textContent === label) as HTMLButtonElement;
+const named = (node: Element, label: string) =>
+  [...node.querySelectorAll("button")].find((item) => item.textContent === label) as HTMLButtonElement;
 
 test("a tail starts from their side and confidence, and says whose it is", () => {
   const { sheet } = setup({ ok: true, status: 200, body: SAVED }, { prefill: PREFILL });
@@ -177,7 +184,10 @@ test("a normal call has no tail fields", async () => {
 
 test("after locking a tail, Back it is offered with the new call", async () => {
   const offered: unknown[] = [];
-  const { sheet } = setup({ ok: true, status: 200, body: SAVED }, { prefill: PREFILL, offerBack: (called) => offered.push(called) });
+  const { sheet } = setup(
+    { ok: true, status: 200, body: SAVED },
+    { prefill: PREFILL, offerBack: (called) => offered.push(called) },
+  );
   sheet.trigger!();
   await tick();
   named(sheet.node, "Back it").click();
@@ -185,7 +195,10 @@ test("after locking a tail, Back it is offered with the new call", async () => {
 });
 
 test("no proof on Sui means no Back it", async () => {
-  const { sheet } = setup({ ok: true, status: 200, body: { ...SAVED, commit: null } }, { prefill: PREFILL, offerBack: () => undefined });
+  const { sheet } = setup(
+    { ok: true, status: 200, body: { ...SAVED, commit: null } },
+    { prefill: PREFILL, offerBack: () => undefined },
+  );
   sheet.trigger!();
   await tick();
   assert.equal(named(sheet.node, "Back it"), undefined);

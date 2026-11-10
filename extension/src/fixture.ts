@@ -134,9 +134,10 @@ export function resolveKickoff(text: string, nowMs: number): { date: Date; evide
   let year: number | null = null;
   let dateText = "";
   // Not after a digit and hyphen: in "3-3-4 Nov 21", the 4 is a team's record, not a day.
-  const dayFirst = new RegExp(`(?<![\\d-])\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(${MONTH_RE})\\.?(?:\\s+(\\d{4}))?\\b`, "i").exec(
-    source,
-  );
+  const dayFirst = new RegExp(
+    `(?<![\\d-])\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(${MONTH_RE})\\.?(?:\\s+(\\d{4}))?\\b`,
+    "i",
+  ).exec(source);
   const monthFirst = new RegExp(`\\b(${MONTH_RE})\\.?\\s+(\\d{1,2})(?:st|nd|rd|th)?(?:,?\\s+(\\d{4}))?\\b`, "i").exec(
     source,
   );
@@ -296,7 +297,8 @@ const MAX_HEADER_CHARS = 700;
 const MAX_HEADER_TRIES = 12;
 const NOT_TEXT = /^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE)$/;
 
-const visibleText = (element: Element): string => ((element as HTMLElement).innerText ?? element.textContent ?? "").replace(/\s+/g, " ");
+const visibleText = (element: Element): string =>
+  ((element as HTMLElement).innerText ?? element.textContent ?? "").replace(/\s+/g, " ");
 
 /**
  * The text of this match's own header: from each place the home team is named, in page
@@ -321,7 +323,12 @@ function matchHeaderText(doc: Document, sides: { home: string; away: string }, n
       const text = visibleText(block);
       if (text.length > MAX_HEADER_CHARS) break;
       const all = (block.textContent ?? "").toLowerCase();
-      if (all.includes(home) && all.includes(away) && (resolveKickoff(text, nowMs) !== null || looksStartedOrFinished(text))) return text;
+      if (
+        all.includes(home) &&
+        all.includes(away) &&
+        (resolveKickoff(text, nowMs) !== null || looksStartedOrFinished(text))
+      )
+        return text;
     }
   }
   return null;

@@ -67,7 +67,14 @@ test("/u/<handle> serves the profile page with the handle written in", async () 
 });
 
 test("a malformed handle never reaches the page", async () => {
-  for (const path of ["/u/a", "/u/%3Cscript%3E", "/u/has%20space", "/u/" + "a".repeat(21), "/u/%E0%A4%A", "/u/ok_name/more"]) {
+  for (const path of [
+    "/u/a",
+    "/u/%3Cscript%3E",
+    "/u/has%20space",
+    "/u/" + "a".repeat(21),
+    "/u/%E0%A4%A",
+    "/u/ok_name/more",
+  ]) {
     const { env, seen } = assetsWith("__HANDLE__");
     await site.fetch(new Request(`https://soothia.fun${path}`), env);
     assert.equal(seen.includes("/profile"), false, path);

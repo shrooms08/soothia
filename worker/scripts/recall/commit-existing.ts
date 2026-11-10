@@ -11,7 +11,8 @@ const MIN_LEAD_MS = 3 * 60_000;
 const env = loadEnvOrExit();
 
 async function main(): Promise<number> {
-  if (!commitConfigured(env)) throw new Error("Not configured: need TATUM_API_KEY, SOOTHIA_RECALL_PACKAGE and a usable commit key.");
+  if (!commitConfigured(env))
+    throw new Error("Not configured: need TATUM_API_KEY, SOOTHIA_RECALL_PACKAGE and a usable commit key.");
   const store = await openStore(env);
   const { walrus, merged, walrusOk } = await loadPicks(store, env);
   const onWalrus = new Map(walrus.map((pick) => [pick.id, pick]));
@@ -27,7 +28,9 @@ async function main(): Promise<number> {
     const match = `${pick.fixture.home} vs ${pick.fixture.away}`;
     if (pick.commit) {
       if (walrusOk && !onWalrus.get(pick.id)?.commit) {
-        await store.write("pick", pick).catch((error) => console.log(`${pick.id} ${match}: Walrus update failed: ${safeError(error, env)}`));
+        await store
+          .write("pick", pick)
+          .catch((error) => console.log(`${pick.id} ${match}: Walrus update failed: ${safeError(error, env)}`));
         console.log(`${pick.id} ${match}: already committed, updated the Walrus copy`);
       } else {
         console.log(`${pick.id} ${match}: already committed`);
@@ -53,8 +56,12 @@ async function main(): Promise<number> {
       // Saved locally first, so a Walrus failure can never cause a second commit.
       appendLocalPick(updated);
       committed += 1;
-      console.log(`${pick.id} ${match}: ${digest} committed ${formatGap(Date.parse(pick.fixture.startISO) - Date.now())} before kickoff`);
-      await store.write("pick", updated).catch((error) => console.log(`  Walrus update failed, kept locally: ${safeError(error, env)}`));
+      console.log(
+        `${pick.id} ${match}: ${digest} committed ${formatGap(Date.parse(pick.fixture.startISO) - Date.now())} before kickoff`,
+      );
+      await store
+        .write("pick", updated)
+        .catch((error) => console.log(`  Walrus update failed, kept locally: ${safeError(error, env)}`));
     } catch (error) {
       failed += 1;
       console.log(`${pick.id} ${match}: COMMIT FAILED: ${safeError(error, env)}`);

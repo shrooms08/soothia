@@ -29,7 +29,10 @@ async function drillCreateRoute(context: Context): Promise<Response> {
   const config = await chain.readConfig();
   // Pools copy the delays when created, so a drill pool made before step (a) would take hours to resolve.
   if (config.minResolveDelayMs !== 0n || config.challengeMs !== DRILL_CHALLENGE_MS) {
-    refuse(409, "delays_not_shortened", { minResolveDelayMs: Number(config.minResolveDelayMs), challengeMs: Number(config.challengeMs) });
+    refuse(409, "delays_not_shortened", {
+      minResolveDelayMs: Number(config.minResolveDelayMs),
+      challengeMs: Number(config.challengeMs),
+    });
   }
   await clearPoolCreation(context);
 
@@ -79,7 +82,8 @@ async function drillResolveRoute(context: Context): Promise<Response> {
   const { env, chain } = context;
   const { poolId, pool } = await loadDrill(context);
   if (pool.status !== "open") refuse(409, "pool_not_open", { status: pool.status });
-  if (BigInt(context.nowMs) < pool.closeMs + pool.minResolveDelayMs) refuse(409, "drill_pool_not_closed", { closeMs: Number(pool.closeMs) });
+  if (BigInt(context.nowMs) < pool.closeMs + pool.minResolveDelayMs)
+    refuse(409, "drill_pool_not_closed", { closeMs: Number(pool.closeMs) });
   // With nothing on YES the contract voids at once, and there would be no window to overturn in.
   if (pool.yes === 0n) refuse(409, "nothing_staked");
   if (!(await acquireResolverLock(env))) refuse(503, "resolver_busy");
@@ -98,7 +102,12 @@ async function drillRefundRoute(context: Context): Promise<Response> {
   if (!position) return refuse(404, "no_position");
   if (position.claimed) refuse(409, "already_refunded");
   const { digest, amount } = await sendDrillTx(() => context.chain.claimFromGasWallet(poolId));
-  return json(context.request, { digest, amountMist: amount.toString(), stakedMist: position.amount.toString(), fullRefund: amount === position.amount });
+  return json(context.request, {
+    digest,
+    amountMist: amount.toString(),
+    stakedMist: position.amount.toString(),
+    fullRefund: amount === position.amount,
+  });
 }
 
 /** Runs a Worker-signed drill step, reporting a contract refusal by its code. */

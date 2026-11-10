@@ -69,4 +69,5 @@ export const publicProfile = (profile: ProfileIndex) => ({
   shareHistory: profile.shareHistory,
 });
 
-export const socialJson = (context: SocialContext, body: unknown, status = 200): Response => json(context.request, body, status);
+export const socialJson = (context: SocialContext, body: unknown, status = 200): Response =>
+  json(context.request, body, status);

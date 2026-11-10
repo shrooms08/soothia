@@ -24,13 +24,20 @@ function renderWallet(): void {
   const { wallet, info } = page;
   if (wallet && info) {
     if (page.isOwner()) setStatus(status, `Connected: ${wallet.address}. This wallet holds the AdminCap.`, "good");
-    else setStatus(status, `Refused. Connected: ${wallet.address}. The AdminCap is held by ${info.adminCapOwner}.`, "bad");
+    else
+      setStatus(status, `Refused. Connected: ${wallet.address}. The AdminCap is held by ${info.adminCapOwner}.`, "bad");
   } else if (wallet) {
     setStatus(status, `Connected: ${wallet.address}. Enter the token to check it.`);
   }
   if (info) {
     const text = `On chain now: resolve delay ${info.minResolveDelayMs} ms, challenge window ${info.challengeMs} ms.`;
-    setStatus(byId("config-status"), info.productionDelays ? `${text} These are the production values.` : `${text} Not the production values, so new pools are paused.`, info.productionDelays ? "" : "bad");
+    setStatus(
+      byId("config-status"),
+      info.productionDelays
+        ? `${text} These are the production values.`
+        : `${text} Not the production values, so new pools are paused.`,
+      info.productionDelays ? "" : "bad",
+    );
   }
   document.querySelectorAll<HTMLButtonElement>("button[data-overturn]").forEach((button) => {
     button.disabled = !page.isOwner();
@@ -137,14 +144,18 @@ function renderPending(items: Pending[]): void {
 }
 
 function tick(): void {
-  for (const { node, endsAt } of countdowns) node.textContent = `Time left to overturn: ${formatLeft(endsAt - Date.now())}`;
+  for (const { node, endsAt } of countdowns)
+    node.textContent = `Time left to overturn: ${formatLeft(endsAt - Date.now())}`;
 }
 
 async function refreshPending(): Promise<void> {
   const status = byId("pending-status");
   try {
     const { pending } = await api<{ pending: Pending[] }>("/stake/admin/pending");
-    setStatus(status, pending.length === 0 ? "No pools are in a challenge window." : `${pending.length} in a challenge window.`);
+    setStatus(
+      status,
+      pending.length === 0 ? "No pools are in a challenge window." : `${pending.length} in a challenge window.`,
+    );
     renderPending(pending);
   } catch (error) {
     setStatus(status, failureText(error), "bad");

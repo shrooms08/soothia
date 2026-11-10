@@ -65,7 +65,14 @@ export function readRequirement(header: string | null): Requirement | null {
 }
 
 export function paymentHeader(requirement: Requirement, signed: { bytes: string; signature: string }): string {
-  return btoa(JSON.stringify({ x402Version: 2, resource: requirement.resource, accepted: requirement.accepted, payload: { signature: signed.signature, transaction: signed.bytes } }));
+  return btoa(
+    JSON.stringify({
+      x402Version: 2,
+      resource: requirement.resource,
+      accepted: requirement.accepted,
+      payload: { signature: signed.signature, transaction: signed.bytes },
+    }),
+  );
 }
 
 export interface PremiumCallResponse {
@@ -122,7 +129,12 @@ export async function runUnlock(deps: UnlockDeps): Promise<UnlockResult> {
   let signed: { bytes: string; signature: string };
   try {
     const txBytes = await deps.build();
-    signed = await deps.sign(txBytes, { kind: "pay", nonce: requirement.nonce, recipient: requirement.payTo, priceMist: requirement.amount });
+    signed = await deps.sign(txBytes, {
+      kind: "pay",
+      nonce: requirement.nonce,
+      recipient: requirement.payTo,
+      priceMist: requirement.amount,
+    });
   } catch (error) {
     const text = message(error);
     if (/^[a-z_]+$/.test(text)) return failed(text);
@@ -137,11 +149,17 @@ export async function runUnlock(deps: UnlockDeps): Promise<UnlockResult> {
   }
   if (second.status === 200) return opened(second);
   if (second.status === 0) return failed("network", true);
-  const reason = (second.body as { reason?: string; error?: string } | null)?.reason ?? (second.body as { error?: string } | null)?.error ?? "unavailable";
+  const reason =
+    (second.body as { reason?: string; error?: string } | null)?.reason ??
+    (second.body as { error?: string } | null)?.error ??
+    "unavailable";
   return failed(reason, reason === "broadcast_failed" || reason === "no_payment_event");
 }
 
-export function unlockFailureText(result: Extract<UnlockResult, { ok: false }>, walletText: (message: string) => string): string {
+export function unlockFailureText(
+  result: Extract<UnlockResult, { ok: false }>,
+  walletText: (message: string) => string,
+): string {
   if (result.walletMessage !== undefined) return walletText(result.walletMessage);
   switch (result.code) {
     case "insufficient_balance":
@@ -198,7 +216,11 @@ export interface AgentStatus {
   receipts: AgentReceipt[];
 }
 
-export const DEFAULT_AGENT_SETTINGS: AgentSettings = { enabled: false, dailyBudgetMist: AGENT_DEFAULT_BUDGET_MIST.toString(), maxPerCallMist: AGENT_DEFAULT_MAX_MIST.toString() };
+export const DEFAULT_AGENT_SETTINGS: AgentSettings = {
+  enabled: false,
+  dailyBudgetMist: AGENT_DEFAULT_BUDGET_MIST.toString(),
+  maxPerCallMist: AGENT_DEFAULT_MAX_MIST.toString(),
+};
 
 const mistOr = (value: unknown, fallback: bigint, max: bigint): bigint => {
   if (typeof value !== "string" || !AMOUNT.test(value)) return fallback;
@@ -223,7 +245,8 @@ export function spentToday(spend: AgentSpend | null | undefined, nowMs: number):
   return spend?.day === utcDay(nowMs) && AMOUNT.test(spend.spentMist) ? BigInt(spend.spentMist) : 0n;
 }
 
-export const isLockedItem = (item: FeedItem | LockedFeedItem): item is LockedFeedItem => (item as LockedFeedItem).locked === true;
+export const isLockedItem = (item: FeedItem | LockedFeedItem): item is LockedFeedItem =>
+  (item as LockedFeedItem).locked === true;
 
 export interface AgentCandidate {
   handle: string;
@@ -231,9 +254,15 @@ export interface AgentCandidate {
 }
 
 /** The locked calls the agent may buy now, inside the per-call cap and the day's budget. */
-export function agentCandidates(entries: Pick<FeedEntry, "handle" | "item">[], settings: AgentSettings, spentMist: bigint, nowMs: number): AgentCandidate[] {
+export function agentCandidates(
+  entries: Pick<FeedEntry, "handle" | "item">[],
+  settings: AgentSettings,
+  spentMist: bigint,
+  nowMs: number,
+): AgentCandidate[] {
   if (!settings.enabled) return [];
-  const perCall = BigInt(settings.maxPerCallMist) < AGENT_HARD_CAP_MIST ? BigInt(settings.maxPerCallMist) : AGENT_HARD_CAP_MIST;
+  const perCall =
+    BigInt(settings.maxPerCallMist) < AGENT_HARD_CAP_MIST ? BigInt(settings.maxPerCallMist) : AGENT_HARD_CAP_MIST;
   let left = BigInt(settings.dailyBudgetMist) - spentMist;
   const chosen: AgentCandidate[] = [];
   for (const { handle, item } of entries) {

@@ -88,7 +88,10 @@ test("the owner still counts toward the global cap", async () => {
 
 test("a low balance skips the commit, and exactly the floor is allowed", async () => {
   const { env, kv } = fakeEnv();
-  assert.equal(await checkCommitGuard(env, "u1", { now: NOW, readBalance: async () => MIN_BALANCE_MIST - 1n }), "low_balance");
+  assert.equal(
+    await checkCommitGuard(env, "u1", { now: NOW, readBalance: async () => MIN_BALANCE_MIST - 1n }),
+    "low_balance",
+  );
   assert.equal(kv.size, 0);
   clearMemoryCache();
   assert.equal(await checkCommitGuard(env, "u1", { now: NOW, readBalance: async () => MIN_BALANCE_MIST }), null);

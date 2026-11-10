@@ -19,7 +19,18 @@ import { stakeSettings, tatumStakeChain, type StakeChain } from "../stake/chain"
 import { estimatedPayout, positionResult } from "../stake/math";
 import { BOARDS_KEY, HIDDEN_KEY, recentKey, statsKey, type ProfileIndex } from "./context";
 import { seedFeedItems, type FeedItem } from "./feed";
-import { BOARDS, PERIODS, rankBoard, statsForPeriod, type Board, type BoardRow, type CallEntry, type Period, type PeriodStats, type StakeEntry } from "./stats";
+import {
+  BOARDS,
+  PERIODS,
+  rankBoard,
+  statsForPeriod,
+  type Board,
+  type BoardRow,
+  type CallEntry,
+  type Period,
+  type PeriodStats,
+  type StakeEntry,
+} from "./stats";
 
 const MAX_RECENT_CALLS = 50;
 /** Leaves room under the 50 outbound calls for KV and the cache. */
@@ -120,33 +131,52 @@ function budgetedFetcher(fetcher: ScoreboardFetcher, budget: Budget): Scoreboard
 /** Whether a settled call was committed on Sui before ESPN's kickoff. Null means try again later. */
 async function proveCall(pick: PickRecord, deps: SnapshotDeps, fetcher: ScoreboardFetcher): Promise<Proof | null> {
   const commit = await deps.checkCommit((pick.commit as NonNullable<PickRecord["commit"]>).digest, pick.hash);
-  if (!commit.verified) return commit.problem === "hash_mismatch" || commit.problem === "no_commit_event" ? { proven: false } : null;
+  if (!commit.verified)
+    return commit.problem === "hash_mismatch" || commit.problem === "no_commit_event" ? { proven: false } : null;
   if (commit.timestampMs === null) return null;
   const { located, eventsSeen } = await locateFixture(pick.fixture as NonNullable<PickRecord["fixture"]>, fetcher);
   if (!located) return eventsSeen > 0 ? { proven: false } : null;
   const kickoffMs = Date.parse(located.event.startISO);
-  return { proven: commit.timestampMs < kickoffMs, kickoffMs, competition: located.event.competition, teams: [located.event.home.name, located.event.away.name] };
+  return {
+    proven: commit.timestampMs < kickoffMs,
+    kickoffMs,
+    competition: located.event.competition,
+    teams: [located.event.home.name, located.event.away.name],
+  };
 }
 
-async function finalPosition(poolId: string, address: string, chain: NonNullable<SnapshotDeps["chain"]>, nowMs: number): Promise<FinalPosition | null> {
+async function finalPosition(
+  poolId: string,
+  address: string,
+  chain: NonNullable<SnapshotDeps["chain"]>,
+  nowMs: number,
+): Promise<FinalPosition | null> {
   const pool = await chain.readPool(poolId);
   const position = await chain.readPosition(pool, address);
   if (!position) return null;
   const result = positionResult(pool, position, BigInt(nowMs));
-  return result === null ? null : { result, amountMist: position.amount.toString(), payoutMist: estimatedPayout(pool, position).toString() };
+  return result === null
+    ? null
+    : { result, amountMist: position.amount.toString(), payoutMist: estimatedPayout(pool, position).toString() };
 }
 
-const isPublic = (pick: PickRecord, profile: ProfileIndex): boolean => profile.shareHistory || pick.at >= profile.publicSince;
+const isPublic = (pick: PickRecord, profile: ProfileIndex): boolean =>
+  profile.shareHistory || pick.at >= profile.publicSince;
 
 /** Builds one profile's snapshot, reusing what can't have changed. */
-export async function buildSnapshot(profile: ProfileIndex, previous: ProfileSnapshot | null, deps: SnapshotDeps, budget: Budget): Promise<{ snapshot: ProfileSnapshot; feed: FeedItem[] }> {
+export async function buildSnapshot(
+  profile: ProfileIndex,
+  previous: ProfileSnapshot | null,
+  deps: SnapshotDeps,
+  budget: Budget,
+): Promise<{ snapshot: ProfileSnapshot; feed: FeedItem[] }> {
   const nowMs = deps.now.getTime();
   const store = deps.store(profile.userKey);
-  const [rawPicks, rawOutcomes, rawStakes] = (await Promise.all([store.list("pick", true), store.list("outcome", true), store.list("stake", true)])) as [
-    RecordByKind["pick"][],
-    OutcomeRecord[],
-    StakeRecord[],
-  ];
+  const [rawPicks, rawOutcomes, rawStakes] = (await Promise.all([
+    store.list("pick", true),
+    store.list("outcome", true),
+    store.list("stake", true),
+  ])) as [RecordByKind["pick"][], OutcomeRecord[], StakeRecord[]];
   budget.take(WALRUS_READS);
 
   const picks = mergePicks(rawPicks).filter((pick) => pick.fixture && isPublic(pick, profile));
@@ -204,14 +234,27 @@ export async function buildSnapshot(profile: ProfileIndex, previous: ProfileSnap
 
     // An open call counts as made; a settled one only once it is proven before kickoff.
     if (pick.commit && (!outcome || proof?.proven)) {
-      calls.push({ kickoffMs, competition, teams, result: outcome ? { hit: outcome.hit, brier: outcome.brier } : null });
+      calls.push({
+        kickoffMs,
+        competition,
+        teams,
+        result: outcome ? { hit: outcome.hit, brier: outcome.brier } : null,
+      });
     }
 
     const pickStakes = stakesByPick.get(pick.id) ?? [];
     const final = pickStakes[0] ? finals[pickStakes[0].poolId] : undefined;
     const recorded = pickStakes.reduce((sum, stake) => sum + BigInt(stake.amountMist), 0n);
     if (pickStakes.length > 0) {
-      stakes.push({ kickoffMs, competition, teams, match, stakedMist: final ? BigInt(final.amountMist) : recorded, result: final?.result ?? null, payoutMist: final ? BigInt(final.payoutMist) : 0n });
+      stakes.push({
+        kickoffMs,
+        competition,
+        teams,
+        match,
+        stakedMist: final ? BigInt(final.amountMist) : recorded,
+        result: final?.result ?? null,
+        payoutMist: final ? BigInt(final.payoutMist) : 0n,
+      });
     }
 
     recent.push({
@@ -221,22 +264,38 @@ export async function buildSnapshot(profile: ProfileIndex, previous: ProfileSnap
       side: pick.pYes >= 0.5 ? "YES" : "NO",
       confidence: Math.round(Math.max(pick.pYes, 1 - pick.pYes) * 100),
       status: outcome ? (outcome.hit ? "right" : "wrong") : "open",
-      stake: pickStakes.length > 0 ? { amountMist: (final ? BigInt(final.amountMist) : recorded).toString(), result: final?.result ?? null, payoutMist: final?.payoutMist ?? null } : null,
-      proof: pick.commit ? { digest: pick.commit.digest, url: `https://suivision.xyz/txblock/${encodeURIComponent(pick.commit.digest)}` } : null,
+      stake:
+        pickStakes.length > 0
+          ? {
+              amountMist: (final ? BigInt(final.amountMist) : recorded).toString(),
+              result: final?.result ?? null,
+              payoutMist: final?.payoutMist ?? null,
+            }
+          : null,
+      proof: pick.commit
+        ? { digest: pick.commit.digest, url: `https://suivision.xyz/txblock/${encodeURIComponent(pick.commit.digest)}` }
+        : null,
       ...(pick.tailOf ? { tailOf: pick.tailOf } : {}),
       ...(pick.premium ? { premium: pick.premium } : {}),
     });
   }
 
   recent.sort((a, b) => b.at.localeCompare(a.at));
-  const staked = new Map([...stakesByPick].map(([pickId, list]) => [pickId, list.reduce((sum, stake) => sum + BigInt(stake.amountMist), 0n)]));
+  const staked = new Map(
+    [...stakesByPick].map(([pickId, list]) => [
+      pickId,
+      list.reduce((sum, stake) => sum + BigInt(stake.amountMist), 0n),
+    ]),
+  );
   const snapshot: ProfileSnapshot = {
     handle: profile.handle,
     address: profile.address,
     publicSince: profile.publicSince,
     shareHistory: profile.shareHistory,
     builtAt: deps.now.toISOString(),
-    periods: Object.fromEntries(PERIODS.map((period) => [period, statsForPeriod(calls, stakes, period, nowMs)])) as Record<Period, PeriodStats>,
+    periods: Object.fromEntries(
+      PERIODS.map((period) => [period, statsForPeriod(calls, stakes, period, nowMs)]),
+    ) as Record<Period, PeriodStats>,
     recent: recent.slice(0, MAX_RECENT_CALLS),
     proofs,
     finals,
@@ -244,13 +303,25 @@ export async function buildSnapshot(profile: ProfileIndex, previous: ProfileSnap
   return { snapshot, feed: seedFeedItems(picks, staked) };
 }
 
-const withoutTime = <T extends { builtAt?: string; generatedAt?: string }>(value: T): string => JSON.stringify({ ...value, builtAt: "", generatedAt: "" });
+const withoutTime = <T extends { builtAt?: string; generatedAt?: string }>(value: T): string =>
+  JSON.stringify({ ...value, builtAt: "", generatedAt: "" });
 
 /** Boards from every profile's snapshot. */
 export function buildBoards(snapshots: ProfileSnapshot[], now: Date): BoardsDocument {
   const entries = snapshots.map(({ handle, periods }) => ({ handle, periods }));
   const boards = Object.fromEntries(
-    BOARDS.map((board) => [board, Object.fromEntries(PERIODS.map((period) => [period, rankBoard(board, entries.map(({ handle, periods }) => ({ handle, stats: periods[period].stats })))]))]),
+    BOARDS.map((board) => [
+      board,
+      Object.fromEntries(
+        PERIODS.map((period) => [
+          period,
+          rankBoard(
+            board,
+            entries.map(({ handle, periods }) => ({ handle, stats: periods[period].stats })),
+          ),
+        ]),
+      ),
+    ]),
   ) as BoardsDocument["boards"];
   return { generatedAt: now.toISOString(), boards, entries };
 }
@@ -260,7 +331,10 @@ export interface SweepSocialDeps extends Partial<SnapshotDeps> {
 }
 
 /** Rebuilds as many profiles as the budget allows, then the boards. */
-export async function sweepSocial(env: Env, overrides: SweepSocialDeps = {}): Promise<{ rebuilt: number; written: number; boardsWritten: boolean }> {
+export async function sweepSocial(
+  env: Env,
+  overrides: SweepSocialDeps = {},
+): Promise<{ rebuilt: number; written: number; boardsWritten: boolean }> {
   if (!overrides.store && !memwalConfigured(env)) return { rebuilt: 0, written: 0, boardsWritten: false };
   const settings = stakeSettings(env);
   const deps: SnapshotDeps = {
@@ -273,14 +347,21 @@ export async function sweepSocial(env: Env, overrides: SweepSocialDeps = {}): Pr
   const kv = env.SOOTHIA_CACHE;
   const startedMs = deps.now.getTime();
 
-  const profileNames = (await kv.list({ prefix: "profile:", limit: 1000 })).keys.map((key) => key.name.slice("profile:".length));
-  const built = new Set((await kv.list({ prefix: "socialstats:", limit: 1000 })).keys.map((key) => key.name.slice("socialstats:".length)));
+  const profileNames = (await kv.list({ prefix: "profile:", limit: 1000 })).keys.map((key) =>
+    key.name.slice("profile:".length),
+  );
+  const built = new Set(
+    (await kv.list({ prefix: "socialstats:", limit: 1000 })).keys.map((key) => key.name.slice("socialstats:".length)),
+  );
 
   // New profiles first, then whoever's turn it is.
   const cursor = (await cacheGet<string>(CURSOR_KEY)) ?? "";
   const rest = profileNames.filter((handle) => built.has(handle)).sort();
   const turn = rest.findIndex((handle) => handle > cursor);
-  const order = [...profileNames.filter((handle) => !built.has(handle)), ...(turn < 0 ? rest : [...rest.slice(turn), ...rest.slice(0, turn)])];
+  const order = [
+    ...profileNames.filter((handle) => !built.has(handle)),
+    ...(turn < 0 ? rest : [...rest.slice(turn), ...rest.slice(0, turn)]),
+  ];
 
   const budget = new Budget(overrides.budget ?? SWEEP_BUDGET);
   let rebuilt = 0;
@@ -294,21 +375,24 @@ export async function sweepSocial(env: Env, overrides: SweepSocialDeps = {}): Pr
       const { snapshot: next, feed } = await buildSnapshot(profile, previous, deps, budget);
       rebuilt += 1;
       // Calls made before the feed existed: fill it once, so followers see something.
-      if (feed.length > 0 && (await kv.get(recentKey(handle))) === null) await kvPut(env, recentKey(handle), JSON.stringify(feed));
+      if (feed.length > 0 && (await kv.get(recentKey(handle))) === null)
+        await kvPut(env, recentKey(handle), JSON.stringify(feed));
       await cachePut(CURSOR_KEY, handle, CURSOR_TTL_SEC);
       if (!previous || withoutTime(previous) !== withoutTime(next)) {
         if (await kvPut(env, statsKey(handle), JSON.stringify(next))) written += 1;
       }
     } catch (error) {
       // One profile's failure must not stop the others.
-      console.warn(`Soothia: social sweep failed on ${handle}: ${String((error as Error)?.message ?? error).slice(0, 160)}`);
+      console.warn(
+        `Soothia: social sweep failed on ${handle}: ${String((error as Error)?.message ?? error).slice(0, 160)}`,
+      );
     }
   }
 
   const live = new Set(profileNames);
-  const snapshots = (await Promise.all(profileNames.map((handle) => kv.get<ProfileSnapshot>(statsKey(handle), "json")))).filter(
-    (snapshot): snapshot is ProfileSnapshot => snapshot !== null && live.has(snapshot.handle),
-  );
+  const snapshots = (
+    await Promise.all(profileNames.map((handle) => kv.get<ProfileSnapshot>(statsKey(handle), "json")))
+  ).filter((snapshot): snapshot is ProfileSnapshot => snapshot !== null && live.has(snapshot.handle));
   const boards = buildBoards(snapshots, deps.now);
   const previousBoards = await kv.get<BoardsDocument>(BOARDS_KEY, "json");
   const boardsChanged = !previousBoards || withoutTime(previousBoards) !== withoutTime(boards);

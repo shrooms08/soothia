@@ -97,7 +97,13 @@ test("the fixture subject follows who the question backs", () => {
 });
 
 test("a fixture call sends the match, with the backed team as subject", () => {
-  const body = callBody(tile("Will Chelsea beat Arsenal on Sat 21 Nov?", { fromFixture: true }), "no", 60, PAGE, FIXTURE);
+  const body = callBody(
+    tile("Will Chelsea beat Arsenal on Sat 21 Nov?", { fromFixture: true }),
+    "no",
+    60,
+    PAGE,
+    FIXTURE,
+  );
   assert.equal(body.pYes, 0.4);
   assert.deepEqual(body.fixture, {
     home: "Arsenal",
@@ -129,26 +135,58 @@ const NAPOLI = { home: "Napoli", away: "Lazio" };
 
 test("lean wording: YES backs the team, NO says what that means", () => {
   assert.equal(leanSide({ pYes: 0.6, fixture: { ...NAPOLI, subject: "home" } }), "Napoli win");
-  assert.equal(leanSide({ pYes: 0.35, fixture: { ...NAPOLI, subject: "home" } }), "Napoli doesn't win (Lazio win or draw)");
+  assert.equal(
+    leanSide({ pYes: 0.35, fixture: { ...NAPOLI, subject: "home" } }),
+    "Napoli doesn't win (Lazio win or draw)",
+  );
   assert.equal(leanSide({ pYes: 0.6, fixture: { ...NAPOLI, subject: "away" } }), "Lazio win");
   assert.equal(leanSide({ pYes: 0.6, fixture: null }), "YES");
 });
 
 test("a match call reads with its confidence, and other calls stay short", () => {
-  assert.equal(pickLean({ pYes: 0.35, fixture: { ...NAPOLI, subject: "home" } }), "Napoli doesn't win (Lazio win or draw) \u00b7 65%");
+  assert.equal(
+    pickLean({ pYes: 0.35, fixture: { ...NAPOLI, subject: "home" } }),
+    "Napoli doesn't win (Lazio win or draw) \u00b7 65%",
+  );
   assert.equal(pickLean({ pYes: 0.6, fixture: null }), "YES 60%");
 });
 
 test("a newly locked call becomes the tile's call state", () => {
-  const pick = { id: "p_9", at: "x", pYes: 0.25, commit: { digest: "d", network: "mainnet" }, fixture: { ...NAPOLI, startISO: "2026-11-21T15:00:00.000Z", subject: "away" as const } };
-  assert.deepEqual(calledFromPick(pick), { side: "Lazio doesn't win (Napoli win or draw)", confidence: 75, pickId: "p_9", committed: true, pYes: 0.25, fixture: pick.fixture });
+  const pick = {
+    id: "p_9",
+    at: "x",
+    pYes: 0.25,
+    commit: { digest: "d", network: "mainnet" },
+    fixture: { ...NAPOLI, startISO: "2026-11-21T15:00:00.000Z", subject: "away" as const },
+  };
+  assert.deepEqual(calledFromPick(pick), {
+    side: "Lazio doesn't win (Napoli win or draw)",
+    confidence: 75,
+    pickId: "p_9",
+    committed: true,
+    pYes: 0.25,
+    fixture: pick.fixture,
+  });
   assert.equal(calledFromPick({ ...pick, commit: null }).committed, false);
 });
 
 test("the headline leaves out what is not known yet", () => {
-  const base = { picks: 1, open: 1, resolved: 0, hits: 0, brier: null, marketBrier: null, vsMarketCalls: 0, calibration: [], entities: [] };
+  const base = {
+    picks: 1,
+    open: 1,
+    resolved: 0,
+    hits: 0,
+    brier: null,
+    marketBrier: null,
+    vsMarketCalls: 0,
+    calibration: [],
+    entities: [],
+  };
   assert.equal(recordHeadline(base), "1 call · 0 right");
-  assert.equal(recordHeadline({ ...base, picks: 4, resolved: 4, hits: 3, brier: 0.2 }), "4 calls · 3 right · 75% hit rate · Brier 0.200");
+  assert.equal(
+    recordHeadline({ ...base, picks: 4, resolved: 4, hits: 3, brier: 0.2 }),
+    "4 calls · 3 right · 75% hit rate · Brier 0.200",
+  );
 });
 
 test("tiles show at most two notes", () => {
@@ -163,7 +201,10 @@ test("tiles sort by relevance and ties keep their order", () => {
     ["b", insight("b", 2)],
     ["d", insight("d", 2)],
   ]);
-  assert.deepEqual(sortByRelevance(tiles, insights).map((item) => item.claim.id), ["c", "b", "d", "a"]);
+  assert.deepEqual(
+    sortByRelevance(tiles, insights).map((item) => item.claim.id),
+    ["c", "b", "d", "a"],
+  );
 });
 
 test("every skip reason reads in plain words", () => {
@@ -174,7 +215,10 @@ test("every skip reason reads in plain words", () => {
 });
 
 test("errors read in plain words and only some can be retried", () => {
-  assert.deepEqual(callErrorMessage(409, { error: "duplicate_pick" }), { text: "You already called this.", retry: false });
+  assert.deepEqual(callErrorMessage(409, { error: "duplicate_pick" }), {
+    text: "You already called this.",
+    retry: false,
+  });
   assert.deepEqual(callErrorMessage(400, { error: "invalid_pick", field: "fixture.startISO" }), {
     text: "This match has already kicked off.",
     retry: false,
@@ -202,8 +246,14 @@ const proof = (over: Partial<Parameters<typeof proofText>[0]>): Parameters<typeo
 
 test("proof lines say when it was committed, or what went wrong", () => {
   assert.deepEqual(proofText(proof({})), { text: "Committed 2h 7m before kickoff ✓", good: true });
-  assert.deepEqual(proofText(proof({ gapMs: -60 * 60_000, beforeKickoff: false })), { text: "Committed 1h 0m after kickoff", good: false });
-  assert.deepEqual(proofText(proof({ gapMs: null, kickoffISO: null, beforeKickoff: null })), { text: "Committed on Sui ✓", good: true });
+  assert.deepEqual(proofText(proof({ gapMs: -60 * 60_000, beforeKickoff: false })), {
+    text: "Committed 1h 0m after kickoff",
+    good: false,
+  });
+  assert.deepEqual(proofText(proof({ gapMs: null, kickoffISO: null, beforeKickoff: null })), {
+    text: "Committed on Sui ✓",
+    good: true,
+  });
   assert.equal(proofText(proof({ verified: false, problem: "hash_mismatch" })).good, false);
   assert.match(proofText(proof({ verified: false, problem: "hash_mismatch" })).text, /does not match/);
   assert.match(proofText(proof({ verified: false, problem: "tatum_grpc_http_500" })).text, /Couldn't check/);

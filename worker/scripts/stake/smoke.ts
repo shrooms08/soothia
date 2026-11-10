@@ -6,7 +6,14 @@
 
 import { sha256Hex } from "../../src/recall/picks";
 import { claimAmount, feeOn } from "../../src/stake/math";
-import { ClaimedBcs, FeeCollectedBcs, PoolCreatedBcs, readConfig, readPool, readPosition } from "../../src/stake/readers";
+import {
+  ClaimedBcs,
+  FeeCollectedBcs,
+  PoolCreatedBcs,
+  readConfig,
+  readPool,
+  readPosition,
+} from "../../src/stake/readers";
 import {
   buildClaim,
   buildCollectFee,
@@ -17,7 +24,16 @@ import {
   type StakeIds,
 } from "../../src/stake/transactions";
 import { loadEnvOrExit, readDevVars, safeError } from "../recall/shared";
-import { balanceOf, execute, explorerTx, PROD_CHALLENGE_MS, PROD_MIN_RESOLVE_DELAY_MS, stakeContext, sui, type StakeContext } from "./shared";
+import {
+  balanceOf,
+  execute,
+  explorerTx,
+  PROD_CHALLENGE_MS,
+  PROD_MIN_RESOLVE_DELAY_MS,
+  stakeContext,
+  sui,
+  type StakeContext,
+} from "./shared";
 
 const STAKE_AMOUNT = 100_000_000n;
 const OPEN_FOR_MS = 2 * 60_000;
@@ -48,7 +64,13 @@ function required(vars: Record<string, string>, name: string): string {
   return value;
 }
 
-async function runPool(context: StakeContext, ids: StakeIds, resolverCap: string, feeBps: bigint, treasury: string): Promise<void> {
+async function runPool(
+  context: StakeContext,
+  ids: StakeIds,
+  resolverCap: string,
+  feeBps: bigint,
+  treasury: string,
+): Promise<void> {
   const gasBefore = await balanceOf(context, context.sender);
   const treasuryBefore = await balanceOf(context, treasury);
   console.log(`Gas wallet before: ${sui(gasBefore)}. Treasury before: ${sui(treasuryBefore)}.`);
@@ -60,15 +82,23 @@ async function runPool(context: StakeContext, ids: StakeIds, resolverCap: string
   const poolId = PoolCreatedBcs.parse(eventBytes(created, "PoolCreated")).pool;
   console.log(`  Pool: ${poolId}`);
 
-  report("Stake 0.1 SUI on YES", await execute(context, buildStake(ids, { poolId, side: true, amount: STAKE_AMOUNT, pickHash: PICK_HASH })));
+  report(
+    "Stake 0.1 SUI on YES",
+    await execute(context, buildStake(ids, { poolId, side: true, amount: STAKE_AMOUNT, pickHash: PICK_HASH })),
+  );
 
   const waitForClose = closeMs + CLOCK_MARGIN_MS - Date.now();
   console.log(`Waiting ${Math.ceil(waitForClose / 1000)} seconds for the pool to close...`);
   await sleep(waitForClose);
 
-  report("Resolve YES", await execute(context, buildResolve(ids, { resolverCap, poolId, outcomeYes: true, evidence: "smoke test" })));
+  report(
+    "Resolve YES",
+    await execute(context, buildResolve(ids, { resolverCap, poolId, outcomeYes: true, evidence: "smoke test" })),
+  );
   const resolved = await readPool(context.client, poolId);
-  console.log(`  Evidence on chain: "${resolved.evidence}". Challenge window: ${resolved.challengeMs} ms. Fee locked: ${resolved.feeBps} bps.`);
+  console.log(
+    `  Evidence on chain: "${resolved.evidence}". Challenge window: ${resolved.challengeMs} ms. Fee locked: ${resolved.feeBps} bps.`,
+  );
 
   let aborted = false;
   try {
@@ -105,7 +135,9 @@ async function runPool(context: StakeContext, ids: StakeIds, resolverCap: string
   console.log(`Fee to treasury: ${sui(fee)} (1% of the stake is ${sui(feeOn(STAKE_AMOUNT, feeBps))})`);
   console.log(`Treasury: ${sui(treasuryBefore)} -> ${sui(treasuryAfter)}`);
   console.log(`Gas wallet: ${sui(gasBefore)} -> ${sui(gasAfter)}`);
-  console.log(`Position marked claimed: ${spent?.claimed === true ? "yes" : "NO"}. Fee marked collected: ${final.feeCollected ? "yes" : "NO"}.`);
+  console.log(
+    `Position marked claimed: ${spent?.claimed === true ? "yes" : "NO"}. Fee marked collected: ${final.feeCollected ? "yes" : "NO"}.`,
+  );
   if (amount !== expected) throw new Error("The claimed amount does not match the TypeScript math.");
   if (treasuryAfter - treasuryBefore !== fee) throw new Error("The treasury did not receive exactly the fee.");
 }
@@ -117,16 +149,24 @@ async function main(context: StakeContext): Promise<void> {
   const resolverCap = required(vars, "STAKE_RESOLVER_CAP");
   const config = await readConfig(context.client, ids.configId);
 
-  report("Shorten delays for the test", await execute(context, buildSetDelays(ids, { adminCap, minResolveDelayMs: 0n, challengeMs: SMOKE_CHALLENGE_MS })));
+  report(
+    "Shorten delays for the test",
+    await execute(context, buildSetDelays(ids, { adminCap, minResolveDelayMs: 0n, challengeMs: SMOKE_CHALLENGE_MS })),
+  );
   try {
     await runPool(context, ids, resolverCap, config.feeBps, config.treasury);
   } finally {
     report(
       "Restore production delays",
-      await execute(context, buildSetDelays(ids, { adminCap, minResolveDelayMs: PROD_MIN_RESOLVE_DELAY_MS, challengeMs: PROD_CHALLENGE_MS })),
+      await execute(
+        context,
+        buildSetDelays(ids, { adminCap, minResolveDelayMs: PROD_MIN_RESOLVE_DELAY_MS, challengeMs: PROD_CHALLENGE_MS }),
+      ),
     );
     const restored = await readConfig(context.client, ids.configId);
-    console.log(`Config read back: min_resolve_delay_ms ${restored.minResolveDelayMs}, challenge_ms ${restored.challengeMs}`);
+    console.log(
+      `Config read back: min_resolve_delay_ms ${restored.minResolveDelayMs}, challenge_ms ${restored.challengeMs}`,
+    );
   }
 }
 

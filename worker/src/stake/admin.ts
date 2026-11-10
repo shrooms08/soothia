@@ -28,15 +28,20 @@ async function infoRoute(context: Context): Promise<Response> {
     configId: context.settings.configId,
     minResolveDelayMs: Number(config.minResolveDelayMs),
     challengeMs: Number(config.challengeMs),
-    productionDelays: config.minResolveDelayMs === PROD_MIN_RESOLVE_DELAY_MS && config.challengeMs === PROD_CHALLENGE_MS,
+    productionDelays:
+      config.minResolveDelayMs === PROD_MIN_RESOLVE_DELAY_MS && config.challengeMs === PROD_CHALLENGE_MS,
   });
 }
 
 /** Builds for the AdminCap's owner. A contract refusal comes back with its code. */
 async function buildForOwner(context: Context, tx: Transaction, owner: string): Promise<Response> {
-  if ((await context.chain.balanceOf(owner)) < BigInt(ADMIN_GAS_BUDGET)) refuse(409, "admin_wallet_low_balance", { neededMist: String(ADMIN_GAS_BUDGET) });
+  if ((await context.chain.balanceOf(owner)) < BigInt(ADMIN_GAS_BUDGET))
+    refuse(409, "admin_wallet_low_balance", { neededMist: String(ADMIN_GAS_BUDGET) });
   try {
-    return json(context.request, { txBytes: await context.chain.buildForSender(tx, owner, ADMIN_GAS_BUDGET), sender: owner });
+    return json(context.request, {
+      txBytes: await context.chain.buildForSender(tx, owner, ADMIN_GAS_BUDGET),
+      sender: owner,
+    });
   } catch (error) {
     const abortCode = abortCodeOf(error);
     if (abortCode === null) throw error;
@@ -46,7 +51,8 @@ async function buildForOwner(context: Context, tx: Transaction, owner: string): 
 
 export async function readOurPool(context: Context, poolId: string): Promise<StakePool> {
   return context.chain.readPool(poolId).catch((error) => {
-    if (/not_a_stake_pool|not.?found|does not exist/i.test(String((error as Error)?.message))) return refuse(404, "pool_not_found");
+    if (/not_a_stake_pool|not.?found|does not exist/i.test(String((error as Error)?.message)))
+      return refuse(404, "pool_not_found");
     throw error;
   });
 }

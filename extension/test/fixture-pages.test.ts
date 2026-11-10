@@ -16,7 +16,8 @@ const SKIP = /^(SCRIPT|STYLE|NOSCRIPT|TEMPLATE)$/;
 
 function spacedText(node: Node): string {
   if (node.nodeType === 3) return node.nodeValue ?? "";
-  if (node.nodeType !== 1 || SKIP.test((node as Element).tagName) || (node as Element).hasAttribute("data-hidden")) return "";
+  if (node.nodeType !== 1 || SKIP.test((node as Element).tagName) || (node as Element).hasAttribute("data-hidden"))
+    return "";
   return [...node.childNodes].map(spacedText).join(" ");
 }
 
@@ -36,7 +37,11 @@ function documentFrom(html: string, bodyText?: string, url = "https://example.co
 }
 
 function saved(name: string, url: string): Document {
-  return documentFrom(readFileSync(join(FIXTURES, `${name}.html`), "utf8"), readFileSync(join(FIXTURES, `${name}.visible.txt`), "utf8"), url);
+  return documentFrom(
+    readFileSync(join(FIXTURES, `${name}.html`), "utf8"),
+    readFileSync(join(FIXTURES, `${name}.visible.txt`), "utf8"),
+    url,
+  );
 }
 
 // The pages show kickoff in the viewer's time zone; the parser reads it the same way.
@@ -68,12 +73,31 @@ test("a scores bar right before the match header does not count", () => {
 });
 
 test("the match's own full-time marker still counts", () => {
-  assert.equal(findFixture(page(`${BAR}<div><span>Newcastle United</span> <span>FT</span> <span>21 Nov 6:30 PM</span> <span>Arsenal</span></div>`), NOW), null);
+  assert.equal(
+    findFixture(
+      page(
+        `${BAR}<div><span>Newcastle United</span> <span>FT</span> <span>21 Nov 6:30 PM</span> <span>Arsenal</span></div>`,
+      ),
+      NOW,
+    ),
+    null,
+  );
 });
 
 test("the match's own live score still counts", () => {
-  assert.equal(findFixture(page(`<div><span>LIVE</span> <span>Newcastle United</span> <span>21 Nov 6:30 PM</span> <span>Arsenal</span></div>`), NOW), null);
-  assert.equal(findFixture(page(`<div><span>Newcastle United 2 - 1 Arsenal</span> <span>21 Nov 6:30 PM</span></div>`), NOW), null);
+  assert.equal(
+    findFixture(
+      page(
+        `<div><span>LIVE</span> <span>Newcastle United</span> <span>21 Nov 6:30 PM</span> <span>Arsenal</span></div>`,
+      ),
+      NOW,
+    ),
+    null,
+  );
+  assert.equal(
+    findFixture(page(`<div><span>Newcastle United 2 - 1 Arsenal</span> <span>21 Nov 6:30 PM</span></div>`), NOW),
+    null,
+  );
 });
 
 test("an old meeting further down the page does not count", () => {
@@ -95,7 +119,10 @@ test("a league table holding both teams does not stand in for the header", () =>
 });
 
 test("a team's record next to the date is not read as the day", () => {
-  const fixture = findFixture(page(`<div><span>Newcastle United 3-3-4</span> <span>Nov 21 6:30 PM</span> <span>Arsenal 9-0-1</span></div>`), NOW);
+  const fixture = findFixture(
+    page(`<div><span>Newcastle United 3-3-4</span> <span>Nov 21 6:30 PM</span> <span>Arsenal 9-0-1</span></div>`),
+    NOW,
+  );
   assert.equal(fixture?.startISO, new Date(2026, 10, 21, 18, 30).toISOString());
 });
 
@@ -107,7 +134,13 @@ test("a narrow layout that hides the full names still finds the header", () => {
 });
 
 test("a date that is itself hidden is not used", () => {
-  assert.equal(findFixture(page(`<div><span>Newcastle United</span> <span data-hidden>21 Nov 6:30 PM</span> <span>Arsenal</span></div>`), NOW), null);
+  assert.equal(
+    findFixture(
+      page(`<div><span>Newcastle United</span> <span data-hidden>21 Nov 6:30 PM</span> <span>Arsenal</span></div>`),
+      NOW,
+    ),
+    null,
+  );
 });
 
 test("a page with no fixture finds none", () => {

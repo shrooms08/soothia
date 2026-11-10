@@ -7,7 +7,16 @@
 // is a single recall against one namespace rather than a filter over everyone.
 
 export type RecordKind = "pick" | "outcome" | "lesson" | "pref" | "stake" | "profile" | "follow" | "unlock";
-export const RECORD_KINDS: readonly RecordKind[] = ["pick", "outcome", "lesson", "pref", "stake", "profile", "follow", "unlock"];
+export const RECORD_KINDS: readonly RecordKind[] = [
+  "pick",
+  "outcome",
+  "lesson",
+  "pref",
+  "stake",
+  "profile",
+  "follow",
+  "unlock",
+];
 
 export type Side = "YES" | "NO";
 
@@ -80,7 +89,17 @@ export interface OutcomeRecord {
   favourite: boolean;
 }
 
-export type LessonKey = "calibration" | "favourites" | "vs_market" | "stakes" | "stake_size" | "consensus" | "premium" | `entity:${string}` | `category:${string}` | `tail:${string}`;
+export type LessonKey =
+  | "calibration"
+  | "favourites"
+  | "vs_market"
+  | "stakes"
+  | "stake_size"
+  | "consensus"
+  | "premium"
+  | `entity:${string}`
+  | `category:${string}`
+  | `tail:${string}`;
 
 /** A pattern Soothia has learned about the user's calls. */
 export interface LessonRecord {
@@ -210,7 +229,9 @@ export function sentenceFor<K extends RecordKind>(kind: K, record: RecordByKind[
     }
     case "follow": {
       const follow = record as FollowRecord;
-      return follow.kind === "follow" ? `I follow @${follow.handle} on Soothia.` : `I no longer follow @${follow.handle} on Soothia.`;
+      return follow.kind === "follow"
+        ? `I follow @${follow.handle} on Soothia.`
+        : `I no longer follow @${follow.handle} on Soothia.`;
     }
     case "unlock": {
       const unlock = record as UnlockRecord;
@@ -218,7 +239,9 @@ export function sentenceFor<K extends RecordKind>(kind: K, record: RecordByKind[
     }
     case "profile": {
       const profile = record as ProfileRecord;
-      return profile.unpublished ? `My Soothia profile @${profile.handle} is no longer public.` : `My public Soothia profile is @${profile.handle}, for ${profile.address}.`;
+      return profile.unpublished
+        ? `My Soothia profile @${profile.handle} is no longer public.`
+        : `My public Soothia profile is @${profile.handle}, for ${profile.address}.`;
     }
     case "stake": {
       const stake = record as StakeRecord;

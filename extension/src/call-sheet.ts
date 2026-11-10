@@ -178,7 +178,8 @@ export function openCallSheet(host: CallHost): Sheet {
     }
     lockButton.dataset.side = side;
     premiumChoices.hidden = !premiumOn;
-    for (const [price, priceNode] of priceButtons) priceNode.classList.toggle("selected", customPrice.value.trim() === "" && price === premiumPrice);
+    for (const [price, priceNode] of priceButtons)
+      priceNode.classList.toggle("selected", customPrice.value.trim() === "" && price === premiumPrice);
     const badPrice = premiumOn && chosenPrice() === null;
     premiumNote.textContent = badPrice ? "Prices run from 0.01 to 0.5 SUI." : "Hidden until kickoff. You keep 90%.";
     if (!busy && !closed) lockButton.disabled = badPrice;
@@ -199,10 +200,16 @@ export function openCallSheet(host: CallHost): Sheet {
     if (pick.commit) {
       outcome.append(
         el("p", "question", "Locked on Sui · remembered on Walrus"),
-        externalLink("See the proof on Sui", `https://suivision.xyz/txblock/${encodeURIComponent(pick.commit.digest)}`, "link ext"),
+        externalLink(
+          "See the proof on Sui",
+          `https://suivision.xyz/txblock/${encodeURIComponent(pick.commit.digest)}`,
+          "link ext",
+        ),
       );
     } else if (pick.commitSkipped) {
-      outcome.append(el("p", "question", `Saved to Walrus. Sui proof skipped (${skipReasonText(pick.commitSkipped)}).`));
+      outcome.append(
+        el("p", "question", `Saved to Walrus. Sui proof skipped (${skipReasonText(pick.commitSkipped)}).`),
+      );
     } else {
       outcome.append(el("p", "question", "Saved to Walrus. The Sui proof didn't go through this time."));
     }
@@ -223,7 +230,18 @@ export function openCallSheet(host: CallHost): Sheet {
     busy = true;
     lockButton.disabled = true;
     setStatus("Locking your call…");
-    const response = await host.api<RecallSavedPick>("/recall/pick", callBody(host.tile, side, percent, host.page, host.fixture, prefill ? { tailOf: prefill.tailOf, flip: side !== prefill.side } : undefined, premiumMist));
+    const response = await host.api<RecallSavedPick>(
+      "/recall/pick",
+      callBody(
+        host.tile,
+        side,
+        percent,
+        host.page,
+        host.fixture,
+        prefill ? { tailOf: prefill.tailOf, flip: side !== prefill.side } : undefined,
+        premiumMist,
+      ),
+    );
     busy = false;
     if (response.ok && response.body) {
       const pick = response.body as RecallSavedPick;

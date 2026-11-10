@@ -65,7 +65,11 @@ export class TatumGrpcTransport implements RpcTransport {
     return mergeRpcOptions({}, options);
   }
 
-  private async call<I extends object, O extends object>(method: MethodInfo<I, O>, input: I, options: RpcOptions): Promise<O> {
+  private async call<I extends object, O extends object>(
+    method: MethodInfo<I, O>,
+    input: I,
+    options: RpcOptions,
+  ): Promise<O> {
     const body = encodeFrame(method.I.toBinary(input, options.binaryOptions));
     let response: Response;
     // A 429 means the gateway rejected the call unprocessed, so resending is safe.

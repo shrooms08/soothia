@@ -10,7 +10,9 @@ export const shortAddress = (address: string): string => `${address.slice(0, 6)}
 
 export function isConnectedWallet(value: unknown): value is ConnectedWallet {
   const wallet = value as Partial<ConnectedWallet> | null | undefined;
-  return typeof wallet?.address === "string" && typeof wallet.walletId === "string" && typeof wallet.walletName === "string";
+  return (
+    typeof wallet?.address === "string" && typeof wallet.walletId === "string" && typeof wallet.walletName === "string"
+  );
 }
 
 export interface WalletStorage {
@@ -78,7 +80,10 @@ export function createWalletSettings(bridge: WalletBridge, storage: WalletStorag
   async function connectAndSave(wallet: WalletSummary): Promise<void> {
     show(`Approve in ${wallet.name}…`);
     try {
-      const { address, walletName } = (await bridge.call("connect", { walletId: wallet.id })) as { address: string; walletName: string };
+      const { address, walletName } = (await bridge.call("connect", { walletId: wallet.id })) as {
+        address: string;
+        walletName: string;
+      };
       connected = { address, walletId: wallet.id, walletName };
       await storage.write(connected);
       render();

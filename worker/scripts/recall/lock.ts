@@ -5,7 +5,16 @@
 import { createInterface } from "node:readline/promises";
 import { upcomingFixtures, type Fixture } from "../../src/recall/espn";
 import { buildPick, dayLabel, fixturePickInput } from "../../src/recall/picks";
-import { appendLocalPick, fixtureKey, loadEnvOrExit, openStore, readLocalPicks, safeError, scrub, timeIn } from "./shared";
+import {
+  appendLocalPick,
+  fixtureKey,
+  loadEnvOrExit,
+  openStore,
+  readLocalPicks,
+  safeError,
+  scrub,
+  timeIn,
+} from "./shared";
 
 const MIN_LEAD_MS = 10 * 60_000;
 const DAY_MS = 86_400_000;
@@ -31,7 +40,8 @@ async function main(): Promise<number> {
   const all = [...byId.values()].filter(lockable).sort((a, b) => a.startISO.localeCompare(b.startISO));
   const fixtures = all.filter((fixture) => !locked.has(fixtureKey(fixture)));
 
-  if (all.length > fixtures.length) console.log(`Skipping ${all.length - fixtures.length} fixture(s) you already called.\n`);
+  if (all.length > fixtures.length)
+    console.log(`Skipping ${all.length - fixtures.length} fixture(s) you already called.\n`);
   if (fixtures.length === 0) {
     console.log("No fixtures left to call.");
     return 0;
@@ -54,7 +64,10 @@ async function main(): Promise<number> {
     let percent: number | null = null;
     let stop = false;
     for (;;) {
-      const answer = await Promise.race([input.question(`Chance ${fixture.home} beats ${fixture.away}? (1-99, Enter to skip) `), closed]);
+      const answer = await Promise.race([
+        input.question(`Chance ${fixture.home} beats ${fixture.away}? (1-99, Enter to skip) `),
+        closed,
+      ]);
       if (answer === null) {
         stop = true;
         break;
@@ -84,7 +97,9 @@ async function main(): Promise<number> {
         return store.write("pick", pick);
       });
       saved += 1;
-      console.log(`Locked ${pick.id}: ${lean} | job ${jobId} | anchor: after checkpoint ${checkpoint} | commit ${commit}`);
+      console.log(
+        `Locked ${pick.id}: ${lean} | job ${jobId} | anchor: after checkpoint ${checkpoint} | commit ${commit}`,
+      );
     } catch (error) {
       failed += 1;
       console.log(`NOT saved to Walrus (kept in the local backup): ${lean}\n  ${safeError(error, env)}`);

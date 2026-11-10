@@ -16,7 +16,16 @@ import { commitConfigured, latestCheckpoint, memoryAccount, tatumConfigured, ver
 import { SWEEP_PREFIX } from "./sweep";
 import { parseHandle } from "../social/context";
 import { applyTail, type TailRequest } from "../social/tail";
-import { consensusOf, feedItemFor, followedCallsOn, followedStance, loadFollowedItems, pushPickToFeed, visibleToViewer, type FeedItem } from "../social/feed";
+import {
+  consensusOf,
+  feedItemFor,
+  followedCallsOn,
+  followedStance,
+  loadFollowedItems,
+  pushPickToFeed,
+  visibleToViewer,
+  type FeedItem,
+} from "../social/feed";
 import { parsePriceMist, preparePremium, savePremiumEntry, type Seller } from "../social/premium";
 import { callScore } from "../social/stats";
 import { stakeSummaries } from "../stake/positions";
@@ -38,7 +47,8 @@ export function isHostname(site: unknown): site is string {
   return typeof site === "string" && HOSTNAME.test(site);
 }
 
-const shortString = (value: unknown, max: number): value is string => typeof value === "string" && value.trim().length > 0 && value.length <= max;
+const shortString = (value: unknown, max: number): value is string =>
+  typeof value === "string" && value.trim().length > 0 && value.length <= max;
 
 function isWebUrl(value: unknown): value is string {
   if (typeof value !== "string" || value.length > 500) return false;
@@ -49,7 +59,8 @@ function isWebUrl(value: unknown): value is string {
   }
 }
 
-export type PickValidation = { ok: true; input: PickInput; tail?: TailRequest; premiumMist?: bigint } | { ok: false; field: string };
+export type PickValidation =
+  { ok: true; input: PickInput; tail?: TailRequest; premiumMist?: bigint } | { ok: false; field: string };
 
 /** Checks a POST /recall/pick body. */
 export function validatePickBody(body: Record<string, unknown>, nowMs: number): PickValidation {
@@ -61,12 +72,19 @@ export function validatePickBody(body: Record<string, unknown>, nowMs: number): 
   if (typeof endTime !== "string" || !(Date.parse(endTime) > nowMs)) return fail("endTime");
 
   const rawSource = source as { site?: unknown; url?: unknown } | null | undefined;
-  if (typeof rawSource !== "object" || rawSource === null || !shortString(rawSource.site, 100) || !isWebUrl(rawSource.url)) return fail("source");
+  if (
+    typeof rawSource !== "object" ||
+    rawSource === null ||
+    !shortString(rawSource.site, 100) ||
+    !isWebUrl(rawSource.url)
+  )
+    return fail("source");
 
   let parsedFixture: PickFixture | undefined;
   if (fixture !== undefined) {
     const raw = fixture as Partial<PickFixture> | null;
-    if (typeof raw !== "object" || raw === null || !shortString(raw.home, 100) || !shortString(raw.away, 100)) return fail("fixture");
+    if (typeof raw !== "object" || raw === null || !shortString(raw.home, 100) || !shortString(raw.away, 100))
+      return fail("fixture");
     if (raw.subject !== "home" && raw.subject !== "away") return fail("fixture.subject");
     if (typeof raw.startISO !== "string" || !(Date.parse(raw.startISO) > nowMs)) return fail("fixture.startISO");
     if (raw.competition !== undefined && !shortString(raw.competition, 100)) return fail("fixture.competition");
@@ -114,11 +132,13 @@ export function validatePickBody(body: Record<string, unknown>, nowMs: number): 
 export function isDuplicatePick(existing: PickRecord[], input: PickInput): boolean {
   const key = (fixture: PickFixture): string => `${fixture.home}|${fixture.away}|${fixture.startISO}`;
   return existing.some(
-    (pick) => pick.question === input.question || (pick.fixture && input.fixture && key(pick.fixture) === key(input.fixture)),
+    (pick) =>
+      pick.question === input.question || (pick.fixture && input.fixture && key(pick.fixture) === key(input.fixture)),
   );
 }
 
-export const storeFor = (env: Env, userKey: string, cache = true): RecallStore => new RecallStore(memwalBackend(env), userKey, cache);
+export const storeFor = (env: Env, userKey: string, cache = true): RecallStore =>
+  new RecallStore(memwalBackend(env), userKey, cache);
 
 /** The user's memory key, or a Response explaining why there is none. */
 export async function identify(request: Request): Promise<string | Response> {
@@ -167,7 +187,9 @@ async function record(request: Request, env: Env, userKey: string): Promise<Resp
         detail: outcome?.detail ?? null,
         brier: outcome?.brier ?? null,
         anchor: pick.anchor ?? null,
-        commit: pick.commit ? { ...pick.commit, explorerUrl: `https://suivision.xyz/txblock/${pick.commit.digest}` } : null,
+        commit: pick.commit
+          ? { ...pick.commit, explorerUrl: `https://suivision.xyz/txblock/${pick.commit.digest}` }
+          : null,
         commitSkipped: pick.commit ? null : (pick.commitSkipped ?? null),
         stake: stakes.get(pick.id) ?? null,
       };
@@ -189,7 +211,12 @@ async function proof(request: Request, env: Env, userKey: string, pickId: string
   const result = await verifyCommit(env, pick.commit.digest, pick.hash);
   const kickoffMs = pick.fixture ? Date.parse(pick.fixture.startISO) : null;
   const gapMs = kickoffMs !== null && result.timestampMs !== null ? kickoffMs - result.timestampMs : null;
-  return json(request, { ...result, kickoffISO: pick.fixture?.startISO ?? null, gapMs, beforeKickoff: gapMs === null ? null : gapMs > 0 });
+  return json(request, {
+    ...result,
+    kickoffISO: pick.fixture?.startISO ?? null,
+    gapMs,
+    beforeKickoff: gapMs === null ? null : gapMs > 0,
+  });
 }
 
 interface Claim {
@@ -205,10 +232,12 @@ export function parseClaims(value: unknown): Claim[] | null {
   for (const raw of value.slice(0, MAX_INSIGHT_CLAIMS)) {
     const claim = raw as Partial<Claim> | null;
     if (typeof claim !== "object" || claim === null) return null;
-    if (!shortString(claim.id, 100) || !shortString(claim.question, MAX_QUESTION) || !shortString(claim.category, 40)) return null;
+    if (!shortString(claim.id, 100) || !shortString(claim.question, MAX_QUESTION) || !shortString(claim.category, 40))
+      return null;
     const fixture = claim.fixture as Partial<NonNullable<Claim["fixture"]>> | null | undefined;
     if (fixture !== undefined && fixture !== null) {
-      if (!shortString(fixture.home, 100) || !shortString(fixture.away, 100) || !shortString(fixture.startISO, 40)) return null;
+      if (!shortString(fixture.home, 100) || !shortString(fixture.away, 100) || !shortString(fixture.startISO, 40))
+        return null;
     }
     claims.push({
       id: claim.id,
@@ -230,10 +259,15 @@ async function insights(request: Request, env: Env, userKey: string): Promise<Re
   await Promise.all(
     claims.map(async (claim) => {
       const hits = await store.search("pick", claim.question, RELATED_LIMIT).catch(() => []);
-      related.set(claim.id, hits.map((hit) => ({ pick: hit.record, distance: hit.distance })));
+      related.set(
+        claim.id,
+        hits.map((hit) => ({ pick: hit.record, distance: hit.distance })),
+      );
     }),
   );
-  const followed = await loadFollowedItems({ env }, userKey).then((items) => visibleToViewer({ env }, userKey, items, Date.now())).catch(() => []);
+  const followed = await loadFollowedItems({ env }, userKey)
+    .then((items) => visibleToViewer({ env }, userKey, items, Date.now()))
+    .catch(() => []);
   const consensusLesson = latestBy(memory.lesson, (lesson) => lesson.key).get("consensus");
   const fixtures = new Map(claims.map((claim) => [claim.id, claim.fixture]));
   return json(request, {
@@ -243,7 +277,8 @@ async function insights(request: Request, env: Env, userKey: string): Promise<Re
     ).map((insight) => {
       const fixture = fixtures.get(insight.claimId);
       const followedCalls = fixture ? followedCallsOn(followed, fixture) : [];
-      const notes = followedCalls.length > 0 && consensusLesson ? [...insight.notes, consensusLesson.text] : insight.notes;
+      const notes =
+        followedCalls.length > 0 && consensusLesson ? [...insight.notes, consensusLesson.text] : insight.notes;
       return { ...insight, notes, followedCalls, consensus: consensusOf(followedCalls) };
     }),
     shrink: shrinkFactor(memory.lesson),
@@ -258,7 +293,8 @@ async function createPick(request: Request, env: Env, userKey: string): Promise<
   if (!checked.ok) return json(request, { error: "invalid_pick", field: checked.field }, 400);
   const store = storeFor(env, userKey);
   // The cached list folds in recent writes, which the relayer has not stored yet.
-  if (isDuplicatePick(mergePicks(await store.list("pick")), checked.input)) return json(request, { error: "duplicate_pick" }, 409);
+  if (isDuplicatePick(mergePicks(await store.list("pick")), checked.input))
+    return json(request, { error: "duplicate_pick" }, 409);
   let input = checked.input;
   if (checked.tail) {
     const tailed = await applyTail(env, input, checked.tail, userKey, fetchScoreboard, Date.now());
@@ -275,14 +311,28 @@ async function createPick(request: Request, env: Env, userKey: string): Promise<
   }
   if (input.fixture) {
     // Remembered at lock time, because what they said can change later. Never blocks the call.
-    const followed = await loadFollowedItems({ env }, userKey).then((items) => visibleToViewer({ env }, userKey, items, Date.now())).catch(() => []);
+    const followed = await loadFollowedItems({ env }, userKey)
+      .then((items) => visibleToViewer({ env }, userKey, items, Date.now()))
+      .catch(() => []);
     const stance = followedStance(input.fixture, input.pYes, followedCallsOn(followed, input.fixture));
     if (stance) input = { ...input, followedConsensus: stance };
   }
   const pick = await savePick(input, env, userKey, store);
   await pushPickToFeed(env, userKey, pick);
   if (seller) {
-    await savePremiumEntry(env, { pickId: pick.id, handle: seller.handle, payTo: seller.address, userKey, priceMist: (pick.premium as { priceMist: string }).priceMist, kickoffMs: seller.kickoffMs, item: feedItemFor(pick) as FeedItem }, Date.now());
+    await savePremiumEntry(
+      env,
+      {
+        pickId: pick.id,
+        handle: seller.handle,
+        payTo: seller.address,
+        userKey,
+        priceMist: (pick.premium as { priceMist: string }).priceMist,
+        kickoffMs: seller.kickoffMs,
+        item: feedItemFor(pick) as FeedItem,
+      },
+      Date.now(),
+    );
   }
   return json(request, pick);
 }
@@ -345,7 +395,9 @@ export async function recallRoute(request: Request, env: Env, path: string): Pro
         return await createPref(request, env, user);
     }
   } catch (error) {
-    console.warn(`Soothia: ${request.method} ${path} failed: ${String((error as Error)?.message ?? error).slice(0, 300)}`);
+    console.warn(
+      `Soothia: ${request.method} ${path} failed: ${String((error as Error)?.message ?? error).slice(0, 300)}`,
+    );
     return json(request, { error: "recall_unavailable" }, 502);
   }
 }

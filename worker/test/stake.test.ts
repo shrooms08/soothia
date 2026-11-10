@@ -1,9 +1,25 @@
 // Soothia staking helpers, without a network. Run with `npm test`.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { claimAmount, claimOpensAtMs, feeOn, inChallengeWindow, wasOverturned, winnerPayout, type SettledPool } from "../src/stake/math";
+import {
+  claimAmount,
+  claimOpensAtMs,
+  feeOn,
+  inChallengeWindow,
+  wasOverturned,
+  winnerPayout,
+  type SettledPool,
+} from "../src/stake/math";
 import { ConfigBcs, parseConfig, parsePool, parsePosition, PoolBcs, PositionBcs } from "../src/stake/readers";
-import { buildClaim, buildCollectFee, buildCreatePool, buildOverturn, buildResolve, buildSetDelays, buildStake } from "../src/stake/transactions";
+import {
+  buildClaim,
+  buildCollectFee,
+  buildCreatePool,
+  buildOverturn,
+  buildResolve,
+  buildSetDelays,
+  buildStake,
+} from "../src/stake/transactions";
 
 const SUI = 1_000_000_000n;
 const U64_MAX = 18_446_744_073_709_551_615n;
@@ -71,7 +87,15 @@ test("losers, open pools and spent positions can claim nothing", () => {
 });
 
 test("a void pool refunds the stake on either side", () => {
-  const pool: SettledPool = { status: "void", outcomeYes: false, yesTotal: 0n, noTotal: 0n, feeAmount: 0n, resolvedAtMs: 0n, challengeMs: CHALLENGE };
+  const pool: SettledPool = {
+    status: "void",
+    outcomeYes: false,
+    yesTotal: 0n,
+    noTotal: 0n,
+    feeAmount: 0n,
+    resolvedAtMs: 0n,
+    challengeMs: CHALLENGE,
+  };
   assert.equal(claimAmount(pool, position(true, SUI), OPENS), SUI);
   assert.equal(claimAmount(pool, position(false, 2n * SUI), OPENS), 2n * SUI);
 });
@@ -158,8 +182,23 @@ test("the config and a position read back from their bytes", () => {
     challenge_ms: 6n,
     registry: { id: ADDRESS, size: 0n },
   }).toBytes();
-  assert.deepEqual(parseConfig(config), { id: ADDRESS, treasury: OTHER, feeBps: 100n, minStake: 1n, maxStakePerUser: 2n, maxPool: 3n, refundAfterMs: 4n, minResolveDelayMs: 5n, challengeMs: 6n, registryTableId: ADDRESS });
-  assert.deepEqual(parsePosition(PositionBcs.serialize({ side: true, amount: 9n, claimed: false }).toBytes()), { side: true, amount: 9n, claimed: false });
+  assert.deepEqual(parseConfig(config), {
+    id: ADDRESS,
+    treasury: OTHER,
+    feeBps: 100n,
+    minStake: 1n,
+    maxStakePerUser: 2n,
+    maxPool: 3n,
+    refundAfterMs: 4n,
+    minResolveDelayMs: 5n,
+    challengeMs: 6n,
+    registryTableId: ADDRESS,
+  });
+  assert.deepEqual(parsePosition(PositionBcs.serialize({ side: true, amount: 9n, claimed: false }).toBytes()), {
+    side: true,
+    amount: 9n,
+    claimed: false,
+  });
 });
 
 const moveCall = (tx: ReturnType<typeof buildClaim>, index = 0) => tx.getData().commands[index].MoveCall!;
@@ -167,7 +206,11 @@ const moveCall = (tx: ReturnType<typeof buildClaim>, index = 0) => tx.getData().
 test("each builder targets the right function with the right arguments", () => {
   const cases: [ReturnType<typeof buildClaim>, string, number][] = [
     [buildCreatePool(IDS, { resolverCap: OTHER, questionHash: HASH, closeMs: 5n }), "create_pool", 5],
-    [buildResolve(IDS, { resolverCap: OTHER, poolId: ADDRESS, outcomeYes: true, evidence: "smoke test" }), "resolve", 5],
+    [
+      buildResolve(IDS, { resolverCap: OTHER, poolId: ADDRESS, outcomeYes: true, evidence: "smoke test" }),
+      "resolve",
+      5,
+    ],
     [buildClaim(IDS, { poolId: ADDRESS }), "claim", 2],
     [buildCollectFee(IDS, { poolId: ADDRESS }), "collect_fee", 3],
     [buildOverturn(IDS, { adminCap: OTHER, poolId: ADDRESS }), "overturn", 3],
@@ -181,9 +224,17 @@ test("each builder targets the right function with the right arguments", () => {
 });
 
 test("evidence is limited to 200 bytes, counted in UTF-8", () => {
-  assert.doesNotThrow(() => buildResolve(IDS, { resolverCap: OTHER, poolId: ADDRESS, outcomeYes: true, evidence: "a".repeat(200) }));
-  assert.throws(() => buildResolve(IDS, { resolverCap: OTHER, poolId: ADDRESS, outcomeYes: true, evidence: "a".repeat(201) }), /at most 200 bytes/);
-  assert.throws(() => buildResolve(IDS, { resolverCap: OTHER, poolId: ADDRESS, outcomeYes: true, evidence: "é".repeat(101) }), /at most 200 bytes/);
+  assert.doesNotThrow(() =>
+    buildResolve(IDS, { resolverCap: OTHER, poolId: ADDRESS, outcomeYes: true, evidence: "a".repeat(200) }),
+  );
+  assert.throws(
+    () => buildResolve(IDS, { resolverCap: OTHER, poolId: ADDRESS, outcomeYes: true, evidence: "a".repeat(201) }),
+    /at most 200 bytes/,
+  );
+  assert.throws(
+    () => buildResolve(IDS, { resolverCap: OTHER, poolId: ADDRESS, outcomeYes: true, evidence: "é".repeat(101) }),
+    /at most 200 bytes/,
+  );
 });
 
 test("a stake splits the amount from gas, then calls stake with it", () => {
@@ -195,6 +246,12 @@ test("a stake splits the amount from gas, then calls stake with it", () => {
 });
 
 test("hashes must be exactly 32 bytes", () => {
-  assert.throws(() => buildCreatePool(IDS, { resolverCap: OTHER, questionHash: "abcd", closeMs: 5n }), /questionHash must be 32 bytes/);
-  assert.throws(() => buildStake(IDS, { poolId: ADDRESS, side: true, amount: 1n, pickHash: "zz".repeat(32) }), /pickHash must be 32 bytes/);
+  assert.throws(
+    () => buildCreatePool(IDS, { resolverCap: OTHER, questionHash: "abcd", closeMs: 5n }),
+    /questionHash must be 32 bytes/,
+  );
+  assert.throws(
+    () => buildStake(IDS, { poolId: ADDRESS, side: true, amount: 1n, pickHash: "zz".repeat(32) }),
+    /pickHash must be 32 bytes/,
+  );
 });

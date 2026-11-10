@@ -6,7 +6,15 @@ import type { ScoreboardEvent, ScoreboardFetcher } from "../src/recall/espn";
 import type { PickInput } from "../src/recall/picks";
 import { validatePickBody } from "../src/recall/routes";
 import { clearMemoryCache } from "../src/store";
-import { consensusOf, followedCallsOn, isLockedItem, lockItem, visibleToViewer, type FeedItem, type FollowedItem } from "../src/social/feed";
+import {
+  consensusOf,
+  followedCallsOn,
+  isLockedItem,
+  lockItem,
+  visibleToViewer,
+  type FeedItem,
+  type FollowedItem,
+} from "../src/social/feed";
 import { isHidden, parsePriceMist, premiumEligibility, preparePremium } from "../src/social/premium";
 import { applyTail } from "../src/social/tail";
 
@@ -44,7 +52,16 @@ function kvFake() {
 
 function seller(data: Map<string, string>, score = 583, settled = 14): void {
   data.set("profileuser:u1", "ada");
-  data.set("profile:ada", JSON.stringify({ handle: "ada", address: ADDRESS, userKey: "u1", publicSince: "2026-01-01T00:00:00.000Z", shareHistory: true }));
+  data.set(
+    "profile:ada",
+    JSON.stringify({
+      handle: "ada",
+      address: ADDRESS,
+      userKey: "u1",
+      publicSince: "2026-01-01T00:00:00.000Z",
+      shareHistory: true,
+    }),
+  );
   data.set("socialstats:ada", JSON.stringify({ periods: { all: { stats: { score, settled } } } }));
 }
 
@@ -61,7 +78,9 @@ const event = (overrides: Partial<ScoreboardEvent> = {}): ScoreboardEvent => ({
   ...overrides,
 });
 
-const board = (found: ScoreboardEvent): ScoreboardFetcher => async (league) => ({ competition: "", events: league === "eng.1" ? [found] : [] });
+const board =
+  (found: ScoreboardEvent): ScoreboardFetcher =>
+  async (league) => ({ competition: "", events: league === "eng.1" ? [found] : [] });
 
 const input = (overrides: Partial<PickInput> = {}): PickInput => ({
   question: "Will Arsenal beat Newcastle?",
@@ -81,11 +100,18 @@ beforeEach(() => clearMemoryCache());
 test("a price is 0.01 to 0.5 SUI, as a whole number of MIST", () => {
   assert.equal(parsePriceMist("10000000"), 10_000_000n);
   assert.equal(parsePriceMist(500_000_000), 500_000_000n);
-  for (const bad of ["9999999", "500000001", "0", "1.5", -10_000_000, null, undefined, "1e8", {}]) assert.equal(parsePriceMist(bad), null, String(bad));
+  for (const bad of ["9999999", "500000001", "0", "1.5", -10_000_000, null, undefined, "1e8", {}])
+    assert.equal(parsePriceMist(bad), null, String(bad));
 });
 
 test("the pick body takes a premium price and refuses a bad one", () => {
-  const body = { question: "Will Arsenal beat Newcastle?", category: "sports", pYes: 0.7, endTime: "2026-11-21T20:00:00.000Z", source: { site: "espn.com", url: "https://espn.com/x" } };
+  const body = {
+    question: "Will Arsenal beat Newcastle?",
+    category: "sports",
+    pYes: 0.7,
+    endTime: "2026-11-21T20:00:00.000Z",
+    source: { site: "espn.com", url: "https://espn.com/x" },
+  };
   const good = validatePickBody({ ...body, premium: { priceMist: "20000000" } }, NOW);
   assert.equal(good.ok && good.premiumMist, 20_000_000n);
   const none = validatePickBody(body, NOW);
@@ -96,11 +122,25 @@ test("the pick body takes a premium price and refuses a bad one", () => {
 
 test("eligibility needs a public profile, a score of 550 and 10 settled calls", async () => {
   const none = kvFake();
-  assert.deepEqual(await premiumEligibility(none.env, "u1"), { eligible: false, handle: null, address: null, score: null, settled: 0, reason: "not_public" });
+  assert.deepEqual(await premiumEligibility(none.env, "u1"), {
+    eligible: false,
+    handle: null,
+    address: null,
+    score: null,
+    settled: 0,
+    reason: "not_public",
+  });
 
   const good = kvFake();
   seller(good.data);
-  assert.deepEqual(await premiumEligibility(good.env, "u1"), { eligible: true, handle: "ada", address: ADDRESS, score: 583, settled: 14, reason: null });
+  assert.deepEqual(await premiumEligibility(good.env, "u1"), {
+    eligible: true,
+    handle: "ada",
+    address: ADDRESS,
+    score: 583,
+    settled: 14,
+    reason: null,
+  });
 
   const edge = kvFake();
   seller(edge.data, 550, 10);
@@ -136,13 +176,23 @@ test("a premium call is refused once the match has started, or isn't on ESPN", a
   seller(data);
   const started = await preparePremium(env, "u1", input(), 20_000_000n, board(event({ state: "in" })), NOW);
   assert.deepEqual(started, { ok: false, status: 409, body: { error: "fixture_not_open" } });
-  const missing = await preparePremium(env, "u1", input(), 20_000_000n, async () => ({ competition: "", events: [] }), NOW);
+  const missing = await preparePremium(
+    env,
+    "u1",
+    input(),
+    20_000_000n,
+    async () => ({ competition: "", events: [] }),
+    NOW,
+  );
   assert.equal(missing.ok === false && missing.body.error, "fixture_not_on_espn");
 });
 
 test("a premium call needs a match and an eligible caller", async () => {
   const { data, env } = kvFake();
-  assert.equal((await preparePremium(env, "u1", input({ fixture: undefined }), 20_000_000n, board(event()), NOW)).ok, false);
+  assert.equal(
+    (await preparePremium(env, "u1", input({ fixture: undefined }), 20_000_000n, board(event()), NOW)).ok,
+    false,
+  );
   const refused = await preparePremium(env, "u1", input(), 20_000_000n, board(event()), NOW);
   assert.deepEqual(refused, { ok: false, status: 403, body: { error: "premium_not_eligible", reason: "not_public" } });
   assert.equal(data.size, 0);
@@ -153,7 +203,8 @@ test("a locked item gives no side, confidence, stake or question subject", () =>
   assert.deepEqual(Object.keys(locked).sort(), ["at", "fixture", "locked", "pickId", "premium", "proof"]);
   assert.deepEqual(Object.keys(locked.fixture).sort(), ["away", "competition", "home", "startISO"]);
   const text = JSON.stringify(locked);
-  for (const leak of ["Arsenal win", "YES", '"confidence"', "stakeMist", "subject"]) assert.equal(text.includes(leak), false, leak);
+  for (const leak of ["Arsenal win", "YES", '"confidence"', "stakeMist", "subject"])
+    assert.equal(text.includes(leak), false, leak);
 });
 
 test("a premium call is hidden until kickoff, and only then", () => {
@@ -188,7 +239,9 @@ test("an ordinary call is never locked", async () => {
 test("a locked call shows in followed calls without its side, and doesn't move the consensus", async () => {
   const { env } = kvFake();
   const match = { home: "Newcastle", away: "Arsenal", startISO: KICKOFF };
-  const others: FollowedItem[] = [{ handle: "bob", item: item({ pickId: "p2", premium: undefined, side: "NO", lean: "No Arsenal win" }) }];
+  const others: FollowedItem[] = [
+    { handle: "bob", item: item({ pickId: "p2", premium: undefined, side: "NO", lean: "No Arsenal win" }) },
+  ];
   const calls = followedCallsOn(await visibleToViewer({ env }, "buyer", [...followed, ...others], NOW), match);
   const locked = calls.find((call) => call.handle === "ada")!;
   assert.equal(JSON.stringify(locked).includes("Arsenal win"), false);
@@ -203,6 +256,13 @@ test("tailing a locked call is refused before any check that could give away the
   const wrongSide = input({ pYes: 0.2, tailOf: "ada" });
   const refused = await applyTail(env, wrongSide, { handle: "ada", flip: false }, "buyer", board(event()), NOW);
   assert.deepEqual(refused, { ok: false, status: 402, code: "tail_locked" });
-  const rightSide = await applyTail(env, input({ tailOf: "ada" }), { handle: "ada", flip: false }, "buyer", board(event()), NOW);
+  const rightSide = await applyTail(
+    env,
+    input({ tailOf: "ada" }),
+    { handle: "ada", flip: false },
+    "buyer",
+    board(event()),
+    NOW,
+  );
   assert.deepEqual(rightSide, { ok: false, status: 402, code: "tail_locked" });
 });

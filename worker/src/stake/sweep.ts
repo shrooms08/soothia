@@ -4,7 +4,13 @@
 // chain says now, so a run that dies half way is finished by the next one.
 
 import type { Env } from "../http";
-import { fetchScoreboard, locateFixture, resolutionOf, type FixtureSearch, type ScoreboardFetcher } from "../recall/espn";
+import {
+  fetchScoreboard,
+  locateFixture,
+  resolutionOf,
+  type FixtureSearch,
+  type ScoreboardFetcher,
+} from "../recall/espn";
 import { resolverKeypair } from "../recall/sui";
 import { cacheGet, cachePut, kvPut } from "../store";
 import { stakeSettings, tatumStakeChain, type StakeChain } from "./chain";
@@ -66,7 +72,10 @@ export async function releaseResolverLock(env: Env): Promise<void> {
   await env.SOOTHIA_CACHE.delete(RESOLVER_LOCK_KEY).catch(() => undefined);
 }
 
-export type Settlement = { action: "wait" } | { action: "void"; reason: string } | { action: "resolve"; outcomeYes: boolean; evidence: string };
+export type Settlement =
+  | { action: "wait" }
+  | { action: "void"; reason: string }
+  | { action: "resolve"; outcomeYes: boolean; evidence: string };
 
 /** What to do with an open pool past its resolve time. YES means the subject team won. */
 export function decideSettlement(subject: Subject, search: FixtureSearch, closeMs: number, nowMs: number): Settlement {
@@ -102,7 +111,10 @@ export interface StakeSweepDeps {
 const message = (error: unknown): string => String((error as Error)?.message ?? error).slice(0, 160);
 
 /** Advances up to one page of indexed pools. */
-export async function sweepStake(env: Env, deps: StakeSweepDeps = {}): Promise<{ checked: number; actions: SweepAction[] }> {
+export async function sweepStake(
+  env: Env,
+  deps: StakeSweepDeps = {},
+): Promise<{ checked: number; actions: SweepAction[] }> {
   const settings = stakeSettings(env);
   const chain = deps.chain ?? (settings && resolverKeypair(env) ? tatumStakeChain(env, settings) : null);
   if (!chain) return { checked: 0, actions: [] };
@@ -116,7 +128,11 @@ export async function sweepStake(env: Env, deps: StakeSweepDeps = {}): Promise<{
   await cachePut(CURSOR_KEY, page.list_complete ? null : page.cursor, CURSOR_TTL_SEC);
 
   const actions: SweepAction[] = [];
-  const record = (poolId: string, action: SweepAction["action"], extra: Pick<SweepAction, "digest" | "detail"> = {}): void => {
+  const record = (
+    poolId: string,
+    action: SweepAction["action"],
+    extra: Pick<SweepAction, "digest" | "detail"> = {},
+  ): void => {
     actions.push({ at: now.toISOString(), poolId, action, ...extra });
   };
   const drop = (poolId: string): Promise<void> => env.SOOTHIA_CACHE.delete(poolIndexKey(poolId));
@@ -170,7 +186,8 @@ export async function sweepStake(env: Env, deps: StakeSweepDeps = {}): Promise<{
     const digest = await chain!.resolvePool(pool.id, decision.outcomeYes, decision.evidence);
     record(pool.id, "resolve", { digest, detail: `${decision.outcomeYes ? "YES" : "NO"}: ${decision.evidence}` });
     const settled = await chain!.readPool(pool.id);
-    if (settled.status === "resolved") await writePoolIndex(env, entry, { phase: "resolved", dueMs: Number(claimOpensAtMs(settled)) });
+    if (settled.status === "resolved")
+      await writePoolIndex(env, entry, { phase: "resolved", dueMs: Number(claimOpensAtMs(settled)) });
     // The contract voids a pool with no stake on the winning side.
     else if (settled.status === "void") await drop(pool.id);
   }

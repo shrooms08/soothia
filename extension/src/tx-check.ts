@@ -54,7 +54,10 @@ function pureBytes(data: Data, argument: Argument | undefined, what: string): Ui
   return fromBase64(bytes);
 }
 
-function checkTarget(command: Data["commands"][number] | undefined, fn: string): NonNullable<Data["commands"][number]["MoveCall"]> {
+function checkTarget(
+  command: Data["commands"][number] | undefined,
+  fn: string,
+): NonNullable<Data["commands"][number]["MoveCall"]> {
   const call = command?.MoveCall;
   if (!call) throw new Refusal(`Expected a call to ${fn}.`);
   refuseIf(!sameAddress(call.package, STAKE_PACKAGE), "It calls a contract that is not Soothia's.");
@@ -81,7 +84,9 @@ function checkStake(data: Data, expected: Extract<ExpectedTx, { kind: "stake" }>
   const sideBytes = pureBytes(data, side, "The side");
   refuseIf(sideBytes.length !== 1 || bcs.bool().parse(sideBytes) !== expected.side, "It backs the other side.");
 
-  const fromSplit = (coin.$kind === "NestedResult" && coin.NestedResult[0] === 0 && coin.NestedResult[1] === 0) || (coin.$kind === "Result" && coin.Result === 0);
+  const fromSplit =
+    (coin.$kind === "NestedResult" && coin.NestedResult[0] === 0 && coin.NestedResult[1] === 0) ||
+    (coin.$kind === "Result" && coin.Result === 0);
   refuseIf(!fromSplit, "The stake does not use the split coin.");
 
   const hash = bcs.vector(bcs.u8()).parse(pureBytes(data, pickHash, "The call's hash"));
@@ -114,7 +119,9 @@ function checkRecipient(data: Data, argument: Argument | undefined, expected: st
   refuseIf(bytes.length !== 32 || !sameAddress(bcs.Address.parse(bytes), expected), "It pays someone else.");
 }
 
-const isSplitCoin = (argument: Argument): boolean => (argument.$kind === "NestedResult" && argument.NestedResult[0] === 0 && argument.NestedResult[1] === 0) || (argument.$kind === "Result" && argument.Result === 0);
+const isSplitCoin = (argument: Argument): boolean =>
+  (argument.$kind === "NestedResult" && argument.NestedResult[0] === 0 && argument.NestedResult[1] === 0) ||
+  (argument.$kind === "Result" && argument.Result === 0);
 
 function checkPay(data: Data, expected: Extract<ExpectedTx, { kind: "pay" }>): void {
   refuseIf(data.commands.length !== 2, "It does more than split a coin and pay.");
@@ -130,7 +137,10 @@ function checkPay(data: Data, expected: Extract<ExpectedTx, { kind: "pay" }>): v
   const [config, nonce, recipient, coin] = call.arguments;
   refuseIf(!sameAddress(sharedObjectId(data, config, "The config"), PAY_CONFIG), "It uses a different config.");
   const nonceBytes = bcs.vector(bcs.u8()).parse(pureBytes(data, nonce, "The nonce"));
-  refuseIf(nonceBytes.map((byte) => byte.toString(16).padStart(2, "0")).join("") !== expected.nonce, "It is tied to a different payment.");
+  refuseIf(
+    nonceBytes.map((byte) => byte.toString(16).padStart(2, "0")).join("") !== expected.nonce,
+    "It is tied to a different payment.",
+  );
   checkRecipient(data, recipient, expected.recipient);
   refuseIf(!isSplitCoin(coin), "The payment does not use the split coin.");
 }
@@ -151,7 +161,10 @@ function checkWithdraw(data: Data, expected: Extract<ExpectedTx, { kind: "withdr
   checkGasBudget(data);
   const transfer = data.commands[0].TransferObjects;
   if (!transfer) throw new Refusal("Expected a transfer.");
-  refuseIf(transfer.objects.length !== 1 || transfer.objects[0].$kind !== "GasCoin", "It does not send the whole balance.");
+  refuseIf(
+    transfer.objects.length !== 1 || transfer.objects[0].$kind !== "GasCoin",
+    "It does not send the whole balance.",
+  );
   checkRecipient(data, transfer.address, expected.recipient);
 }
 
@@ -159,7 +172,10 @@ function checkClaim(data: Data, expected: Extract<ExpectedTx, { kind: "claim" }>
   refuseIf(data.commands.length !== 1, "It does more than claim.");
   const call = checkTarget(data.commands[0], "claim");
   refuseIf(call.arguments.length !== 2, "The claim call has the wrong arguments.");
-  refuseIf(!sameAddress(sharedObjectId(data, call.arguments[0], "The pool"), expected.poolId), "It claims from a different pool.");
+  refuseIf(
+    !sameAddress(sharedObjectId(data, call.arguments[0], "The pool"), expected.poolId),
+    "It claims from a different pool.",
+  );
   refuseIf(!sameAddress(sharedObjectId(data, call.arguments[1], "The clock"), CLOCK), "It does not use the Sui clock.");
   refuseIf(data.inputs.length !== 2, "It carries extra inputs.");
 }
@@ -171,7 +187,10 @@ export function checkTransaction(txBytes: unknown, expected: ExpectedTx, sender:
     refuseIf(typeof txBytes !== "string" || !BASE64.test(txBytes), "It is not a built transaction.");
     const data = Transaction.from(fromBase64(txBytes as string)).getData();
     refuseIf(!data.sender || !sameAddress(data.sender, sender), "It would be sent from a different address.");
-    refuseIf(Boolean(data.gasData.owner) && !sameAddress(data.gasData.owner as string, sender), "Someone else would pay its gas.");
+    refuseIf(
+      Boolean(data.gasData.owner) && !sameAddress(data.gasData.owner as string, sender),
+      "Someone else would pay its gas.",
+    );
     if (expected.kind === "stake") checkStake(data, expected);
     else if (expected.kind === "claim") checkClaim(data, expected);
     else if (expected.kind === "pay") checkPay(data, expected);

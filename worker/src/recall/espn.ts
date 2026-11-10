@@ -47,7 +47,8 @@ export interface Fixture {
 
 export type Winner = "home" | "away" | "draw";
 
-export type Resolution = { status: "final"; winner: Winner; detail: string } | { status: "pending" } | { status: "not_found" };
+export type Resolution =
+  { status: "final"; winner: Winner; detail: string } | { status: "pending" } | { status: "not_found" };
 
 export interface FixtureQuery {
   home: string;
@@ -137,7 +138,10 @@ export function yyyymmdd(date: Date): string {
 }
 
 /** Every not-yet-started fixture ESPN lists on a UTC day, soonest first. */
-export async function upcomingFixtures(dateUTC: Date, fetcher: ScoreboardFetcher = fetchScoreboard): Promise<Fixture[]> {
+export async function upcomingFixtures(
+  dateUTC: Date,
+  fetcher: ScoreboardFetcher = fetchScoreboard,
+): Promise<Fixture[]> {
   const day = yyyymmdd(dateUTC);
   const boards = await Promise.allSettled(LEAGUES.map((league) => fetcher(league, day)));
   const fixtures: Fixture[] = [];
@@ -197,14 +201,19 @@ export function resolutionOf(event: ScoreboardEvent): Resolution {
 }
 
 /** Finds a fixture on ESPN and reports its result. Throws if ESPN could not be checked. */
-export async function resolveFixture(query: FixtureQuery, fetcher: ScoreboardFetcher = fetchScoreboard): Promise<Resolution> {
+export async function resolveFixture(
+  query: FixtureQuery,
+  fetcher: ScoreboardFetcher = fetchScoreboard,
+): Promise<Resolution> {
   const startMs = Date.parse(query.startISO);
   if (Number.isNaN(startMs)) return { status: "not_found" };
   const days = [yyyymmdd(new Date(startMs)), yyyymmdd(new Date(startMs + DAY_MS))];
   const leagues = query.league ? [query.league] : [...LEAGUES];
   const boards = await Promise.allSettled(leagues.flatMap((league) => days.map((day) => fetcher(league, day))));
   const events = boards.flatMap((board) => (board.status === "fulfilled" ? board.value.events : []));
-  const event = events.find((candidate) => sameTeam(query.home, candidate.home) && sameTeam(query.away, candidate.away));
+  const event = events.find(
+    (candidate) => sameTeam(query.home, candidate.home) && sameTeam(query.away, candidate.away),
+  );
   if (event) return resolutionOf(event);
   // A failed league might be the one holding this fixture, so "not found" would be a guess.
   if (boards.some((board) => board.status === "rejected")) throw new Error("espn_unavailable");
@@ -227,11 +236,16 @@ export interface FixtureSearch {
 }
 
 /** Finds a fixture whichever way round it is listed. Throws if ESPN could not be checked. */
-export async function locateFixture(query: FixtureQuery, fetcher: ScoreboardFetcher = fetchScoreboard): Promise<FixtureSearch> {
+export async function locateFixture(
+  query: FixtureQuery,
+  fetcher: ScoreboardFetcher = fetchScoreboard,
+): Promise<FixtureSearch> {
   const startMs = Date.parse(query.startISO);
   if (Number.isNaN(startMs)) return { located: null, eventsSeen: 0 };
   const days = [yyyymmdd(new Date(startMs)), yyyymmdd(new Date(startMs + DAY_MS))];
-  const searches = (query.league ? [query.league] : [...LEAGUES]).flatMap((league) => days.map((day) => ({ league, day })));
+  const searches = (query.league ? [query.league] : [...LEAGUES]).flatMap((league) =>
+    days.map((day) => ({ league, day })),
+  );
   const boards = await Promise.allSettled(searches.map(({ league, day }) => fetcher(league, day)));
 
   let eventsSeen = 0;
@@ -243,7 +257,12 @@ export async function locateFixture(query: FixtureQuery, fetcher: ScoreboardFetc
       const direct = sameTeam(query.home, event.home) && sameTeam(query.away, event.away);
       const reversed = sameTeam(query.home, event.away) && sameTeam(query.away, event.home);
       if (found || (!direct && !reversed)) continue;
-      found = { event, league: searches[index].league, reversed: !direct, notPlayed: NOT_PLAYED.test(event.statusName) };
+      found = {
+        event,
+        league: searches[index].league,
+        reversed: !direct,
+        notPlayed: NOT_PLAYED.test(event.statusName),
+      };
     }
   });
   if (!found && boards.some((board) => board.status === "rejected")) throw new Error("espn_unavailable");

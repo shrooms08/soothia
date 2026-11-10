@@ -42,12 +42,7 @@
         return r.ok ? r.json() : null;
       })
       .then(function (s) {
-        if (
-          !s ||
-          typeof s.totalCalls !== "number" ||
-          typeof s.provenCalls !== "number" ||
-          typeof s.users !== "number"
-        )
+        if (!s || typeof s.totalCalls !== "number" || typeof s.provenCalls !== "number" || typeof s.users !== "number")
           return;
         strip.hidden = false;
         var nodes = strip.querySelectorAll("[data-stat]");

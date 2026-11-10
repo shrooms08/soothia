@@ -1,7 +1,16 @@
 // The admin routes and the admin page's headers, with the chain faked. Run with `npm test`.
 import assert from "node:assert/strict";
 import { beforeEach, test } from "node:test";
-import { DRILL_STEPS, drillStepEnabled, emptyDrill, errorText, formatLeft, sameAddress, suiAmount, type DrillState } from "../admin/logic";
+import {
+  DRILL_STEPS,
+  drillStepEnabled,
+  emptyDrill,
+  errorText,
+  formatLeft,
+  sameAddress,
+  suiAmount,
+  type DrillState,
+} from "../admin/logic";
 import type { Env } from "../src/http";
 import worker from "../src/index";
 import { clearMemoryCache } from "../src/store";
@@ -17,7 +26,11 @@ const ADMIN = "x".repeat(32);
 const POOL = `0x${"bb".repeat(32)}`;
 const OWNER = `0x${"8e".repeat(32)}`;
 const CAP = `0x${"6b".repeat(32)}`;
-const SETTINGS: StakeSettings = { packageId: `0x${"01".repeat(32)}`, configId: `0x${"02".repeat(32)}`, resolverCap: `0x${"03".repeat(32)}` };
+const SETTINGS: StakeSettings = {
+  packageId: `0x${"01".repeat(32)}`,
+  configId: `0x${"02".repeat(32)}`,
+  resolverCap: `0x${"03".repeat(32)}`,
+};
 const CONFIG = { minResolveDelayMs: 8_100_000n, challengeMs: 21_600_000n } as StakeConfig;
 
 const pool = (overrides: Partial<StakePool> = {}): StakePool =>
@@ -47,7 +60,10 @@ function harness(chain: Partial<StakeChain> = {}) {
     readPool: async () => pool(),
     objectOwner: async () => OWNER,
     balanceOf: async () => SUI,
-    buildForSender: async (tx: { getData(): { commands: { MoveCall?: { module: string; function: string; arguments: unknown[] } }[] } }, sender: string) => {
+    buildForSender: async (
+      tx: { getData(): { commands: { MoveCall?: { module: string; function: string; arguments: unknown[] } }[] } },
+      sender: string,
+    ) => {
       const call = tx.getData().commands[0].MoveCall!;
       built.push({ target: `${call.module}::${call.function}`, sender, args: call.arguments.length });
       return "BYTES";
@@ -62,7 +78,12 @@ type Harness = ReturnType<typeof harness>;
 
 async function call(h: Harness, method: string, path: string, body?: unknown, token: string | null = ADMIN) {
   const headers: Record<string, string> = token ? { "X-Soothia-Admin": token } : {};
-  const response = await stakeRoute(new Request(`https://x${path}`, { method, headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }), h.env, path, h.deps);
+  const response = await stakeRoute(
+    new Request(`https://x${path}`, { method, headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }),
+    h.env,
+    path,
+    h.deps,
+  );
   return { status: response.status, body: (await response.json()) as Record<string, any> };
 }
 
@@ -105,7 +126,10 @@ test("info says when the delays are not the production values", async () => {
 });
 
 test("a cap nobody owns, or a missing id, is a clear error", async () => {
-  assert.equal((await call(harness({ objectOwner: async () => null }), "GET", "/stake/admin/info")).body.error, "admin_cap_has_no_owner");
+  assert.equal(
+    (await call(harness({ objectOwner: async () => null }), "GET", "/stake/admin/info")).body.error,
+    "admin_cap_has_no_owner",
+  );
   const h = harness();
   (h.env as { STAKE_ADMIN_CAP?: string }).STAKE_ADMIN_CAP = undefined;
   assert.equal((await call(h, "GET", "/stake/admin/info")).body.error, "admin_cap_not_configured");
@@ -142,7 +166,10 @@ test("an overturn on something else is a 404, and a bad id a 400", async () => {
     },
   });
   assert.equal((await call(h, "POST", "/stake/admin/overturn/build", { poolId: POOL })).status, 404);
-  assert.equal((await call(harness(), "POST", "/stake/admin/overturn/build", { poolId: "0x1" })).body.error, "invalid_pool_id");
+  assert.equal(
+    (await call(harness(), "POST", "/stake/admin/overturn/build", { poolId: "0x1" })).body.error,
+    "invalid_pool_id",
+  );
 });
 
 test("a contract refusal while building comes back with its code", async () => {
@@ -158,14 +185,20 @@ test("a contract refusal while building comes back with its code", async () => {
 
 test("setting the delays is built for the owner", async () => {
   const h = harness();
-  const { status } = await call(h, "POST", "/stake/admin/config/build", { min_resolve_delay_ms: 0, challenge_ms: 900_000 });
+  const { status } = await call(h, "POST", "/stake/admin/config/build", {
+    min_resolve_delay_ms: 0,
+    challenge_ms: 900_000,
+  });
   assert.equal(status, 200);
   assert.deepEqual(h.built, [{ target: "pool::set_delays", sender: OWNER, args: 4 }]);
 });
 
 test("a wallet too poor to pay gas gets a clear error before anything is built", async () => {
   const h = harness({ balanceOf: async () => 19_999_999n });
-  const { status, body } = await call(h, "POST", "/stake/admin/config/build", { min_resolve_delay_ms: 0, challenge_ms: 900_000 });
+  const { status, body } = await call(h, "POST", "/stake/admin/config/build", {
+    min_resolve_delay_ms: 0,
+    challenge_ms: 900_000,
+  });
   assert.equal(status, 409);
   assert.deepEqual(body, { error: "admin_wallet_low_balance", neededMist: "20000000" });
   assert.equal(h.built.length, 0);
@@ -204,7 +237,8 @@ function pageEnv(): { env: Env; asked: string[] } {
 }
 
 const ctx = { waitUntil: () => undefined } as unknown as ExecutionContext;
-const fetchPage = (env: Env, path: string, init?: RequestInit) => worker.fetch(new Request(`https://api.soothia.fun${path}`, init) as never, env, ctx);
+const fetchPage = (env: Env, path: string, init?: RequestInit) =>
+  worker.fetch(new Request(`https://api.soothia.fun${path}`, init) as never, env, ctx);
 
 test("/admin serves the page, unindexed and locked down", async () => {
   const { env, asked } = pageEnv();
@@ -253,7 +287,18 @@ const GAS_WALLET = `0x${"fd".repeat(32)}`;
 const DRILL_CONFIG = { minResolveDelayMs: 0n, challengeMs: DRILL_CHALLENGE_MS } as StakeConfig;
 const CLOSE = NOW + 120_000;
 
-function drillHarness(options: { pool?: Partial<StakePool>; position?: StakePosition | null; config?: StakeConfig; marked?: boolean; chain?: Partial<StakeChain>; lock?: boolean; capUsed?: number; balance?: bigint } = {}) {
+function drillHarness(
+  options: {
+    pool?: Partial<StakePool>;
+    position?: StakePosition | null;
+    config?: StakeConfig;
+    marked?: boolean;
+    chain?: Partial<StakeChain>;
+    lock?: boolean;
+    capUsed?: number;
+    balance?: bigint;
+  } = {},
+) {
   const data = new Map<string, { value: string; metadata?: unknown }>();
   const calls: string[] = [];
   let hash = "11".repeat(32);
@@ -269,14 +314,23 @@ function drillHarness(options: { pool?: Partial<StakePool>; position?: StakePosi
     delete: async (key: string) => {
       data.delete(key);
     },
-    list: async ({ prefix }: { prefix: string }) => ({ keys: [...data.entries()].filter(([name]) => name.startsWith(prefix)).map(([name, entry]) => ({ name, metadata: entry.metadata })), list_complete: true }),
+    list: async ({ prefix }: { prefix: string }) => ({
+      keys: [...data.entries()]
+        .filter(([name]) => name.startsWith(prefix))
+        .map(([name, entry]) => ({ name, metadata: entry.metadata })),
+      list_complete: true,
+    }),
   };
-  if (options.marked !== false) data.set(drillKey(POOL), { value: JSON.stringify({ poolId: POOL, questionHash: hash, timestamp: NOW, closeMs: CLOSE }) });
+  if (options.marked !== false)
+    data.set(drillKey(POOL), {
+      value: JSON.stringify({ poolId: POOL, questionHash: hash, timestamp: NOW, closeMs: CLOSE }),
+    });
   if (options.lock) data.set("stake:resolver-lock", { value: "1" });
   if (options.capUsed) data.set("stakecap:2026-11-20:pools", { value: String(options.capUsed) });
   const chain = {
     readConfig: async () => options.config ?? DRILL_CONFIG,
-    readPool: async () => pool({ questionHash: hash, status: "open", closeMs: BigInt(CLOSE), yes: 0n, resolvedAtMs: 0n, ...options.pool }),
+    readPool: async () =>
+      pool({ questionHash: hash, status: "open", closeMs: BigInt(CLOSE), yes: 0n, resolvedAtMs: 0n, ...options.pool }),
     readPosition: async () => options.position ?? null,
     balanceOf: async () => options.balance ?? SUI,
     gasWalletAddress: () => GAS_WALLET,
@@ -304,7 +358,8 @@ function drillHarness(options: { pool?: Partial<StakePool>; position?: StakePosi
 }
 
 type DrillHarness = ReturnType<typeof drillHarness>;
-const drill = (h: DrillHarness, step: string, body: unknown = { poolId: POOL }) => call(h as unknown as Harness, "POST", `/stake/admin/drill/${step}`, body);
+const drill = (h: DrillHarness, step: string, body: unknown = { poolId: POOL }) =>
+  call(h as unknown as Harness, "POST", `/stake/admin/drill/${step}`, body);
 
 test("creating a drill pool closes in two minutes, uses the drill hash, and marks it", async () => {
   const h = drillHarness({ marked: false });
@@ -322,8 +377,15 @@ test("creating a drill pool closes in two minutes, uses the drill hash, and mark
 test("the sweep never touches a drill pool", async () => {
   const h = drillHarness({ marked: false });
   await drill(h, "create", {});
-  assert.equal([...h.data.keys()].some((key) => key.startsWith("stakepool:")), false);
-  const result = await sweepStake(h.env, { chain: h.chain, fetcher: async () => assert.fail("should not call ESPN"), now: new Date(CLOSE + 7 * 86_400_000) });
+  assert.equal(
+    [...h.data.keys()].some((key) => key.startsWith("stakepool:")),
+    false,
+  );
+  const result = await sweepStake(h.env, {
+    chain: h.chain,
+    fetcher: async () => assert.fail("should not call ESPN"),
+    now: new Date(CLOSE + 7 * 86_400_000),
+  });
   assert.deepEqual(result, { checked: 0, actions: [] });
 });
 
@@ -382,14 +444,20 @@ test("stake puts exactly 0.1 SUI on YES from the gas wallet", async () => {
 });
 
 test("stake is refused once closed, once done, or on a settled pool", async () => {
-  assert.equal((await drill(drillHarness({ pool: { closeMs: BigInt(NOW) } }), "stake")).body.error, "drill_pool_closed");
-  assert.equal((await drill(drillHarness({ position: { side: true, amount: 1n, claimed: false } }), "stake")).body.error, "already_staked");
+  assert.equal(
+    (await drill(drillHarness({ pool: { closeMs: BigInt(NOW) } }), "stake")).body.error,
+    "drill_pool_closed",
+  );
+  assert.equal(
+    (await drill(drillHarness({ position: { side: true, amount: 1n, claimed: false } }), "stake")).body.error,
+    "already_staked",
+  );
   assert.equal((await drill(drillHarness({ pool: { status: "void" } }), "stake")).body.error, "pool_not_open");
 });
 
 const CLOSED = { closeMs: BigInt(NOW - 1), yes: DRILL_STAKE_MIST };
 
-test("resolve records YES with the evidence \"drill\" after close", async () => {
+test('resolve records YES with the evidence "drill" after close', async () => {
   const h = drillHarness({ pool: CLOSED });
   assert.equal((await drill(h, "resolve")).body.digest, "D-resolve");
   assert.deepEqual(h.calls, [`resolve ${POOL} true drill`]);
@@ -400,9 +468,15 @@ test("resolve waits for close, needs a stake, and respects the lock", async () =
   const early = await drill(drillHarness({ pool: { yes: DRILL_STAKE_MIST } }), "resolve");
   assert.equal(early.body.error, "drill_pool_not_closed");
   assert.equal(early.body.closeMs, CLOSE);
-  assert.equal((await drill(drillHarness({ pool: { closeMs: BigInt(NOW - 1) } }), "resolve")).body.error, "nothing_staked");
+  assert.equal(
+    (await drill(drillHarness({ pool: { closeMs: BigInt(NOW - 1) } }), "resolve")).body.error,
+    "nothing_staked",
+  );
   assert.equal((await drill(drillHarness({ pool: CLOSED, lock: true }), "resolve")).body.error, "resolver_busy");
-  assert.equal((await drill(drillHarness({ pool: { ...CLOSED, status: "resolved" } }), "resolve")).body.error, "pool_not_open");
+  assert.equal(
+    (await drill(drillHarness({ pool: { ...CLOSED, status: "resolved" } }), "resolve")).body.error,
+    "pool_not_open",
+  );
 });
 
 test("a contract refusal in a drill step comes back with its code", async () => {
@@ -430,21 +504,36 @@ test("refund claims for the gas wallet and reports the full amount", async () =>
 });
 
 test("a short refund is reported as short", async () => {
-  const h = drillHarness({ pool: { status: "void" }, position: STAKED, chain: { claimFromGasWallet: async () => ({ digest: "D", amount: 99_000_000n }) } });
+  const h = drillHarness({
+    pool: { status: "void" },
+    position: STAKED,
+    chain: { claimFromGasWallet: async () => ({ digest: "D", amount: 99_000_000n }) },
+  });
   assert.equal((await drill(h, "refund")).body.fullRefund, false);
 });
 
 test("refund waits for the overturn and only happens once", async () => {
-  assert.equal((await drill(drillHarness({ pool: { status: "resolved" }, position: STAKED }), "refund")).body.error, "pool_not_void");
-  assert.equal((await drill(drillHarness({ pool: { status: "void" }, position: { ...STAKED, claimed: true } }), "refund")).body.error, "already_refunded");
+  assert.equal(
+    (await drill(drillHarness({ pool: { status: "resolved" }, position: STAKED }), "refund")).body.error,
+    "pool_not_void",
+  );
+  assert.equal(
+    (await drill(drillHarness({ pool: { status: "void" }, position: { ...STAKED, claimed: true } }), "refund")).body
+      .error,
+    "already_refunded",
+  );
   assert.equal((await drill(drillHarness({ pool: { status: "void" } }), "refund")).body.error, "no_position");
 });
 
 test("drill buttons run in order, and only for the AdminCap's wallet", () => {
-  const enabled = (state: DrillState, owner = true) => DRILL_STEPS.filter((step) => drillStepEnabled(step, state, owner));
+  const enabled = (state: DrillState, owner = true) =>
+    DRILL_STEPS.filter((step) => drillStepEnabled(step, state, owner));
   assert.deepEqual(enabled(emptyDrill()), ["shorten", "restore"]);
   assert.deepEqual(enabled(emptyDrill(), false), []);
   assert.deepEqual(enabled({ ...emptyDrill(), done: { shorten: "d" } }), ["create", "restore"]);
-  assert.deepEqual(enabled({ ...emptyDrill(), done: { shorten: "d", create: "d", stake: "d", resolve: "d", overturn: "d" } }), ["refund", "restore"]);
+  assert.deepEqual(
+    enabled({ ...emptyDrill(), done: { shorten: "d", create: "d", stake: "d", resolve: "d", overturn: "d" } }),
+    ["refund", "restore"],
+  );
   assert.deepEqual(enabled({ ...emptyDrill(), done: { restore: "d" } }), ["shorten", "restore"]);
 });

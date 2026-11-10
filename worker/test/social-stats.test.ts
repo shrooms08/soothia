@@ -1,7 +1,19 @@
 // Call Score and profile stats. Run with `npm test`.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { boardValue, callScore, computeStats, findBreakdown, MAX_BOARD_ROWS, rankBoard, statsForPeriod, streaks, type CallEntry, type StakeEntry, type Stats } from "../src/social/stats";
+import {
+  boardValue,
+  callScore,
+  computeStats,
+  findBreakdown,
+  MAX_BOARD_ROWS,
+  rankBoard,
+  statsForPeriod,
+  streaks,
+  type CallEntry,
+  type StakeEntry,
+  type Stats,
+} from "../src/social/stats";
 
 const NOW = Date.parse("2026-11-09T12:00:00.000Z");
 const DAY = 86_400_000;
@@ -13,7 +25,12 @@ const call = (hit: boolean | null, daysAgo = 1, overrides: Partial<CallEntry> = 
   result: hit === null ? null : { hit, brier: hit ? 0.09 : 0.49 },
   ...overrides,
 });
-const stake = (result: StakeEntry["result"], stakedMist = SUI, payoutMist = 0n, overrides: Partial<StakeEntry> = {}): StakeEntry => ({
+const stake = (
+  result: StakeEntry["result"],
+  stakedMist = SUI,
+  payoutMist = 0n,
+  overrides: Partial<StakeEntry> = {},
+): StakeEntry => ({
   kickoffMs: NOW - DAY,
   competition: "English Premier League",
   teams: ["Arsenal", "Chelsea"],
@@ -63,7 +80,10 @@ test("streaks run in kickoff order, and an open call does not break one", () => 
 });
 
 test("stakes: staked, returned, profit, ROI and counts", () => {
-  const stats = computeStats([], [stake("won", SUI, 1_500_000_000n), stake("won", 2n * SUI, 2_200_000_000n), stake("lost", SUI), stake(null, SUI)]);
+  const stats = computeStats(
+    [],
+    [stake("won", SUI, 1_500_000_000n), stake("won", 2n * SUI, 2_200_000_000n), stake("lost", SUI), stake(null, SUI)],
+  );
   assert.equal(stats.stakedMist, (5n * SUI).toString());
   assert.equal(stats.returnedMist, "3700000000");
   // +0.5 +0.2 -1 = -0.3 on 4 settled
@@ -74,7 +94,14 @@ test("stakes: staked, returned, profit, ROI and counts", () => {
 });
 
 test("the best multiplier names its match", () => {
-  const stats = computeStats([], [stake("won", SUI, 1_500_000_000n, { match: "A vs B" }), stake("won", SUI, 3_000_000_000n, { match: "C vs D" }), stake("lost", SUI)]);
+  const stats = computeStats(
+    [],
+    [
+      stake("won", SUI, 1_500_000_000n, { match: "A vs B" }),
+      stake("won", SUI, 3_000_000_000n, { match: "C vs D" }),
+      stake("lost", SUI),
+    ],
+  );
   assert.deepEqual(stats.bestMultiplier, { value: 3, match: "C vs D" });
   assert.equal(computeStats([], [stake("lost")]).bestMultiplier, null);
 });
@@ -112,7 +139,12 @@ test("breakdowns by league and by team", () => {
 });
 
 test("breakdowns are found whatever the case or alias", () => {
-  const { leagues, teams } = statsForPeriod([call(true, 1, { teams: ["Newcastle United", "Arsenal"] })], [], "all", NOW);
+  const { leagues, teams } = statsForPeriod(
+    [call(true, 1, { teams: ["Newcastle United", "Arsenal"] })],
+    [],
+    "all",
+    NOW,
+  );
   assert.ok(findBreakdown(leagues, "english premier league", "league"));
   assert.ok(findBreakdown(teams, "Newcastle", "team"));
   assert.ok(findBreakdown(teams, "ARSENAL FC", "team"));
@@ -142,16 +174,41 @@ test("boards sort best first, break ties, and number the rows", () => {
     { handle: "dee", stats: statsOf({ settled: 10, score: 900 }) },
     { handle: "new", stats: statsOf({ settled: 2, score: 999 }) },
   ]);
-  assert.deepEqual(rows.map((row) => [row.rank, row.handle]), [[1, "dee"], [2, "cal"], [3, "amy"], [4, "bob"]]);
+  assert.deepEqual(
+    rows.map((row) => [row.rank, row.handle]),
+    [
+      [1, "dee"],
+      [2, "cal"],
+      [3, "amy"],
+      [4, "bob"],
+    ],
+  );
 });
 
 test("a row carries the fields the pages show", () => {
-  const stats = computeStats(Array.from({ length: 10 }, () => call(true)), [stake("won", SUI, 2n * SUI)]);
+  const stats = computeStats(
+    Array.from({ length: 10 }, () => call(true)),
+    [stake("won", SUI, 2n * SUI)],
+  );
   const [row] = rankBoard("score", [{ handle: "amy", stats }]);
-  assert.deepEqual(row, { rank: 1, handle: "amy", score: stats.score, value: stats.score, calls: 10, hitRate: 1, profit: SUI.toString(), roi: 100, bestMultiplier: 2, streak: 10 });
+  assert.deepEqual(row, {
+    rank: 1,
+    handle: "amy",
+    score: stats.score,
+    value: stats.score,
+    calls: 10,
+    hitRate: 1,
+    profit: SUI.toString(),
+    roi: 100,
+    bestMultiplier: 2,
+    streak: 10,
+  });
 });
 
 test("a board keeps at most 100 rows", () => {
-  const entries = Array.from({ length: 150 }, (_, i) => ({ handle: `user${i}`, stats: statsOf({ settled: 10, score: i }) }));
+  const entries = Array.from({ length: 150 }, (_, i) => ({
+    handle: `user${i}`,
+    stats: statsOf({ settled: 10, score: i }),
+  }));
   assert.equal(rankBoard("score", entries).length, MAX_BOARD_ROWS);
 });

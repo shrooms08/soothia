@@ -74,7 +74,11 @@ export function tatumPayChain(env: RecallEnv, settings: PaySettings): PayChain {
     const coins = [];
     let cursor: string | null = null;
     do {
-      const page: Awaited<ReturnType<typeof client.core.listCoins>> = await client.core.listCoins({ owner, limit: COIN_PAGE, cursor });
+      const page: Awaited<ReturnType<typeof client.core.listCoins>> = await client.core.listCoins({
+        owner,
+        limit: COIN_PAGE,
+        cursor,
+      });
       coins.push(...page.objects);
       cursor = page.hasNextPage ? page.cursor : null;
     } while (cursor && coins.length < MAX_GAS_COINS);
@@ -92,7 +96,12 @@ export function tatumPayChain(env: RecallEnv, settings: PaySettings): PayChain {
       const [coin] = tx.splitCoins(tx.gas, [amount]);
       tx.moveCall({
         target: `${settings.packageId}::pay::pay`,
-        arguments: [tx.object(settings.configId), tx.pure.vector("u8", Array.from(hexToBytes(nonce))), tx.pure.address(payTo), coin],
+        arguments: [
+          tx.object(settings.configId),
+          tx.pure.vector("u8", Array.from(hexToBytes(nonce))),
+          tx.pure.address(payTo),
+          coin,
+        ],
       });
       return build(tx, sender);
     },
@@ -117,7 +126,11 @@ export function tatumPayChain(env: RecallEnv, settings: PaySettings): PayChain {
     },
 
     async execute(transaction, signature) {
-      const result = await client.core.executeTransaction({ transaction: fromBase64(transaction), signatures: [signature], include: { events: true } });
+      const result = await client.core.executeTransaction({
+        transaction: fromBase64(transaction),
+        signatures: [signature],
+        include: { events: true },
+      });
       const tx = result.Transaction ?? result.FailedTransaction;
       const paid = tx.events
         // The full type, because anyone can publish a module with the same names.

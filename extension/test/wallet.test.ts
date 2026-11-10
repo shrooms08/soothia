@@ -11,7 +11,12 @@ const NONCE = "nonce-1";
 const win = { location: { origin: "https://example.com" } };
 const request = { channel: WALLET_CHANNEL, direction: "request", nonce: NONCE, id: "w1", method: "list", params: {} };
 const response = { channel: WALLET_CHANNEL, direction: "response", nonce: NONCE, id: "w1", ok: true };
-const event = (data: unknown, overrides: Record<string, unknown> = {}) => ({ source: win, origin: win.location.origin, data, ...overrides });
+const event = (data: unknown, overrides: Record<string, unknown> = {}) => ({
+  source: win,
+  origin: win.location.origin,
+  data,
+  ...overrides,
+});
 
 test("a well-formed request and response are accepted", () => {
   assert.deepEqual(acceptRequest(event(request), win, NONCE), request);
@@ -78,7 +83,10 @@ test("checked bytes go to the wallet unchanged", async () => {
 
 test("a refusal never reaches the wallet", async () => {
   const { bridge, calls } = recordingBridge();
-  await assert.rejects(signChecked(bridge, async () => ({ ok: false, reason: "Transaction refused. Nope." }), WALLET, "BYTES", EXPECTED), /Nope/);
+  await assert.rejects(
+    signChecked(bridge, async () => ({ ok: false, reason: "Transaction refused. Nope." }), WALLET, "BYTES", EXPECTED),
+    /Nope/,
+  );
   assert.deepEqual(calls, []);
 });
 

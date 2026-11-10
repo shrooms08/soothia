@@ -45,8 +45,8 @@ const pool = (overrides: Partial<PoolView> = {}): PoolView => ({
   poolId: "0xpool",
   status: "open",
   closeMs: Date.parse(KICKOFF),
-  yesTotal: (32n * SUI / 10n).toString(),
-  noTotal: (11n * SUI / 10n).toString(),
+  yesTotal: ((32n * SUI) / 10n).toString(),
+  noTotal: ((11n * SUI) / 10n).toString(),
   feeBps: 100,
   limits: LIMITS,
   ...overrides,
@@ -56,7 +56,8 @@ test("amounts read and print exactly", () => {
   assert.equal(parseSuiAmount("0.1"), 100_000_000n);
   assert.equal(parseSuiAmount(" 5 "), 5n * SUI);
   assert.equal(parseSuiAmount("1.000000001"), SUI + 1n);
-  for (const bad of ["", "0", "0.0", "-1", "1.0000000001", "abc", "1e3", "1,5", ".5"]) assert.equal(parseSuiAmount(bad), null, bad);
+  for (const bad of ["", "0", "0.0", "-1", "1.0000000001", "abc", "1e3", "1,5", ".5"])
+    assert.equal(parseSuiAmount(bad), null, bad);
   assert.equal(formatSui(100_000_000n), "0.1");
   assert.equal(formatSui(5n * SUI), "5");
   assert.equal(formatSui(1_536_999n * 100n, 4), "0.1536");
@@ -93,18 +94,24 @@ test("tiles with no stakeable call get no row", () => {
 
 test("the pool line uses the user's side, whichever side that is", () => {
   assert.equal(poolLine(pool(), true, "Arsenal win"), "Pool: 3.2 SUI on Arsenal win · 1.1 SUI against · pays 1.33x");
-  assert.equal(poolLine(pool(), false, "Arsenal doesn't win"), "Pool: 1.1 SUI on Arsenal doesn't win · 3.2 SUI against · pays 3.87x");
+  assert.equal(
+    poolLine(pool(), false, "Arsenal doesn't win"),
+    "Pool: 1.1 SUI on Arsenal doesn't win · 3.2 SUI against · pays 3.87x",
+  );
 });
 
 test("no pool yet, and no pays figure with nothing on your side", () => {
-  assert.equal(poolLine(pool({ exists: false, yesTotal: "0", noTotal: "0" }), true, "X"), "No pool yet. Be the first to back it.");
+  assert.equal(
+    poolLine(pool({ exists: false, yesTotal: "0", noTotal: "0" }), true, "X"),
+    "No pool yet. Be the first to back it.",
+  );
   assert.equal(poolLine(pool({ yesTotal: "0" }), true, "Arsenal win"), "Pool: 0 SUI on Arsenal win · 1.1 SUI against");
 });
 
 test("what you backed, and when a top-up is allowed", () => {
   assert.equal(backedLine(pool(), true, SUI), "You backed 1 SUI · pays ~1.33x");
-  assert.equal(canTopUp(LIMITS, 49n * SUI / 10n), true);
-  assert.equal(canTopUp(LIMITS, 49n * SUI / 10n + 1n), false);
+  assert.equal(canTopUp(LIMITS, (49n * SUI) / 10n), true);
+  assert.equal(canTopUp(LIMITS, (49n * SUI) / 10n + 1n), false);
   assert.equal(canTopUp(LIMITS, 5n * SUI), false);
 });
 
@@ -115,7 +122,14 @@ test("a pool takes stakes only while open and more than 2 minutes before close",
   assert.equal(poolIsOpenForStakes(pool({ closeMs: NOW + 120_000 }), NOW), false);
 });
 
-const input = (overrides: Partial<Parameters<typeof amountProblem>[0]> = {}) => ({ amountMist: 100_000_000n as bigint | null, limits: LIMITS, heldMist: 0n, poolTotalMist: 0n, balanceMist: null as bigint | null, ...overrides });
+const input = (overrides: Partial<Parameters<typeof amountProblem>[0]> = {}) => ({
+  amountMist: 100_000_000n as bigint | null,
+  limits: LIMITS,
+  heldMist: 0n,
+  poolTotalMist: 0n,
+  balanceMist: null as bigint | null,
+  ...overrides,
+});
 
 test("amount validation: the good cases", () => {
   assert.equal(amountProblem(input()), null);
@@ -129,10 +143,19 @@ test("amount validation: every refusal says why", () => {
   assert.equal(amountProblem(input({ amountMist: null })), "Enter an amount in SUI");
   assert.equal(amountProblem(input({ amountMist: 99_999_999n })), "Below the 0.1 SUI minimum");
   assert.equal(amountProblem(input({ amountMist: 5n * SUI + 1n })), "Above your 5 SUI limit");
-  assert.equal(amountProblem(input({ amountMist: SUI + 1n, heldMist: 4n * SUI })), "Above your 5 SUI limit: you can add 1 more");
-  assert.equal(amountProblem(input({ amountMist: SUI, heldMist: 5n * SUI })), "Above your 5 SUI limit: you can add 0 more");
+  assert.equal(
+    amountProblem(input({ amountMist: SUI + 1n, heldMist: 4n * SUI })),
+    "Above your 5 SUI limit: you can add 1 more",
+  );
+  assert.equal(
+    amountProblem(input({ amountMist: SUI, heldMist: 5n * SUI })),
+    "Above your 5 SUI limit: you can add 0 more",
+  );
   assert.equal(amountProblem(input({ poolTotalMist: 50n * SUI })), "Pool is full");
-  assert.equal(amountProblem(input({ amountMist: SUI, poolTotalMist: 49n * SUI + 500_000_000n })), "Pool is nearly full: room for 0.5 SUI more");
+  assert.equal(
+    amountProblem(input({ amountMist: SUI, poolTotalMist: 49n * SUI + 500_000_000n })),
+    "Pool is nearly full: room for 0.5 SUI more",
+  );
   assert.equal(amountProblem(input({ balanceMist: 50_000_000n })), "Not enough SUI: you have 0.05, need 0.12 with gas");
 });
 
@@ -145,7 +168,10 @@ test("the estimate includes this stake in the pool and matches the contract's su
   const p = { yesTotal: (4n * SUI).toString(), noTotal: (2n * SUI).toString(), feeBps: 100 };
   // (4 + 2 + 2) * 0.99 / 6 = 1.32
   assert.deepEqual(stakeEstimate(p, true, 2n * SUI, 0n), { multiplier: 1.32, payoutMist: 2_640_000_000n });
-  assert.equal(stakeEstimate(p, false, SUI, 0n).multiplier, Number(((7n * SUI * 99n) / 100n * 10_000n) / (3n * SUI)) / 10_000);
+  assert.equal(
+    stakeEstimate(p, false, SUI, 0n).multiplier,
+    Number((((7n * SUI * 99n) / 100n) * 10_000n) / (3n * SUI)) / 10_000,
+  );
 });
 
 test("a top-up's estimate covers the whole position", () => {
@@ -172,7 +198,10 @@ test("every Worker refusal has plain words", () => {
   assert.match(stakeErrorText(409, { error: "stake_rejected", abortCode: "7" }).text, /over the limit/);
   assert.match(stakeErrorText(409, { error: "pool_full" }).text, /full/);
   assert.match(stakeErrorText(409, { error: "side_switch" }).text, /other side/);
-  assert.match(stakeErrorText(400, { error: "insufficient_balance", neededMist: "120000000" }).text, /0\.12 SUI including gas/);
+  assert.match(
+    stakeErrorText(400, { error: "insufficient_balance", neededMist: "120000000" }).text,
+    /0\.12 SUI including gas/,
+  );
   assert.match(stakeErrorText(0, null).text, /reach Soothia/);
   assert.equal(stakeErrorText(429, { error: "pool_cap_reached" }).retry, false);
   assert.equal(stakeErrorText(429, { error: "rate_limited" }).retry, true);
@@ -209,20 +238,33 @@ test("every status reads in words", () => {
   assert.equal(text({ status: "challenge_window", claimOpensAtMs: 5 }), "In challenge window until 19:45");
   assert.equal(text({ status: "claimable", result: "won" }), "Won 1.5 SUI");
   assert.equal(text({ status: "lost", result: "lost" }), "Lost");
-  assert.equal(text({ status: "refundable", result: "refunded", estimatedPayoutMist: SUI.toString() }), "Refund of 1 SUI ready");
+  assert.equal(
+    text({ status: "refundable", result: "refunded", estimatedPayoutMist: SUI.toString() }),
+    "Refund of 1 SUI ready",
+  );
   assert.equal(text({ status: "claimed", result: "won" }), "Claimed 1.5 SUI");
   assert.equal(text({ status: "claimed", result: "refunded", estimatedPayoutMist: SUI.toString() }), "Refunded 1 SUI");
 });
 
 test("only winners and refunds can claim", () => {
-  assert.deepEqual((["open", "awaiting_result", "challenge_window", "claimable", "lost", "refundable", "claimed"] as const).filter(isClaimable), ["claimable", "refundable"]);
+  assert.deepEqual(
+    (["open", "awaiting_result", "challenge_window", "claimable", "lost", "refundable", "claimed"] as const).filter(
+      isClaimable,
+    ),
+    ["claimable", "refundable"],
+  );
   assert.equal(isClaimable(null), false);
 });
 
 test("the summary counts staked, won, lost, profit, ROI and best multiplier", () => {
   const summary = walletSummary([
     position({ status: "claimable", result: "won", amountMist: SUI.toString(), estimatedPayoutMist: "1500000000" }),
-    position({ status: "claimed", result: "won", amountMist: (2n * SUI).toString(), estimatedPayoutMist: "5000000000" }),
+    position({
+      status: "claimed",
+      result: "won",
+      amountMist: (2n * SUI).toString(),
+      estimatedPayoutMist: "5000000000",
+    }),
     position({ status: "lost", result: "lost", amountMist: SUI.toString(), estimatedPayoutMist: "0" }),
     position({ status: "open", amountMist: SUI.toString() }),
   ]);
@@ -236,7 +278,10 @@ test("the summary counts staked, won, lost, profit, ROI and best multiplier", ()
 });
 
 test("refunds are left out, and nothing settled means no profit figure", () => {
-  const refunded = walletSummary([position({ status: "claimed", result: "refunded" }), position({ status: "refundable", result: "refunded" })]);
+  const refunded = walletSummary([
+    position({ status: "claimed", result: "refunded" }),
+    position({ status: "refundable", result: "refunded" }),
+  ]);
   assert.equal(refunded.stakedMist, 0n);
   assert.equal(refunded.profitMist, null);
   const open = walletSummary([position({ status: "challenge_window", claimOpensAtMs: 5 })]);
@@ -270,17 +315,49 @@ const buttonInput = (overrides: Partial<Parameters<typeof backButtonState>[0]> =
   ...overrides,
 });
 
-const buttonCases: [string, Partial<Parameters<typeof backButtonState>[0]>, { label: string; enabled: boolean; reason: string | null; note: string | null }][] = [
+const buttonCases: [
+  string,
+  Partial<Parameters<typeof backButtonState>[0]>,
+  { label: string; enabled: boolean; reason: string | null; note: string | null },
+][] = [
   ["valid", {}, { label: "Back it", enabled: true, reason: null, note: null }],
-  ["no wallet", { walletConnected: false, balanceMist: null }, { label: "Connect wallet to back it", enabled: true, reason: null, note: null }],
-  ["balance unknown", { balanceMist: null, balanceFailed: true }, { label: "Back it", enabled: true, reason: null, note: "Couldn't check your balance" }],
+  [
+    "no wallet",
+    { walletConnected: false, balanceMist: null },
+    { label: "Connect wallet to back it", enabled: true, reason: null, note: null },
+  ],
+  [
+    "balance unknown",
+    { balanceMist: null, balanceFailed: true },
+    { label: "Back it", enabled: true, reason: null, note: "Couldn't check your balance" },
+  ],
   ["balance still loading", { balanceMist: null }, { label: "Back it", enabled: true, reason: null, note: null }],
-  ["insufficient", { balanceMist: 50_000_000n }, { label: "Back it", enabled: false, reason: "Not enough SUI: you have 0.05, need 0.12 with gas", note: null }],
-  ["over limit", { amountMist: 5n * SUI + 1n }, { label: "Back it", enabled: false, reason: "Above your 5 SUI limit", note: null }],
-  ["pool closed", { pool: pool({ status: "void" }) }, { label: "Back it", enabled: false, reason: "Pool closed", note: null }],
-  ["kickoff near", { nowMs: Date.parse(KICKOFF) - 120_000 }, { label: "Back it", enabled: false, reason: "Pool closed", note: null }],
+  [
+    "insufficient",
+    { balanceMist: 50_000_000n },
+    { label: "Back it", enabled: false, reason: "Not enough SUI: you have 0.05, need 0.12 with gas", note: null },
+  ],
+  [
+    "over limit",
+    { amountMist: 5n * SUI + 1n },
+    { label: "Back it", enabled: false, reason: "Above your 5 SUI limit", note: null },
+  ],
+  [
+    "pool closed",
+    { pool: pool({ status: "void" }) },
+    { label: "Back it", enabled: false, reason: "Pool closed", note: null },
+  ],
+  [
+    "kickoff near",
+    { nowMs: Date.parse(KICKOFF) - 120_000 },
+    { label: "Back it", enabled: false, reason: "Pool closed", note: null },
+  ],
   ["pool loading", { pool: null }, { label: "Back it", enabled: false, reason: "Loading the pool\u2026", note: null }],
-  ["pool failed", { pool: null, poolFailed: true }, { label: "Back it", enabled: false, reason: "Couldn't load this pool. Trying again\u2026", note: null }],
+  [
+    "pool failed",
+    { pool: null, poolFailed: true },
+    { label: "Back it", enabled: false, reason: "Couldn't load this pool. Trying again\u2026", note: null },
+  ],
 ];
 
 for (const [name, overrides, expected] of buttonCases) {

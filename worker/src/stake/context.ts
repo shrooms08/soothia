@@ -65,7 +65,8 @@ async function reservePoolCreation(env: Env, nowMs: number): Promise<void> {
 export async function clearPoolCreation(context: Context): Promise<void> {
   const resolver = resolverKeypair(context.env);
   if (!resolver) return refuse(503, "resolver_not_configured");
-  if ((await context.chain.balanceOf(resolver.toSuiAddress())) < RESOLVER_MIN_BALANCE_MIST) refuse(503, "resolver_low_balance");
+  if ((await context.chain.balanceOf(resolver.toSuiAddress())) < RESOLVER_MIN_BALANCE_MIST)
+    refuse(503, "resolver_low_balance");
   await reservePoolCreation(context.env, context.nowMs);
   if (!(await acquireResolverLock(context.env))) refuse(503, "resolver_busy");
 }

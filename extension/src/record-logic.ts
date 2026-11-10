@@ -2,12 +2,20 @@
 
 import type { RecallLesson, RecallRecord, RecallRecordPick } from "./messages";
 import { leanSide } from "./recall-logic";
-import { formatSui, isClaimable, positionStatusText, signedSuiShort, walletSummary, type StakePositionView } from "./stake-logic";
+import {
+  formatSui,
+  isClaimable,
+  positionStatusText,
+  signedSuiShort,
+  walletSummary,
+  type StakePositionView,
+} from "./stake-logic";
 
 export const RECORD_SECTIONS = ["calls", "lessons", "wallet", "me"] as const;
 export type RecordSection = (typeof RECORD_SECTIONS)[number];
 
-export const isRecordSection = (value: unknown): value is RecordSection => (RECORD_SECTIONS as readonly unknown[]).includes(value);
+export const isRecordSection = (value: unknown): value is RecordSection =>
+  (RECORD_SECTIONS as readonly unknown[]).includes(value);
 
 export interface RecordHeader {
   identity: string;
@@ -25,7 +33,12 @@ export function stakesForSummary(positions: StakePositionView[], picks: RecallRe
     const position = {
       poolId: pick.stake.poolId,
       pickId: pick.id,
-      match: { home: pick.fixture?.home ?? "", away: pick.fixture?.away ?? "", startISO: pick.fixture?.startISO ?? "", subject: pick.fixture?.subject ?? "home" },
+      match: {
+        home: pick.fixture?.home ?? "",
+        away: pick.fixture?.away ?? "",
+        startISO: pick.fixture?.startISO ?? "",
+        subject: pick.fixture?.subject ?? "home",
+      },
       side: pick.stake.side,
       status: pick.stake.status ?? "open",
       amountMist: pick.stake.amountMist,
@@ -36,7 +49,12 @@ export function stakesForSummary(positions: StakePositionView[], picks: RecallRe
   });
 }
 
-export function buildRecordHeader(input: { summary: RecallRecord["summary"]; handle: string | null; publicScore: number | null; stakes: StakePositionView[] }): RecordHeader {
+export function buildRecordHeader(input: {
+  summary: RecallRecord["summary"];
+  handle: string | null;
+  publicScore: number | null;
+  stakes: StakePositionView[];
+}): RecordHeader {
   const { summary, handle, publicScore, stakes } = input;
   const settled = summary.resolved > 0;
   const score = publicScore ?? (settled ? (summary.callScore ?? null) : null);
@@ -74,14 +92,23 @@ export function shortLesson(text: string): string {
 }
 
 /** What needs the user now, most urgent first. Empty when nothing does. */
-export function attentionItems(input: { stakes: StakePositionView[]; picks: RecallRecordPick[]; lessons: RecallLesson[]; nowMs: number }): AttentionItem[] {
+export function attentionItems(input: {
+  stakes: StakePositionView[];
+  picks: RecallRecordPick[];
+  lessons: RecallLesson[];
+  nowMs: number;
+}): AttentionItem[] {
   const { stakes, picks, lessons, nowMs } = input;
   const items: AttentionItem[] = [];
   const claimable = stakes.filter((stake) => isClaimable(stake.status)).length;
-  if (claimable > 0) items.push({ text: `${claimable} ${claimable === 1 ? "stake" : "stakes"} ready to claim`, section: "wallet" });
+  if (claimable > 0)
+    items.push({ text: `${claimable} ${claimable === 1 ? "stake" : "stakes"} ready to claim`, section: "wallet" });
   const today = picks.filter((pick) => pick.status === "open" && sameLocalDay(kickoffOf(pick), nowMs)).length;
-  if (today > 0) items.push({ text: `${today} ${today === 1 ? "call settles" : "calls settle"} today`, section: "calls" });
-  const [newest] = lessons.filter((lesson) => nowMs - Date.parse(lesson.at) <= NEW_LESSON_MS).sort((a, b) => b.at.localeCompare(a.at));
+  if (today > 0)
+    items.push({ text: `${today} ${today === 1 ? "call settles" : "calls settle"} today`, section: "calls" });
+  const [newest] = lessons
+    .filter((lesson) => nowMs - Date.parse(lesson.at) <= NEW_LESSON_MS)
+    .sort((a, b) => b.at.localeCompare(a.at));
   if (newest) items.push({ text: `New lesson: ${shortLesson(newest.text)}`, section: "lessons" });
   return items.slice(0, MAX_ATTENTION);
 }
@@ -108,7 +135,9 @@ export function lockedText(pick: Pick<RecallRecordPick, "at" | "commit" | "fixtu
   if (Number.isNaN(gapMs) || gapMs <= 0) return null;
   const hours = Math.floor(gapMs / 3_600_000);
   if (hours >= 48) return `Locked ${Math.floor(hours / 24)}d before kickoff`;
-  return hours >= 1 ? `Locked ${hours}h before kickoff` : `Locked ${Math.max(1, Math.floor(gapMs / 60_000))}m before kickoff`;
+  return hours >= 1
+    ? `Locked ${hours}h before kickoff`
+    : `Locked ${Math.max(1, Math.floor(gapMs / 60_000))}m before kickoff`;
 }
 
 const LESSON_RANK = (key: string): number => {
@@ -131,7 +160,9 @@ export function lessonsForDisplay(lessons: RecallLesson[]): RecallLesson[] {
     const known = newest.get(lesson.key);
     if (!known || lesson.at > known.at) newest.set(lesson.key, lesson);
   }
-  return [...newest.values()].sort((a, b) => LESSON_RANK(a.key) - LESSON_RANK(b.key) || b.at.localeCompare(a.at)).slice(0, MAX_LESSONS);
+  return [...newest.values()]
+    .sort((a, b) => LESSON_RANK(a.key) - LESSON_RANK(b.key) || b.at.localeCompare(a.at))
+    .slice(0, MAX_LESSONS);
 }
 
 export interface ConfidenceRow {
@@ -154,13 +185,24 @@ export function calibrationRows(buckets: RecallRecord["summary"]["calibration"])
 const SHOWS_ESTIMATE: readonly string[] = ["open", "awaiting_result", "challenge_window"];
 
 /** A stake's status and payout, for an expanded call. */
-export function stakeDetailText(position: StakePositionView, pick: Pick<RecallRecordPick, "pYes" | "fixture">, when: (ms: number) => string): string {
-  const estimate = SHOWS_ESTIMATE.includes(position.status) && BigInt(position.estimatedPayoutMist) > 0n ? ` \u00b7 about ${formatSui(position.estimatedPayoutMist, 4)} SUI if right` : "";
+export function stakeDetailText(
+  position: StakePositionView,
+  pick: Pick<RecallRecordPick, "pYes" | "fixture">,
+  when: (ms: number) => string,
+): string {
+  const estimate =
+    SHOWS_ESTIMATE.includes(position.status) && BigInt(position.estimatedPayoutMist) > 0n
+      ? ` \u00b7 about ${formatSui(position.estimatedPayoutMist, 4)} SUI if right`
+      : "";
   return `Staked ${formatSui(position.amountMist, 4)} SUI on ${leanSide(pick)} \u00b7 ${positionStatusText(position, when)}${estimate}`;
 }
 
 /** One line of the Wallet section's stake list. */
-export function stakeListLean(position: StakePositionView, picks: RecallRecordPick[], when: (ms: number) => string): string {
+export function stakeListLean(
+  position: StakePositionView,
+  picks: RecallRecordPick[],
+  when: (ms: number) => string,
+): string {
   const pick = picks.find((candidate) => candidate.id === position.pickId);
   const lean = leanSide(pick ?? { pYes: position.side === "YES" ? 1 : 0, fixture: position.match });
   return `${position.match.home} v ${position.match.away} \u00b7 ${formatSui(position.amountMist, 4)} SUI on ${lean} \u00b7 ${positionStatusText(position, when)}`;

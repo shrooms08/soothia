@@ -59,7 +59,12 @@ test("parseScoreboard reads events and drops malformed ones", () => {
   assert.equal(board.competition, "English Premier League");
   assert.equal(board.events.length, 6);
   assert.deepEqual(
-    { id: board.events[0].espnId, start: board.events[0].startISO, home: board.events[0].home.name, score: board.events[0].home.score },
+    {
+      id: board.events[0].espnId,
+      start: board.events[0].startISO,
+      home: board.events[0].home.name,
+      score: board.events[0].home.score,
+    },
     { id: "1", start: START, home: "Arsenal", score: 2 },
   );
 });
@@ -122,20 +127,41 @@ test("resolve: an unknown fixture is not_found, and swapped sides do not match",
 test("resolve: finds a fixture listed on the day after kickoff", async () => {
   const nextDay: ScoreboardFetcher = async (league, day) =>
     parseScoreboard(league === "eng.1" && day === "20261109" ? SAMPLE : { events: [] });
-  assert.equal((await resolveFixture({ home: "Arsenal", away: "Hull City", startISO: START }, nextDay)).status, "final");
+  assert.equal(
+    (await resolveFixture({ home: "Arsenal", away: "Hull City", startISO: START }, nextDay)).status,
+    "final",
+  );
 });
 
 test("resolve: throws rather than say not_found when ESPN could not be checked", async () => {
   const broken: ScoreboardFetcher = async () => {
     throw new Error("espn_http_500");
   };
-  await assert.rejects(resolveFixture({ home: "Arsenal", away: "Hull City", startISO: START }, broken), /espn_unavailable/);
+  await assert.rejects(
+    resolveFixture({ home: "Arsenal", away: "Hull City", startISO: START }, broken),
+    /espn_unavailable/,
+  );
 });
 
 test("locate: finds a fixture either way round, and says which", async () => {
   const fetcher: ScoreboardFetcher = async (league) => ({
     competition: "",
-    events: league === "eng.1" ? [{ espnId: "9", startISO: "2026-11-21T17:30:00.000Z", statusName: "STATUS_POSTPONED", state: "pre", completed: false, home: { name: "Newcastle United", short: "Newcastle", abbreviation: "NEW", score: null }, away: { name: "Arsenal", short: "Arsenal", abbreviation: "ARS", score: null }, competition: "", url: "" }] : [],
+    events:
+      league === "eng.1"
+        ? [
+            {
+              espnId: "9",
+              startISO: "2026-11-21T17:30:00.000Z",
+              statusName: "STATUS_POSTPONED",
+              state: "pre",
+              completed: false,
+              home: { name: "Newcastle United", short: "Newcastle", abbreviation: "NEW", score: null },
+              away: { name: "Arsenal", short: "Arsenal", abbreviation: "ARS", score: null },
+              competition: "",
+              url: "",
+            },
+          ]
+        : [],
   });
   const startISO = "2026-11-21T17:30:00.000Z";
   const direct = await locateFixture({ home: "Newcastle", away: "Arsenal", startISO }, fetcher);
@@ -143,7 +169,10 @@ test("locate: finds a fixture either way round, and says which", async () => {
   assert.equal(direct.located?.league, "eng.1");
   assert.equal(direct.located?.notPlayed, true);
   assert.equal(direct.eventsSeen, 2);
-  assert.equal((await locateFixture({ home: "Arsenal", away: "Newcastle United", startISO }, fetcher)).located?.reversed, true);
+  assert.equal(
+    (await locateFixture({ home: "Arsenal", away: "Newcastle United", startISO }, fetcher)).located?.reversed,
+    true,
+  );
   assert.equal((await locateFixture({ home: "Arsenal", away: "Everton", startISO }, fetcher)).located, null);
 });
 
@@ -152,5 +181,8 @@ test("locate: a failed league means unknown, not missing", async () => {
     if (league === "eng.1") throw new Error("down");
     return { competition: "", events: [] };
   };
-  await assert.rejects(locateFixture({ home: "Arsenal", away: "Everton", startISO: "2026-11-21T17:30:00.000Z" }, fetcher), /espn_unavailable/);
+  await assert.rejects(
+    locateFixture({ home: "Arsenal", away: "Everton", startISO: "2026-11-21T17:30:00.000Z" }, fetcher),
+    /espn_unavailable/,
+  );
 });

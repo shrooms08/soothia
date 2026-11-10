@@ -89,7 +89,8 @@ export function estimatedPayout(pool: StakePoolView, position: StakePositionView
   return winnerPayout(position.amount, yes + no - feeOn(yes + no, pool.feeBps), sideTotal);
 }
 
-export type PositionStatus = "open" | "awaiting_result" | "challenge_window" | "claimable" | "lost" | "refundable" | "claimed";
+export type PositionStatus =
+  "open" | "awaiting_result" | "challenge_window" | "claimable" | "lost" | "refundable" | "claimed";
 
 export function positionStatus(pool: StakePoolView, position: StakePositionView, nowMs: bigint): PositionStatus {
   if (position.claimed) return "claimed";

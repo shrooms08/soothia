@@ -31,12 +31,36 @@ function harness() {
     delete: async (key: string) => {
       data.delete(key);
     },
-    list: async ({ prefix, limit }: { prefix: string; limit: number }) => ({ keys: [...data.keys()].filter((key) => key.startsWith(prefix)).sort().slice(0, limit).map((name) => ({ name, metadata: { address: JSON.parse(data.get(name)!).address } })), list_complete: true }),
+    list: async ({ prefix, limit }: { prefix: string; limit: number }) => ({
+      keys: [...data.keys()]
+        .filter((key) => key.startsWith(prefix))
+        .sort()
+        .slice(0, limit)
+        .map((name) => ({ name, metadata: { address: JSON.parse(data.get(name)!).address } })),
+      list_complete: true,
+    }),
   };
   const env = { SOOTHIA_CACHE: kv } as unknown as Env;
-  const store = { write: async (_kind: string, record: FollowRecord) => (written.push(record), { jobId: "j" }), list: async () => stored } as unknown as RecallStore;
-  const call = async (method: string, path: string, body?: unknown, headers: Record<string, string> = { "X-Soothia-Install": INSTALL }) => {
-    const response = await socialRoute(new Request(`https://x${path}`, { method, headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }), env, path.split("?")[0], { now: () => NOW, store: () => store, verify: async () => true, lookupName: async () => null });
+  const store = {
+    write: async (_kind: string, record: FollowRecord) => (written.push(record), { jobId: "j" }),
+    list: async () => stored,
+  } as unknown as RecallStore;
+  const call = async (
+    method: string,
+    path: string,
+    body?: unknown,
+    headers: Record<string, string> = { "X-Soothia-Install": INSTALL },
+  ) => {
+    const response = await socialRoute(
+      new Request(`https://x${path}`, {
+        method,
+        headers,
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      }),
+      env,
+      path.split("?")[0],
+      { now: () => NOW, store: () => store, verify: async () => true, lookupName: async () => null },
+    );
     return { status: response.status, body: (await response.json()) as Record<string, any> };
   };
   const addProfile = (handle: string, userKey = `key-${handle}`, address = addressOf(handle)) => {
@@ -98,7 +122,10 @@ test("only public handles can be followed, and never yourself", async () => {
 test("the follow list has a limit", async () => {
   const h = harness();
   h.addProfile("ada");
-  h.data.set(`following:${await userKeyFor(INSTALL)}`, JSON.stringify(Array.from({ length: MAX_FOLLOWING }, (_, i) => addressOf(`u${i}`))));
+  h.data.set(
+    `following:${await userKeyFor(INSTALL)}`,
+    JSON.stringify(Array.from({ length: MAX_FOLLOWING }, (_, i) => addressOf(`u${i}`))),
+  );
   assert.equal((await h.call("POST", "/social/follow", { handle: "ada" })).body.error, "follow_limit");
 });
 
@@ -119,13 +146,19 @@ test("someone who went private can still be unfollowed", async () => {
   h.addProfile("ada");
   await h.call("POST", "/social/follow", { handle: "ada" });
   h.dropProfile("ada");
-  assert.deepEqual((await h.call("POST", "/social/unfollow", { address: addressOf("ada") })).body, { ok: true, following: false });
+  assert.deepEqual((await h.call("POST", "/social/unfollow", { address: addressOf("ada") })).body, {
+    ok: true,
+    following: false,
+  });
   assert.equal(h.written.at(-1)?.kind, "unfollow");
   assert.equal(h.written.at(-1)?.address, addressOf("ada"));
   assert.equal(h.data.get(`following:${await userKeyFor(INSTALL)}`), "[]");
 });
 
-const boards = (scores: Record<string, number>) => JSON.stringify({ entries: Object.entries(scores).map(([handle, score]) => ({ handle, periods: { all: { stats: { score } } } })) });
+const boards = (scores: Record<string, number>) =>
+  JSON.stringify({
+    entries: Object.entries(scores).map(([handle, score]) => ({ handle, periods: { all: { stats: { score } } } })),
+  });
 
 test("the following list has each handle's score and whether it is still public", async () => {
   const h = harness();
@@ -136,15 +169,25 @@ test("the following list has each handle's score and whether it is still public"
   h.dropProfile("bob");
   h.data.set("social:boards", boards({ ada: 612 }));
   const { body } = await h.call("GET", "/social/following");
-  assert.deepEqual(body.following, [{ address: addressOf("ada"), handle: "ada", score: 612, public: true }, { address: addressOf("bob"), handle: null, score: null, public: false }]);
+  assert.deepEqual(body.following, [
+    { address: addressOf("ada"), handle: "ada", score: 612, public: true },
+    { address: addressOf("bob"), handle: null, score: null, public: false },
+  ]);
 });
 
 test("a lost index is rebuilt from Walrus, once", async () => {
   const h = harness();
   h.addProfile("ada");
-  h.stored.push({ handle: "ada", kind: "follow", at: at(1) }, { handle: "gone", kind: "follow", at: at(1) }, { handle: "gone", kind: "unfollow", at: at(2) });
+  h.stored.push(
+    { handle: "ada", kind: "follow", at: at(1) },
+    { handle: "gone", kind: "follow", at: at(1) },
+    { handle: "gone", kind: "unfollow", at: at(2) },
+  );
   const { body } = await h.call("GET", "/social/following");
-  assert.deepEqual(body.following.map((row: { handle: string }) => row.handle), ["ada"]);
+  assert.deepEqual(
+    body.following.map((row: { handle: string }) => row.handle),
+    ["ada"],
+  );
   assert.equal(h.data.get(`following:${await userKeyFor(INSTALL)}`), JSON.stringify([addressOf("ada")]));
 });
 
@@ -194,7 +237,9 @@ test("a handle someone else takes does not inherit followers or followed calls",
   await h.call("POST", "/social/follow", { handle: "ada" });
   h.dropProfile("ada");
   h.addProfile("ada", "someone-else", addressOf("newcomer"));
-  assert.deepEqual((await h.call("GET", "/social/following")).body.following, [{ address: addressOf("ada"), handle: null, score: null, public: false }]);
+  assert.deepEqual((await h.call("GET", "/social/following")).body.following, [
+    { address: addressOf("ada"), handle: null, score: null, public: false },
+  ]);
   const profile = (await h.call("GET", "/social/profile/ada")).body;
   assert.equal(profile.followers, 0);
 });

@@ -9,13 +9,7 @@
 import { MemWal } from "@mysten-incubation/memwal";
 import type { RecallEnv } from "./env";
 import { cacheGet, cachePut } from "../store";
-import {
-  decodeRecord,
-  encodeRecord,
-  namespaceFor,
-  type RecordByKind,
-  type RecordKind,
-} from "./records";
+import { decodeRecord, encodeRecord, namespaceFor, type RecordByKind, type RecordKind } from "./records";
 
 export const MAINNET_RELAYER = "https://relayer.memory.walrus.xyz";
 

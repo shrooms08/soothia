@@ -3,7 +3,15 @@
 import { RECALL_PACKAGE, STAKE_PACKAGE } from "./config";
 import { button, el, externalLink, icon } from "./dom";
 import { createGoPublicPanel } from "./go-public";
-import type { ApiError, ApiPath, ApiResponse, RecallCalled, RecallProof, RecallRecord, RecallRecordPick } from "./messages";
+import type {
+  ApiError,
+  ApiPath,
+  ApiResponse,
+  RecallCalled,
+  RecallProof,
+  RecallRecord,
+  RecallRecordPick,
+} from "./messages";
 import { pickLean, proofText, recordHeadline, shortId, skipReasonText } from "./recall-logic";
 import {
   attentionItems,
@@ -21,7 +29,16 @@ import {
   type RecordHeader,
   type RecordSection,
 } from "./record-logic";
-import { formatSui, isClaimable, signedSui, stakeErrorText, walletErrorText, walletSummary, type StakeErrorBody, type StakePositionView } from "./stake-logic";
+import {
+  formatSui,
+  isClaimable,
+  signedSui,
+  stakeErrorText,
+  walletErrorText,
+  walletSummary,
+  type StakeErrorBody,
+  type StakePositionView,
+} from "./stake-logic";
 import { createAgentSection, type AgentRequest } from "./agent-view";
 import type { WalletAccess } from "./wallet-access";
 import type { ConnectedWallet, WalletSummary } from "./wallet-protocol";
@@ -43,7 +60,8 @@ export interface RecordHost {
   saveSection?(section: RecordSection): void;
 }
 
-const when = (ms: number): string => new Date(ms).toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" });
+const when = (ms: number): string =>
+  new Date(ms).toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" });
 
 const EMPTY_TEXT = "No calls yet. Open a match page and tap Call it.";
 const SETTLED_PAGE = 10;
@@ -133,7 +151,11 @@ function walletStats(positions: StakePositionView[]): HTMLElement {
 }
 
 /** The Proof link and the line that shows its result. */
-export function proofLink(pickId: string, host: ApiHost, label = "Proof"): { link: HTMLButtonElement; result: HTMLElement } {
+export function proofLink(
+  pickId: string,
+  host: ApiHost,
+  label = "Proof",
+): { link: HTMLButtonElement; result: HTMLElement } {
   const result = el("span", "note proof-result");
   const link = button(label, "link", () => {
     void (async () => {
@@ -211,7 +233,9 @@ export function createRecordView(pane: HTMLElement, host: RecordHost): { render(
   // ---- Calls ----
 
   function positionFor(pickId: string): StakePositionView | undefined {
-    return stakesForSummary(data?.positions ?? [], data?.record.picks ?? []).find((position) => position.pickId === pickId);
+    return stakesForSummary(data?.positions ?? [], data?.record.picks ?? []).find(
+      (position) => position.pickId === pickId,
+    );
   }
 
   function callDetail(pick: RecallRecordPick): HTMLElement {
@@ -223,7 +247,13 @@ export function createRecordView(pane: HTMLElement, host: RecordHost): { render(
       const { link, result } = proofLink(pick.id, host, "Proof on Sui");
       proof.append(link, externalLink("View transaction", pick.commit.explorerUrl, "link ext"), result);
     } else {
-      proof.append(el("span", "note", pick.commitSkipped ? `No Sui proof (${skipReasonText(pick.commitSkipped)})` : "No Sui proof"));
+      proof.append(
+        el(
+          "span",
+          "note",
+          pick.commitSkipped ? `No Sui proof (${skipReasonText(pick.commitSkipped)})` : "No Sui proof",
+        ),
+      );
     }
     detail.append(proof);
     const position = positionFor(pick.id);
@@ -243,9 +273,15 @@ export function createRecordView(pane: HTMLElement, host: RecordHost): { render(
     head.setAttribute("aria-expanded", String(expanded.has(pick.id)));
     const top = el("span", "call-row-top");
     if (pick.status !== "open") top.append(el("span", `call-icon ${pick.status}`, pick.status === "right" ? "✓" : "✗"));
-    top.append(el("span", "call-match", pick.fixture ? `${pick.fixture.home} v ${pick.fixture.away}` : pick.question), el("span", "call-date", shortDate(pick)));
+    top.append(
+      el("span", "call-match", pick.fixture ? `${pick.fixture.home} v ${pick.fixture.away}` : pick.question),
+      el("span", "call-date", shortDate(pick)),
+    );
     const position = positionFor(pick.id);
-    head.append(top, el("span", "call-lean", `${pickLean(pick)}${position ? ` · ${formatSui(position.amountMist, 4)} SUI` : ""}`));
+    head.append(
+      top,
+      el("span", "call-lean", `${pickLean(pick)}${position ? ` · ${formatSui(position.amountMist, 4)} SUI` : ""}`),
+    );
     row.append(head);
     if (expanded.has(pick.id)) row.append(callDetail(pick));
     return row;
@@ -258,7 +294,10 @@ export function createRecordView(pane: HTMLElement, host: RecordHost): { render(
     if (upcoming.length > 0) groups.push(section("Upcoming", ...upcoming.map(callRow)));
     if (settled.length > 0) {
       const shown = settled.slice(0, settledShown);
-      const more = settled.length > shown.length ? [button("Show more", "link record-show-more", () => ((settledShown += SETTLED_PAGE), draw()))] : [];
+      const more =
+        settled.length > shown.length
+          ? [button("Show more", "link record-show-more", () => ((settledShown += SETTLED_PAGE), draw()))]
+          : [];
       groups.push(section("Settled", ...shown.map(callRow), ...more));
     }
     return groups;
@@ -276,7 +315,10 @@ export function createRecordView(pane: HTMLElement, host: RecordHost): { render(
             "Lessons",
             ...lessons.map((lesson) => {
               const card = el("div", "tile");
-              card.append(el("p", "lesson-text", lesson.text), el("p", "note", `From ${lesson.n} ${lesson.n === 1 ? "call" : "calls"}`));
+              card.append(
+                el("p", "lesson-text", lesson.text),
+                el("p", "note", `From ${lesson.n} ${lesson.n === 1 ? "call" : "calls"}`),
+              );
               return card;
             }),
           )
@@ -288,23 +330,45 @@ export function createRecordView(pane: HTMLElement, host: RecordHost): { render(
           "Your confidence",
           ...rows.map((row) => {
             const item = el("div", "cal-bucket");
-            item.append(el("p", "cal-label", row.text), percentBar("You said", row.saidPercent, "claimed"), percentBar("Right", row.rightPercent, "landed"));
+            item.append(
+              el("p", "cal-label", row.text),
+              percentBar("You said", row.saidPercent, "claimed"),
+              percentBar("Right", row.rightPercent, "landed"),
+            );
             return item;
           }),
         ),
       );
     }
-    nodes.push(expander("How Soothia learns", el("p", "note", "After each match, Soothia compares how sure you were with what happened. When a pattern changes, it writes a new lesson to your memory on Walrus.")));
+    nodes.push(
+      expander(
+        "How Soothia learns",
+        el(
+          "p",
+          "note",
+          "After each match, Soothia compares how sure you were with what happened. When a pattern changes, it writes a new lesson to your memory on Walrus.",
+        ),
+      ),
+    );
     const { summary } = record;
     if (summary.resolved > 0 || summary.entities.length > 0) {
-      nodes.push(expander("More numbers", el("p", "note record-headline", recordHeadline(summary)), ...(summary.entities.length > 0 ? [teamTable(summary.entities)] : [])));
+      nodes.push(
+        expander(
+          "More numbers",
+          el("p", "note record-headline", recordHeadline(summary)),
+          ...(summary.entities.length > 0 ? [teamTable(summary.entities)] : []),
+        ),
+      );
     }
     return nodes;
   }
 
   // ---- Wallet ----
 
-  function chooseWallet(picker: HTMLElement, note: HTMLElement): (wallets: WalletSummary[]) => Promise<WalletSummary | null> {
+  function chooseWallet(
+    picker: HTMLElement,
+    note: HTMLElement,
+  ): (wallets: WalletSummary[]) => Promise<WalletSummary | null> {
     return (wallets) =>
       new Promise((resolve) => {
         picker.replaceChildren(
@@ -343,7 +407,12 @@ export function createRecordView(pane: HTMLElement, host: RecordHost): { render(
     return [el("p", "note", "Connect a wallet to see your stakes and claim what you've won."), connect, picker, note];
   }
 
-  async function claim(position: StakePositionView, wallet: ConnectedWallet, control: HTMLButtonElement, note: HTMLElement): Promise<void> {
+  async function claim(
+    position: StakePositionView,
+    wallet: ConnectedWallet,
+    control: HTMLButtonElement,
+    note: HTMLElement,
+  ): Promise<void> {
     const report = (text: string, bad = false): void => {
       note.textContent = text;
       note.classList.toggle("bad", bad);
@@ -351,7 +420,10 @@ export function createRecordView(pane: HTMLElement, host: RecordHost): { render(
     };
     control.disabled = true;
     report("Preparing your claim…");
-    const built = await host.api<{ txBytes: string }>("/stake/claim/build", { poolId: position.poolId, sender: wallet.address });
+    const built = await host.api<{ txBytes: string }>("/stake/claim/build", {
+      poolId: position.poolId,
+      sender: wallet.address,
+    });
     if (!built.ok || !built.body) {
       const { text, retry } = stakeErrorText(built.status, built.body as StakeErrorBody | null);
       report(text, true);
@@ -360,11 +432,20 @@ export function createRecordView(pane: HTMLElement, host: RecordHost): { render(
     }
     report("Waiting for your wallet…");
     try {
-      const { digest } = await (host.wallet as WalletAccess).sign(wallet, (built.body as { txBytes: string }).txBytes, { kind: "claim", poolId: position.poolId });
+      const { digest } = await (host.wallet as WalletAccess).sign(wallet, (built.body as { txBytes: string }).txBytes, {
+        kind: "claim",
+        poolId: position.poolId,
+      });
       control.hidden = true;
       position.status = "claimed";
       report(`Claimed ${formatSui(position.estimatedPayoutMist, 4)} SUI. Proof: `);
-      note.append(externalLink(`${digest.slice(0, 8)}…`, `https://suivision.xyz/txblock/${encodeURIComponent(digest)}`, "link ext"));
+      note.append(
+        externalLink(
+          `${digest.slice(0, 8)}…`,
+          `https://suivision.xyz/txblock/${encodeURIComponent(digest)}`,
+          "link ext",
+        ),
+      );
       drawHeader();
       host.layout();
     } catch (error) {
@@ -377,18 +458,44 @@ export function createRecordView(pane: HTMLElement, host: RecordHost): { render(
   function claimRow(position: StakePositionView, wallet: ConnectedWallet): HTMLElement {
     const row = el("div", "stake-block");
     const note = el("p", "stake-claim-note");
-    const control: HTMLButtonElement = button("Claim", "button primary small", () => void claim(position, wallet, control, note));
-    row.append(el("span", "stake-text", `${position.match.home} v ${position.match.away} · ${formatSui(position.estimatedPayoutMist, 4)} SUI`), control, note);
+    const control: HTMLButtonElement = button(
+      "Claim",
+      "button primary small",
+      () => void claim(position, wallet, control, note),
+    );
+    row.append(
+      el(
+        "span",
+        "stake-text",
+        `${position.match.home} v ${position.match.away} · ${formatSui(position.estimatedPayoutMist, 4)} SUI`,
+      ),
+      control,
+      note,
+    );
     return row;
   }
 
-  function walletSection(record: RecallRecord, wallet: ConnectedWallet | null, positions: StakePositionView[]): HTMLElement[] {
+  function walletSection(
+    record: RecallRecord,
+    wallet: ConnectedWallet | null,
+    positions: StakePositionView[],
+  ): HTMLElement[] {
     if (!wallet) return connectView();
     const claims = positions.filter((position) => isClaimable(position.status));
     const nodes: HTMLElement[] = [];
-    if (claims.length > 0) nodes.push(section("Ready to claim", ...claims.map((position) => claimRow(position, wallet))));
+    if (claims.length > 0)
+      nodes.push(section("Ready to claim", ...claims.map((position) => claimRow(position, wallet))));
     nodes.push(section(`Wallet ${shortId(wallet.address)}`, walletStats(positions)));
-    if (host.agent && host.wallet) nodes.push(createAgentSection({ agent: host.agent, api: host.api, wallet: host.wallet, connected: wallet, layout: host.layout }));
+    if (host.agent && host.wallet)
+      nodes.push(
+        createAgentSection({
+          agent: host.agent,
+          api: host.api,
+          wallet: host.wallet,
+          connected: wallet,
+          layout: host.layout,
+        }),
+      );
     if (positions.length === 0) {
       nodes.push(el("p", "note", "No stakes from this wallet yet."));
     } else {
@@ -438,11 +545,24 @@ export function createRecordView(pane: HTMLElement, host: RecordHost): { render(
     if (account) {
       const line = el("p", "note");
       line.append("Memory account ", externalLink(shortId(account.accountId), account.explorerUrl, "link mono"));
-      if (account.owner) line.append(" owned by ", externalLink(shortId(account.owner), `https://suivision.xyz/account/${encodeURIComponent(account.owner)}`, "link mono"));
+      if (account.owner)
+        line.append(
+          " owned by ",
+          externalLink(
+            shortId(account.owner),
+            `https://suivision.xyz/account/${encodeURIComponent(account.owner)}`,
+            "link mono",
+          ),
+        );
       details.push(line);
     }
     const packages = el("p", "note");
-    packages.append("Packages: ", externalLink("proofs", `https://suivision.xyz/package/${RECALL_PACKAGE}`, "link"), " · ", externalLink("staking", `https://suivision.xyz/package/${STAKE_PACKAGE}`, "link"));
+    packages.append(
+      "Packages: ",
+      externalLink("proofs", `https://suivision.xyz/package/${RECALL_PACKAGE}`, "link"),
+      " · ",
+      externalLink("staking", `https://suivision.xyz/package/${STAKE_PACKAGE}`, "link"),
+    );
     details.push(packages);
     return expander("Calls stored on Walrus · proofs on Sui", ...details);
   }
@@ -514,14 +634,24 @@ export function createRecordView(pane: HTMLElement, host: RecordHost): { render(
   async function loadPositions(): Promise<{ wallet: ConnectedWallet | null; positions: StakePositionView[] }> {
     const wallet = (await host.wallet?.current().catch(() => null)) ?? null;
     if (!wallet) return { wallet: null, positions: [] };
-    const response = await host.api<{ positions: StakePositionView[] }>("/stake/positions", { address: wallet.address });
-    return { wallet, positions: response.ok && response.body ? (response.body as { positions: StakePositionView[] }).positions : [] };
+    const response = await host.api<{ positions: StakePositionView[] }>("/stake/positions", {
+      address: wallet.address,
+    });
+    return {
+      wallet,
+      positions: response.ok && response.body ? (response.body as { positions: StakePositionView[] }).positions : [],
+    };
   }
 
   async function loadPublic(wallet: ConnectedWallet | null): Promise<RecordData["publicInfo"]> {
     if (!wallet) return null;
-    const response = await host.api<{ public: boolean; profile?: { handle: string }; score?: number | null }>("/social/profile/by-address", { address: wallet.address });
-    const body = response.ok ? (response.body as { public: boolean; profile?: { handle: string }; score?: number | null } | null) : null;
+    const response = await host.api<{ public: boolean; profile?: { handle: string }; score?: number | null }>(
+      "/social/profile/by-address",
+      { address: wallet.address },
+    );
+    const body = response.ok
+      ? (response.body as { public: boolean; profile?: { handle: string }; score?: number | null } | null)
+      : null;
     return body?.public && body.profile ? { handle: body.profile.handle, score: body.score ?? null } : null;
   }
 

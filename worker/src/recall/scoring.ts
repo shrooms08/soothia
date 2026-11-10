@@ -21,12 +21,7 @@ export function brier(pYes: number, result: Side): number {
   return Math.round((pYes - actual) ** 2 * 10_000) / 10_000;
 }
 
-export function scoreOutcome(
-  pick: PickRecord,
-  result: Side,
-  detail: string,
-  at: string,
-): OutcomeRecord {
+export function scoreOutcome(pick: PickRecord, result: Side, detail: string, at: string): OutcomeRecord {
   const lean: Side = pick.pYes >= 0.5 ? "YES" : "NO";
   const confidence = Math.max(pick.pYes, 1 - pick.pYes);
   return {
@@ -160,10 +155,15 @@ export interface LessonContext {
   unlocks?: UnlockRecord[];
 }
 
-const hitPercent = (list: { hit?: boolean }[]): number => Math.round((list.filter((outcome) => outcome.hit).length / list.length) * 100);
+const hitPercent = (list: { hit?: boolean }[]): number =>
+  Math.round((list.filter((outcome) => outcome.hit).length / list.length) * 100);
 
 /** What staking and following teach, each needing enough calls on both sides. */
-export function stakingAndSocialLessons(scored: OutcomeRecord[], { picks, stakes, unlocks }: LessonContext, at: string): LessonRecord[] {
+export function stakingAndSocialLessons(
+  scored: OutcomeRecord[],
+  { picks, stakes, unlocks }: LessonContext,
+  at: string,
+): LessonRecord[] {
   const lessons: LessonRecord[] = [];
   const staked = new Map<string, bigint>();
   const counted = new Set<string>();
@@ -176,11 +176,18 @@ export function stakingAndSocialLessons(scored: OutcomeRecord[], { picks, stakes
   const withStake = scored.filter((outcome) => staked.has(outcome.pickId));
   const free = scored.filter((outcome) => !staked.has(outcome.pickId));
   if (withStake.length >= LESSON_MIN_CALLS && free.length >= LESSON_MIN_CALLS) {
-    lessons.push({ key: "stakes", at, n: scored.length, text: `Your staked calls land ${hitPercent(withStake)}%, free ones ${hitPercent(free)}%.` });
+    lessons.push({
+      key: "stakes",
+      at,
+      n: scored.length,
+      text: `Your staked calls land ${hitPercent(withStake)}%, free ones ${hitPercent(free)}%.`,
+    });
   }
 
   if (withStake.length > 0) {
-    const sizes = withStake.map((outcome) => staked.get(outcome.pickId) as bigint).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+    const sizes = withStake
+      .map((outcome) => staked.get(outcome.pickId) as bigint)
+      .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
     const middle = Math.floor(sizes.length / 2);
     const median = sizes.length % 2 === 1 ? sizes[middle] * 2n : sizes[middle - 1] + sizes[middle];
     // Doubled on both sides, so an even count's midpoint needs no rounding.
@@ -189,8 +196,18 @@ export function stakingAndSocialLessons(scored: OutcomeRecord[], { picks, stakes
     if (bigger.length >= LESSON_MIN_CALLS && smaller.length >= LESSON_MIN_CALLS) {
       const big = hitPercent(bigger);
       const small = hitPercent(smaller);
-      const verdict = big > small ? "You size up well." : big < small ? "You size up on the wrong calls." : "Stake size makes no difference to your calls.";
-      lessons.push({ key: "stake_size", at, n: bigger.length + smaller.length, text: `Your bigger stakes land ${big}%, your smaller ones ${small}%. ${verdict}` });
+      const verdict =
+        big > small
+          ? "You size up well."
+          : big < small
+            ? "You size up on the wrong calls."
+            : "Stake size makes no difference to your calls.";
+      lessons.push({
+        key: "stake_size",
+        at,
+        n: bigger.length + smaller.length,
+        text: `Your bigger stakes land ${big}%, your smaller ones ${small}%. ${verdict}`,
+      });
     }
   }
 
@@ -204,15 +221,30 @@ export function stakingAndSocialLessons(scored: OutcomeRecord[], { picks, stakes
   }
   for (const [handle, list] of tails) {
     if (list.length < LESSON_MIN_CALLS) continue;
-    lessons.push({ key: `tail:${handle}`, at, n: list.length, text: `Tailing @${handle}: ${list.filter((outcome) => outcome.hit).length} of ${list.length} right` });
+    lessons.push({
+      key: `tail:${handle}`,
+      at,
+      n: list.length,
+      text: `Tailing @${handle}: ${list.filter((outcome) => outcome.hit).length} of ${list.length} right`,
+    });
   }
   if (against.length >= LESSON_MIN_CALLS) {
-    lessons.push({ key: "consensus", at, n: against.length, text: `When you go against the people you follow, you're right ${hitPercent(against)}%.` });
+    lessons.push({
+      key: "consensus",
+      at,
+      n: against.length,
+      text: `When you go against the people you follow, you're right ${hitPercent(against)}%.`,
+    });
   }
 
   const bought = (unlocks ?? []).filter((unlock) => unlock.hit !== undefined);
   if (bought.length >= LESSON_MIN_CALLS && scored.length > 0) {
-    lessons.push({ key: "premium", at, n: bought.length, text: `Premium calls you bought hit ${hitPercent(bought)}%, your own calls ${hitPercent(scored)}%.` });
+    lessons.push({
+      key: "premium",
+      at,
+      n: bought.length,
+      text: `Premium calls you bought hit ${hitPercent(bought)}%, your own calls ${hitPercent(scored)}%.`,
+    });
   }
   return lessons;
 }
@@ -351,7 +383,8 @@ export function lessonMeaning(lesson: Pick<LessonRecord, "text">): string {
 function lessonFigures(lesson: LessonRecord): number[] {
   if (lesson.key === "vs_market") return lesson.bias === undefined ? [] : [lesson.bias * 100];
   const figures = [...lesson.text.matchAll(/(\d+)%/g)].map((match) => Number(match[1]));
-  for (const match of lesson.text.matchAll(/(\d+) of (\d+) right/g)) figures.push((Number(match[1]) / Number(match[2])) * 100);
+  for (const match of lesson.text.matchAll(/(\d+) of (\d+) right/g))
+    figures.push((Number(match[1]) / Number(match[2])) * 100);
   for (const match of lesson.text.matchAll(/(\d+) points?\b/g)) figures.push(Number(match[1]));
   return figures;
 }
@@ -418,7 +451,10 @@ function kickoffDay(startISO: string): string | null {
 }
 
 /** The same two teams on the same UTC day, whichever way round they are listed. */
-export function sameMatch(a: { home: string; away: string; startISO: string }, b: { home: string; away: string; startISO: string }): boolean {
+export function sameMatch(
+  a: { home: string; away: string; startISO: string },
+  b: { home: string; away: string; startISO: string },
+): boolean {
   const day = kickoffDay(a.startISO);
   if (day === null || day !== kickoffDay(b.startISO)) return false;
   const [teamA, teamB] = [teamKey(a.home), teamKey(a.away)];
@@ -442,7 +478,14 @@ export function matchCalled(claim: Pick<ClaimInput, "question" | "fixture">, pic
     pickId: pick.id,
     committed: pick.commit !== null,
     pYes: pick.pYes,
-    fixture: pick.fixture ? { home: pick.fixture.home, away: pick.fixture.away, startISO: pick.fixture.startISO, subject: pick.fixture.subject } : null,
+    fixture: pick.fixture
+      ? {
+          home: pick.fixture.home,
+          away: pick.fixture.away,
+          startISO: pick.fixture.startISO,
+          subject: pick.fixture.subject,
+        }
+      : null,
   };
 }
 

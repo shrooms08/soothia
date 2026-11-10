@@ -7,7 +7,14 @@ import type { OutcomeRecord, PickRecord, StakeRecord } from "../src/recall/recor
 import { clearMemoryCache } from "../src/store";
 import type { ProfileIndex } from "../src/social/context";
 import { socialRoute } from "../src/social/routes";
-import { Budget, buildBoards, buildSnapshot, sweepSocial, type ProfileSnapshot, type SnapshotDeps } from "../src/social/snapshots";
+import {
+  Budget,
+  buildBoards,
+  buildSnapshot,
+  sweepSocial,
+  type ProfileSnapshot,
+  type SnapshotDeps,
+} from "../src/social/snapshots";
 import { computeStats, MAX_BOARD_ROWS, statsForPeriod } from "../src/social/stats";
 import type { StakePool } from "../src/stake/readers";
 
@@ -18,7 +25,13 @@ const KICKOFF_MS = Date.parse(KICKOFF);
 const ADDRESS = `0x${"aa".repeat(32)}`;
 const OTHER = `0x${"cc".repeat(32)}`;
 const POOL = `0x${"bb".repeat(32)}`;
-const profile: ProfileIndex = { handle: "amy", address: ADDRESS, userKey: "secretuserkey", publicSince: "2026-11-08T00:00:00.000Z", shareHistory: false };
+const profile: ProfileIndex = {
+  handle: "amy",
+  address: ADDRESS,
+  userKey: "secretuserkey",
+  publicSince: "2026-11-08T00:00:00.000Z",
+  shareHistory: false,
+};
 
 const pick = (id: string, overrides: Partial<PickRecord> = {}): PickRecord => ({
   id,
@@ -90,14 +103,36 @@ interface DepsOptions {
 
 function depsFor(options: DepsOptions = {}) {
   const counts = { commits: 0, boards: 0, pools: 0 };
-  const lists: Record<string, unknown[]> = { pick: options.picks ?? [pick("p1")], outcome: options.outcomes ?? [outcome("p1")], stake: options.stakes ?? [] };
+  const lists: Record<string, unknown[]> = {
+    pick: options.picks ?? [pick("p1")],
+    outcome: options.outcomes ?? [outcome("p1")],
+    stake: options.stakes ?? [],
+  };
   const deps: SnapshotDeps = {
     now: NOW,
     store: () => ({ list: (async (kind: string) => lists[kind]) as never }),
     checkCommit: async (digest) => {
       counts.commits += 1;
-      if (options.commitProblem) return { digest, verified: false, timestampMs: null, checkpoint: null, sender: null, hash: null, explorerUrl: "", problem: options.commitProblem };
-      return { digest, verified: true, timestampMs: options.commitMs === undefined ? KICKOFF_MS - 3_600_000 : options.commitMs, checkpoint: "1", sender: null, hash: null, explorerUrl: "" };
+      if (options.commitProblem)
+        return {
+          digest,
+          verified: false,
+          timestampMs: null,
+          checkpoint: null,
+          sender: null,
+          hash: null,
+          explorerUrl: "",
+          problem: options.commitProblem,
+        };
+      return {
+        digest,
+        verified: true,
+        timestampMs: options.commitMs === undefined ? KICKOFF_MS - 3_600_000 : options.commitMs,
+        checkpoint: "1",
+        sender: null,
+        hash: null,
+        explorerUrl: "",
+      };
     },
     fetcher: (async (league: string) => {
       counts.boards += 1;
@@ -106,7 +141,20 @@ function depsFor(options: DepsOptions = {}) {
     chain: {
       readPool: async () => {
         counts.pools += 1;
-        return { status: "resolved", outcomeYes: true, yesTotal: SUI, noTotal: SUI, yes: SUI, no: SUI, feeAmount: 20_000_000n, feeBps: 100n, resolvedAtMs: BigInt(KICKOFF_MS), challengeMs: 21_600_000n, closeMs: BigInt(KICKOFF_MS), ...options.pool } as StakePool;
+        return {
+          status: "resolved",
+          outcomeYes: true,
+          yesTotal: SUI,
+          noTotal: SUI,
+          yes: SUI,
+          no: SUI,
+          feeAmount: 20_000_000n,
+          feeBps: 100n,
+          resolvedAtMs: BigInt(KICKOFF_MS),
+          challengeMs: 21_600_000n,
+          closeMs: BigInt(KICKOFF_MS),
+          ...options.pool,
+        } as StakePool;
       },
       readPosition: async () => ({ side: true, amount: SUI, claimed: false }),
     },
@@ -114,9 +162,18 @@ function depsFor(options: DepsOptions = {}) {
   return { deps, counts };
 }
 
-const build = (options: DepsOptions = {}, who: ProfileIndex = profile, previous: ProfileSnapshot | null = null, budget = 40) => {
+const build = (
+  options: DepsOptions = {},
+  who: ProfileIndex = profile,
+  previous: ProfileSnapshot | null = null,
+  budget = 40,
+) => {
   const { deps, counts } = depsFor(options);
-  return buildSnapshot(who, previous, deps, new Budget(budget)).then(({ snapshot, feed }) => ({ snapshot, feed, counts }));
+  return buildSnapshot(who, previous, deps, new Budget(budget)).then(({ snapshot, feed }) => ({
+    snapshot,
+    feed,
+    counts,
+  }));
 };
 
 beforeEach(() => clearMemoryCache());
@@ -137,7 +194,9 @@ test("a call committed after kickoff does not count", async () => {
 });
 
 test("a faked late kickoff cannot pass: ESPN's kickoff decides", async () => {
-  const faked = pick("p1", { fixture: { home: "Arsenal", away: "Chelsea", startISO: "2026-11-08T23:59:00.000Z", subject: "home" } });
+  const faked = pick("p1", {
+    fixture: { home: "Arsenal", away: "Chelsea", startISO: "2026-11-08T23:59:00.000Z", subject: "home" },
+  });
   const { snapshot } = await build({ picks: [faked], commitMs: KICKOFF_MS + 3_600_000 });
   assert.equal(snapshot.periods.all.stats.settled, 0);
 });
@@ -171,7 +230,11 @@ test("calls before publicSince stay private unless history is shared", async () 
 
 test("a stake on a private call stays private", async () => {
   const old = pick("old", { at: "2026-11-01T10:00:00.000Z" });
-  const { snapshot } = await build({ picks: [old, pick("p1")], outcomes: [outcome("p1")], stakes: [stakeRecord("old")] });
+  const { snapshot } = await build({
+    picks: [old, pick("p1")],
+    outcomes: [outcome("p1")],
+    stakes: [stakeRecord("old")],
+  });
   assert.equal(snapshot.periods.all.stats.stakedMist, "0");
 });
 
@@ -199,7 +262,10 @@ test("a tailed call says whose it copied", async () => {
 test("the seed feed holds public calls only, with their stakes", async () => {
   const old = pick("old", { at: "2026-11-01T10:00:00.000Z" });
   const { feed } = await build({ picks: [old, pick("p1")], outcomes: [], stakes: [stakeRecord("p1")] });
-  assert.deepEqual(feed.map((item) => item.pickId), ["p1"]);
+  assert.deepEqual(
+    feed.map((item) => item.pickId),
+    ["p1"],
+  );
   assert.equal(feed[0].stakeMist, SUI.toString());
 });
 
@@ -208,7 +274,9 @@ test("non-fixture calls are not public", async () => {
 });
 
 test("stakes from another wallet, and repeats of one transaction, are left out", async () => {
-  const { snapshot } = await build({ stakes: [stakeRecord("p1"), stakeRecord("p1"), stakeRecord("p1", { sender: OTHER, digest: "other" })] });
+  const { snapshot } = await build({
+    stakes: [stakeRecord("p1"), stakeRecord("p1"), stakeRecord("p1", { sender: OTHER, digest: "other" })],
+  });
   assert.equal(snapshot.periods.all.stats.stakedMist, SUI.toString());
 });
 
@@ -226,13 +294,18 @@ test("stake results come from the chain", async () => {
 });
 
 test("a result still in its challenge window is not final", async () => {
-  const { snapshot } = await build({ stakes: [stakeRecord("p1")], pool: { resolvedAtMs: BigInt(NOW.getTime() - 1000) } });
+  const { snapshot } = await build({
+    stakes: [stakeRecord("p1")],
+    pool: { resolvedAtMs: BigInt(NOW.getTime() - 1000) },
+  });
   assert.equal(snapshot.periods.all.stats.wonStakes, 0);
   assert.deepEqual(snapshot.finals, {});
 });
 
 test("a stake on a match still to come reads no pool", async () => {
-  const future = pick("p1", { fixture: { home: "Arsenal", away: "Chelsea", startISO: "2026-11-21T15:00:00.000Z", subject: "home" } });
+  const future = pick("p1", {
+    fixture: { home: "Arsenal", away: "Chelsea", startISO: "2026-11-21T15:00:00.000Z", subject: "home" },
+  });
   const { snapshot, counts } = await build({ picks: [future], outcomes: [], stakes: [stakeRecord("p1")] });
   assert.equal(counts.pools, 0);
   assert.equal(snapshot.periods.all.stats.stakedMist, SUI.toString());
@@ -268,7 +341,11 @@ test("work stops when the budget runs out, and the rest waits", async () => {
 });
 
 test("at most 50 recent calls, newest first", async () => {
-  const picks = Array.from({ length: 60 }, (_, i) => pick(`p${i}`, { at: `2026-11-08T${String(10 + (i % 10)).padStart(2, "0")}:${String(i % 60).padStart(2, "0")}:00.000Z` }));
+  const picks = Array.from({ length: 60 }, (_, i) =>
+    pick(`p${i}`, {
+      at: `2026-11-08T${String(10 + (i % 10)).padStart(2, "0")}:${String(i % 60).padStart(2, "0")}:00.000Z`,
+    }),
+  );
   const { snapshot } = await build({ picks, outcomes: [] });
   assert.equal(snapshot.recent.length, 50);
   assert.ok(snapshot.recent[0].at >= snapshot.recent[49].at);
@@ -292,7 +369,13 @@ function kvFake() {
     delete: async (key: string) => {
       data.delete(key);
     },
-    list: async ({ prefix }: { prefix: string }) => ({ keys: [...data.keys()].filter((key) => key.startsWith(prefix)).sort().map((name) => ({ name })), list_complete: true }),
+    list: async ({ prefix }: { prefix: string }) => ({
+      keys: [...data.keys()]
+        .filter((key) => key.startsWith(prefix))
+        .sort()
+        .map((name) => ({ name })),
+      list_complete: true,
+    }),
   };
   return { data, puts, env: { SOOTHIA_CACHE: kv } as unknown as Env };
 }
@@ -365,10 +448,19 @@ test("one profile's failure does not stop the others", async () => {
 
 test("the stop-gap hidden list is cleared once the boards are rebuilt", async () => {
   const { data, env } = kvFake();
-  data.set("social:hidden", JSON.stringify([{ handle: "gone", at: NOW.getTime() - 1000 }, { handle: "just_now", at: NOW.getTime() + 1000 }]));
+  data.set(
+    "social:hidden",
+    JSON.stringify([
+      { handle: "gone", at: NOW.getTime() - 1000 },
+      { handle: "just_now", at: NOW.getTime() + 1000 },
+    ]),
+  );
   const { deps } = depsFor();
   await sweepSocial(env, deps);
-  assert.deepEqual(JSON.parse(data.get("social:hidden")!).map((entry: { handle: string }) => entry.handle), ["just_now"]);
+  assert.deepEqual(
+    JSON.parse(data.get("social:hidden")!).map((entry: { handle: string }) => entry.handle),
+    ["just_now"],
+  );
 });
 
 test("a snapshot whose profile has gone stays off the boards", async () => {
@@ -382,9 +474,20 @@ test("a snapshot whose profile has gone stays off the boards", async () => {
 });
 
 test("every board and period exists, and none holds more than 100 rows", () => {
-  const stats = computeStats(Array.from({ length: 12 }, () => ({ kickoffMs: KICKOFF_MS, competition: "L", teams: ["A"], result: { hit: true, brier: 0.1 } })), []);
+  const stats = computeStats(
+    Array.from({ length: 12 }, () => ({
+      kickoffMs: KICKOFF_MS,
+      competition: "L",
+      teams: ["A"],
+      result: { hit: true, brier: 0.1 },
+    })),
+    [],
+  );
   const period = { stats, leagues: {}, teams: {} };
-  const snapshots = Array.from({ length: 130 }, (_, i) => ({ handle: `user${i}`, periods: { week: period, month: period, all: period } })) as unknown as ProfileSnapshot[];
+  const snapshots = Array.from({ length: 130 }, (_, i) => ({
+    handle: `user${i}`,
+    periods: { week: period, month: period, all: period },
+  })) as unknown as ProfileSnapshot[];
   const { boards } = buildBoards(snapshots, NOW);
   assert.deepEqual(Object.keys(boards).sort(), ["earners", "hits", "roi", "score", "streaks"]);
   assert.deepEqual(Object.keys(boards.score).sort(), ["all", "month", "week"]);
@@ -395,11 +498,25 @@ test("every board and period exists, and none holds more than 100 rows", () => {
 // ---- the public routes ----
 
 const entryFor = (handle: string, settled: number, hit = true, league = "English Premier League", team = "Arsenal") => {
-  const calls = Array.from({ length: settled }, () => ({ kickoffMs: KICKOFF_MS, competition: league, teams: [team], result: { hit, brier: hit ? 0.05 : 0.45 } }));
-  return { handle, periods: { week: statsForPeriod(calls, [], "week", NOW.getTime()), month: statsForPeriod(calls, [], "month", NOW.getTime()), all: statsForPeriod(calls, [], "all", NOW.getTime()) } };
+  const calls = Array.from({ length: settled }, () => ({
+    kickoffMs: KICKOFF_MS,
+    competition: league,
+    teams: [team],
+    result: { hit, brier: hit ? 0.05 : 0.45 },
+  }));
+  return {
+    handle,
+    periods: {
+      week: statsForPeriod(calls, [], "week", NOW.getTime()),
+      month: statsForPeriod(calls, [], "month", NOW.getTime()),
+      all: statsForPeriod(calls, [], "all", NOW.getTime()),
+    },
+  };
 };
 
-async function publicEnv(entries = [entryFor("amy", 12), entryFor("bob", 10, false, "Spanish LALIGA", "Barcelona"), entryFor("cal", 3)]) {
+async function publicEnv(
+  entries = [entryFor("amy", 12), entryFor("bob", 10, false, "Spanish LALIGA", "Barcelona"), entryFor("cal", 3)],
+) {
   const { data, env } = kvFake();
   const snapshots = entries.map((entry) => ({ ...entry })) as unknown as ProfileSnapshot[];
   data.set("social:boards", JSON.stringify(buildBoards(snapshots, NOW)));
@@ -407,7 +524,12 @@ async function publicEnv(entries = [entryFor("amy", 12), entryFor("bob", 10, fal
 }
 
 const get = async (env: Env, path: string) => {
-  const response = await socialRoute(new Request(`https://x${path}`), env, path.split("?")[0], { verify: async () => true, lookupName: async () => null, store: () => ({}) as never, now: () => NOW.getTime() });
+  const response = await socialRoute(new Request(`https://x${path}`), env, path.split("?")[0], {
+    verify: async () => true,
+    lookupName: async () => null,
+    store: () => ({}) as never,
+    now: () => NOW.getTime(),
+  });
   return { status: response.status, body: (await response.json()) as Record<string, any> };
 };
 
@@ -416,8 +538,22 @@ test("the leaderboard ranks qualifying profiles, with the row fields", async () 
   const { body } = await get(env, "/social/leaderboard");
   assert.equal(body.board, "score");
   assert.equal(body.period, "all");
-  assert.deepEqual(body.rows.map((row: { handle: string }) => row.handle), ["amy", "bob"]);
-  assert.deepEqual(Object.keys(body.rows[0]).sort(), ["bestMultiplier", "calls", "handle", "hitRate", "profit", "rank", "roi", "score", "streak", "value"]);
+  assert.deepEqual(
+    body.rows.map((row: { handle: string }) => row.handle),
+    ["amy", "bob"],
+  );
+  assert.deepEqual(Object.keys(body.rows[0]).sort(), [
+    "bestMultiplier",
+    "calls",
+    "handle",
+    "hitRate",
+    "profit",
+    "rank",
+    "roi",
+    "score",
+    "streak",
+    "value",
+  ]);
 });
 
 test("the leaderboard checks its options", async () => {
@@ -430,8 +566,16 @@ test("the leaderboard checks its options", async () => {
 
 test("league and team filters use the breakdowns", async () => {
   const { env } = await publicEnv();
-  assert.deepEqual((await get(env, "/social/leaderboard?league=spanish%20laliga")).body.rows.map((row: { handle: string }) => row.handle), ["bob"]);
-  assert.deepEqual((await get(env, "/social/leaderboard?team=arsenal")).body.rows.map((row: { handle: string }) => row.handle), ["amy"]);
+  assert.deepEqual(
+    (await get(env, "/social/leaderboard?league=spanish%20laliga")).body.rows.map(
+      (row: { handle: string }) => row.handle,
+    ),
+    ["bob"],
+  );
+  assert.deepEqual(
+    (await get(env, "/social/leaderboard?team=arsenal")).body.rows.map((row: { handle: string }) => row.handle),
+    ["amy"],
+  );
   assert.deepEqual((await get(env, "/social/leaderboard?team=everton")).body.rows, []);
 });
 
@@ -450,7 +594,10 @@ test("an unpublished handle vanishes at once, and ranks close up", async () => {
   const { data, env } = await publicEnv();
   data.set("social:hidden", JSON.stringify([{ handle: "amy", at: 1 }]));
   const { body } = await get(env, "/social/leaderboard");
-  assert.deepEqual(body.rows.map((row: { rank: number; handle: string }) => [row.rank, row.handle]), [[1, "bob"]]);
+  assert.deepEqual(
+    body.rows.map((row: { rank: number; handle: string }) => [row.rank, row.handle]),
+    [[1, "bob"]],
+  );
   clearMemoryCache();
   assert.deepEqual((await get(env, "/social/leaderboard?team=arsenal")).body.rows, []);
 });
@@ -475,7 +622,8 @@ test("a profile page shows stats and calls and never the private parts", async (
   assert.ok(body.breakdowns.leagues["English Premier League"]);
   assert.equal(body.calls.length, 1);
   const text = JSON.stringify(body);
-  for (const secret of ["secretuserkey", "userKey", "proofs", "finals", "private-site"]) assert.equal(text.includes(secret), false, secret);
+  for (const secret of ["secretuserkey", "userKey", "proofs", "finals", "private-site"])
+    assert.equal(text.includes(secret), false, secret);
 });
 
 test("a profile with no snapshot yet still answers", async () => {

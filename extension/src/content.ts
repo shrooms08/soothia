@@ -45,7 +45,16 @@ import {
   type RecallRecord,
 } from "./messages";
 import { readPage, type ReadInfo } from "./reader";
-import { badgeText, cachedFeedCount, FEED_CHECK_MS, pageFollowedCount, tailSheetFor, type FeedCheck, type OpenFollowedCall, type TailSource } from "./social-logic";
+import {
+  badgeText,
+  cachedFeedCount,
+  FEED_CHECK_MS,
+  pageFollowedCount,
+  tailSheetFor,
+  type FeedCheck,
+  type OpenFollowedCall,
+  type TailSource,
+} from "./social-logic";
 import type { TailPrefill } from "./social-logic";
 import { createSocialView, followedRow } from "./social-view";
 import { calledRow, createRecordView } from "./record-view";
@@ -268,7 +277,14 @@ async function mount(): Promise<void> {
   recordPane.hidden = true;
   const socialPane = el("div", "body");
   socialPane.hidden = true;
-  const socialView = createSocialView(socialPane, { api, layout, state: stateBlock, onTail: (handle, source) => openSocialTail(handle, source), unlock: unlockCall, runAgent });
+  const socialView = createSocialView(socialPane, {
+    api,
+    layout,
+    state: stateBlock,
+    onTail: (handle, source) => openSocialTail(handle, source),
+    unlock: unlockCall,
+    runAgent,
+  });
   const recordView = createRecordView(recordPane, {
     api,
     layout,
@@ -374,7 +390,11 @@ async function mount(): Promise<void> {
       layout();
     }
     const row = el("div", "recall-row");
-    row.append(input, button("Save", "button small", () => void save(input.value.trim())), button("Clear", "button small", () => void save("")));
+    row.append(
+      input,
+      button("Save", "button small", () => void save(input.value.trim())),
+      button("Clear", "button small", () => void save("")),
+    );
     const field = el("div", "field recall-field");
     field.append(el("span", "field-label", "Link record"), row, note);
     return field;
@@ -390,13 +410,9 @@ async function mount(): Promise<void> {
 
   const walletBridge = createWalletBridge(() => chrome.runtime.getURL("wallet-bridge.js"));
   const walletAccess = createWalletAccess(walletBridge, chromeWalletStorage, checkInBackground);
-  const walletSettings = createWalletSettings(
-    walletBridge,
-    chromeWalletStorage,
-    () => {
-      if (!card.hidden) layout();
-    },
-  );
+  const walletSettings = createWalletSettings(walletBridge, chromeWalletStorage, () => {
+    if (!card.hidden) layout();
+  });
 
   const summary = el("summary", "debug-summary", "settings");
   summary.append(el("span", "debug-version", extensionVersion()));
@@ -466,10 +482,7 @@ async function mount(): Promise<void> {
   const bubbleClose = button("", "bubble-close", () => dismissBubble());
   bubbleClose.setAttribute("aria-label", "Dismiss");
   bubbleClose.append(icon("close"));
-  bubble.append(
-    el("p", "bubble-text", "I'll glow when I spot something you can call. Click me anytime."),
-    bubbleClose,
-  );
+  bubble.append(el("p", "bubble-text", "I'll glow when I spot something you can call. Click me anytime."), bubbleClose);
   let bubbleTimer: ReturnType<typeof setTimeout> | undefined;
 
   function dismissBubble(): void {
@@ -628,7 +641,10 @@ async function mount(): Promise<void> {
         const insight = insightsByClaim.get(tile.claim.id);
         let row: HTMLElement | undefined;
         if (insight?.called && staking.has(tile.claim.id)) {
-          const stakeRow = createStakeRow({ api, wallet: walletAccess, layout, onBack: (called) => openBack(called) }, insight.called);
+          const stakeRow = createStakeRow(
+            { api, wallet: walletAccess, layout, onBack: (called) => openBack(called) },
+            insight.called,
+          );
           stakeRows.push(stakeRow);
           row = stakeRow.node;
         }
@@ -636,7 +652,13 @@ async function mount(): Promise<void> {
         // Both questions on a match share one crowd, so the line appears once.
         if (!followedShown && insight?.followedCalls?.length) {
           followedShown = true;
-          followed = followedRow(insight.followedCalls, insight.consensus ?? null, insight.called ? null : (call: OpenFollowedCall) => openPageTail(call), layout, unlockCall);
+          followed = followedRow(
+            insight.followedCalls,
+            insight.consensus ?? null,
+            insight.called ? null : (call: OpenFollowedCall) => openPageTail(call),
+            layout,
+            unlockCall,
+          );
         }
         return tileNode(tile, insight, () => openCall(tile), { api, layout }, row, followed);
       }),
@@ -659,12 +681,17 @@ async function mount(): Promise<void> {
   }
 
   /** Pays for a premium call from the connected wallet, connecting one if needed. */
-  async function unlockCall(pickId: string, priceMist: string, choose: (wallets: WalletSummary[]) => Promise<WalletSummary | null>): Promise<UnlockResult> {
+  async function unlockCall(
+    pickId: string,
+    priceMist: string,
+    choose: (wallets: WalletSummary[]) => Promise<WalletSummary | null>,
+  ): Promise<UnlockResult> {
     const wallet = (await walletAccess.current()) ?? (await walletAccess.connect(choose));
     if (!wallet) return { ok: false, code: "wallet", walletMessage: "No wallet was connected.", maybePaid: false };
     return runUnlock({
       expectedPriceMist: priceMist,
-      fetchCall: (payment) => chrome.runtime.sendMessage({ type: PREMIUM_CALL, pickId, payment }) as Promise<PremiumCallResponse>,
+      fetchCall: (payment) =>
+        chrome.runtime.sendMessage({ type: PREMIUM_CALL, pickId, payment }) as Promise<PremiumCallResponse>,
       build: async () => {
         const built = await api<{ transaction: string }>("/premium/build", { pickId, sender: wallet.address });
         if (!built.ok || !built.body) throw new Error((built.body as ApiError | null)?.error ?? "unavailable");
@@ -675,7 +702,9 @@ async function mount(): Promise<void> {
   }
 
   function agentRequest<T>(action: AgentAction, settings?: AgentSettings): Promise<T | null> {
-    return (chrome.runtime.sendMessage({ type: AGENT_REQUEST, action, settings }) as Promise<T | null>).catch(() => null);
+    return (chrome.runtime.sendMessage({ type: AGENT_REQUEST, action, settings }) as Promise<T | null>).catch(
+      () => null,
+    );
   }
 
   async function runAgent(): Promise<number> {
@@ -725,7 +754,18 @@ async function mount(): Promise<void> {
         celebrate: pulseOrb,
         sound,
         prefill,
-        offerBack: (called) => showInSocial(openBackSheet({ called, api, wallet: walletAccess, layout, back: backToSocial, celebrate: pulseOrb, sound })),
+        offerBack: (called) =>
+          showInSocial(
+            openBackSheet({
+              called,
+              api,
+              wallet: walletAccess,
+              layout,
+              back: backToSocial,
+              celebrate: pulseOrb,
+              sound,
+            }),
+          ),
       }),
     );
   }
@@ -908,7 +948,9 @@ async function mount(): Promise<void> {
     const now = Date.now();
     newFeedItems = 0;
     renderBadge();
-    chrome.storage.local.set({ [SOCIAL_SEEN_KEY]: now, [FEED_CHECK_KEY]: { at: now, seen: now, count: 0 } satisfies FeedCheck }).catch(() => {});
+    chrome.storage.local
+      .set({ [SOCIAL_SEEN_KEY]: now, [FEED_CHECK_KEY]: { at: now, seen: now, count: 0 } satisfies FeedCheck })
+      .catch(() => {});
   }
 
   /** Counts feed items since Social was last opened, asking the Worker every few minutes at most. */
@@ -1095,7 +1137,9 @@ async function mount(): Promise<void> {
       ]);
       setLinkedRecallId(isRecallId(stored[RECALL_ID_KEY]) ? stored[RECALL_ID_KEY] : "");
       const savedQuiet: unknown = stored[QUIET_SITES_KEY];
-      quietSites = Array.isArray(savedQuiet) ? savedQuiet.filter((site): site is string => typeof site === "string") : [];
+      quietSites = Array.isArray(savedQuiet)
+        ? savedQuiet.filter((site): site is string => typeof site === "string")
+        : [];
       const savedPending: unknown = stored[QUIET_PENDING_KEY];
       quietPending = typeof savedPending === "object" && savedPending !== null ? (savedPending as QuietPending) : {};
       devEvents = stored["soothia:devEvents"] === true;
@@ -1394,7 +1438,10 @@ async function mount(): Promise<void> {
   await safe("settings", loadSettings);
   await safe("wallet", walletSettings.load);
   void safe("feed badge", refreshFeedBadge);
-  setInterval(guarded("feed badge", () => void safe("feed badge", refreshFeedBadge)), FEED_CHECK_MS);
+  setInterval(
+    guarded("feed badge", () => void safe("feed badge", refreshFeedBadge)),
+    FEED_CHECK_MS,
+  );
   // A wallet connected from the Back it sheet shows in settings too.
   chrome.storage.onChanged.addListener(
     guarded("wallet change", (changes: Record<string, chrome.storage.StorageChange>) => {

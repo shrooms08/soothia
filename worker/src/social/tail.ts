@@ -21,22 +21,35 @@ export interface TailRequest {
 
 export type TailResult = { ok: true; input: PickInput } | { ok: false; status: number; code: string };
 
-const subjectTeam = (fixture: { home: string; away: string; subject: "home" | "away" }): string => teamKey(fixture.subject === "home" ? fixture.home : fixture.away);
+const subjectTeam = (fixture: { home: string; away: string; subject: "home" | "away" }): string =>
+  teamKey(fixture.subject === "home" ? fixture.home : fixture.away);
 
 /** Checks a tail against its source call and returns the pick to save. */
-export async function applyTail(env: Env, input: PickInput, tail: TailRequest, userKey: string, fetcher: ScoreboardFetcher, nowMs: number): Promise<TailResult> {
+export async function applyTail(
+  env: Env,
+  input: PickInput,
+  tail: TailRequest,
+  userKey: string,
+  fetcher: ScoreboardFetcher,
+  nowMs: number,
+): Promise<TailResult> {
   const { fixture } = input;
   if (!fixture) return { ok: false, status: 400, code: "tail_needs_match" };
-  if ((await env.SOOTHIA_CACHE.get(userIndexKey(userKey))) === tail.handle) return { ok: false, status: 400, code: "cannot_tail_self" };
+  if ((await env.SOOTHIA_CACHE.get(userIndexKey(userKey))) === tail.handle)
+    return { ok: false, status: 400, code: "cannot_tail_self" };
 
   const items = (await env.SOOTHIA_CACHE.get<FeedItem[]>(recentKey(tail.handle), "json")) ?? [];
   const source = items.filter((item) => sameMatch(fixture, item.fixture)).sort((a, b) => b.at.localeCompare(a.at))[0];
   if (!source) return { ok: false, status: 404, code: "tail_source_not_found" };
   // Checked first: the errors below would otherwise tell a guesser which side it was.
-  if (isHidden(source.premium, source.fixture.startISO, nowMs) && (await env.SOOTHIA_CACHE.get(unlockKey(userKey, source.pickId))) === null) {
+  if (
+    isHidden(source.premium, source.fixture.startISO, nowMs) &&
+    (await env.SOOTHIA_CACHE.get(unlockKey(userKey, source.pickId))) === null
+  ) {
     return { ok: false, status: 402, code: "tail_locked" };
   }
-  if (subjectTeam(fixture) !== subjectTeam(source.fixture)) return { ok: false, status: 400, code: "tail_wrong_question" };
+  if (subjectTeam(fixture) !== subjectTeam(source.fixture))
+    return { ok: false, status: 400, code: "tail_wrong_question" };
   const side = input.pYes >= 0.5 ? "YES" : "NO";
   if (side !== source.side && !tail.flip) return { ok: false, status: 400, code: "tail_side_mismatch" };
 

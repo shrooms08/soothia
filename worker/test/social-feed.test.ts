@@ -5,7 +5,19 @@ import type { Env } from "../src/http";
 import { userKeyFor, type RecallStore } from "../src/recall/memory";
 import type { PickRecord } from "../src/recall/records";
 import { clearMemoryCache } from "../src/store";
-import { consensusOf, feedItemFor, followedCallsOn, followedStance, mergeFeed, pushPickToFeed, pushStakeToFeed, withItem, type FeedItem, type FollowedItem, type OpenFollowedCall } from "../src/social/feed";
+import {
+  consensusOf,
+  feedItemFor,
+  followedCallsOn,
+  followedStance,
+  mergeFeed,
+  pushPickToFeed,
+  pushStakeToFeed,
+  withItem,
+  type FeedItem,
+  type FollowedItem,
+  type OpenFollowedCall,
+} from "../src/social/feed";
 import { socialRoute } from "../src/social/routes";
 
 const INSTALL = "12345678-1234-1234-1234-123456789abc";
@@ -29,7 +41,11 @@ const pick = (id: string, overrides: Partial<PickRecord> = {}): PickRecord => ({
   ...overrides,
 });
 
-const item = (pickId: string, minute: number, overrides: Partial<FeedItem> = {}): FeedItem => ({ ...feedItemFor(pick(pickId))!, at: at(minute), ...overrides });
+const item = (pickId: string, minute: number, overrides: Partial<FeedItem> = {}): FeedItem => ({
+  ...feedItemFor(pick(pickId))!,
+  at: at(minute),
+  ...overrides,
+});
 
 function kvFake() {
   const data = new Map<string, string>();
@@ -48,21 +64,34 @@ function kvFake() {
 
 function publicUser(data: Map<string, string>, userKey = "u1", handle = "ada", shareHistory = false): void {
   data.set(`profileuser:${userKey}`, handle);
-  data.set(`profile:${handle}`, JSON.stringify({ handle, address: "0xa", userKey, publicSince: PUBLIC_SINCE, shareHistory }));
+  data.set(
+    `profile:${handle}`,
+    JSON.stringify({ handle, address: "0xa", userKey, publicSince: PUBLIC_SINCE, shareHistory }),
+  );
 }
 
 const ADA = `0x${"a".repeat(64)}`;
 
 function followAda(data: Map<string, string>, userKey: string): void {
   data.set(`following:${userKey}`, JSON.stringify([ADA]));
-  data.set(`profileaddr:${ADA}`, JSON.stringify({ handle: "ada", address: ADA, userKey: "u-ada", publicSince: PUBLIC_SINCE, shareHistory: false }));
+  data.set(
+    `profileaddr:${ADA}`,
+    JSON.stringify({ handle: "ada", address: ADA, userKey: "u-ada", publicSince: PUBLIC_SINCE, shareHistory: false }),
+  );
 }
 
 beforeEach(() => clearMemoryCache());
 
 test("an item is compact, and says nothing about where the call was read", () => {
   const made = feedItemFor(pick("p1"))!;
-  assert.deepEqual(made, { pickId: "p1", fixture: { home: "Newcastle", away: "Arsenal", competition: "Premier League", startISO: KICKOFF, subject: "away" }, lean: "Arsenal win", side: "YES", confidence: 70, at: at(10) });
+  assert.deepEqual(made, {
+    pickId: "p1",
+    fixture: { home: "Newcastle", away: "Arsenal", competition: "Premier League", startISO: KICKOFF, subject: "away" },
+    lean: "Arsenal win",
+    side: "YES",
+    confidence: 70,
+    at: at(10),
+  });
   assert.equal(JSON.stringify(made).includes("private.example"), false);
 });
 
@@ -89,7 +118,10 @@ test("the feed keeps the newest 50, one entry per pick", () => {
   assert.equal(list.length, 50);
   assert.equal(list[0].pickId, "p59");
   assert.equal(list.at(-1)!.pickId, "p10");
-  assert.equal(withItem(list, { ...list[3], confidence: 99 }).filter((entry) => entry.pickId === list[3].pickId).length, 1);
+  assert.equal(
+    withItem(list, { ...list[3], confidence: 99 }).filter((entry) => entry.pickId === list[3].pickId).length,
+    1,
+  );
 });
 
 test("a stake updates its call instead of adding another, and adds up", async () => {
@@ -118,7 +150,13 @@ test("with history shared, that same stake may show", async () => {
 });
 
 test("a broken KV never fails the call", async () => {
-  const env = { SOOTHIA_CACHE: { get: async () => { throw new Error("down"); } } } as unknown as Env;
+  const env = {
+    SOOTHIA_CACHE: {
+      get: async () => {
+        throw new Error("down");
+      },
+    },
+  } as unknown as Env;
   await pushPickToFeed(env, "u1", pick("p1"));
   await pushStakeToFeed(env, "u1", pick("p1"), 1n);
 });
@@ -126,8 +164,15 @@ test("a broken KV never fails the call", async () => {
 const followed = (handle: string, entry: FeedItem): FollowedItem => ({ handle, item: entry });
 
 test("the feed merges everyone, newest first", () => {
-  const merged = mergeFeed([followed("ada", item("a1", 1)), followed("bob", item("b1", 5)), followed("ada", item("a2", 3))]);
-  assert.deepEqual(merged.map((entry) => entry.item.pickId), ["b1", "a2", "a1"]);
+  const merged = mergeFeed([
+    followed("ada", item("a1", 1)),
+    followed("bob", item("b1", 5)),
+    followed("ada", item("a2", 3)),
+  ]);
+  assert.deepEqual(
+    merged.map((entry) => entry.item.pickId),
+    ["b1", "a2", "a1"],
+  );
   assert.equal(mergeFeed(Array.from({ length: 60 }, (_, i) => followed("ada", item(`p${i}`, i)))).length, 50);
 });
 
@@ -138,23 +183,35 @@ test("followed calls match by teams and day, whichever way round", () => {
   assert.equal(calls.length, 1);
   assert.equal(calls[0].handle, "ada");
   assert.equal((calls[0] as OpenFollowedCall).lean, "Arsenal win");
-  assert.equal(followedCallsOn([followed("ada", item("a", 1))], { ...page, home: "Arsenal", away: "Newcastle" }).length, 1);
+  assert.equal(
+    followedCallsOn([followed("ada", item("a", 1))], { ...page, home: "Arsenal", away: "Newcastle" }).length,
+    1,
+  );
 });
 
 test("another match or day isn't followed", () => {
   assert.equal(followedCallsOn([followed("ada", item("a", 1))], { ...page, away: "Chelsea" }).length, 0);
-  assert.equal(followedCallsOn([followed("ada", item("a", 1))], { ...page, startISO: "2026-11-22T17:30:00.000Z" }).length, 0);
+  assert.equal(
+    followedCallsOn([followed("ada", item("a", 1))], { ...page, startISO: "2026-11-22T17:30:00.000Z" }).length,
+    0,
+  );
 });
 
 test("each person counts once, with their newest call", () => {
-  const calls = followedCallsOn([followed("ada", item("old", 1, { confidence: 55 })), followed("ada", item("new", 5, { confidence: 80 }))], page);
+  const calls = followedCallsOn(
+    [followed("ada", item("old", 1, { confidence: 55 })), followed("ada", item("new", 5, { confidence: 80 }))],
+    page,
+  );
   assert.equal(calls.length, 1);
   assert.equal((calls[0] as OpenFollowedCall).confidence, 80);
 });
 
 test("the consensus is the side most people took", () => {
   const no = item("n", 2, { side: "NO", lean: "Arsenal doesn't win (Newcastle win or draw)" });
-  const calls = followedCallsOn([followed("ada", item("a", 1)), followed("bob", item("b", 2)), followed("cal", no)], page);
+  const calls = followedCallsOn(
+    [followed("ada", item("a", 1)), followed("bob", item("b", 2)), followed("cal", no)],
+    page,
+  );
   const consensus = consensusOf(calls)!;
   assert.equal(consensus.text, "2 of 3 say Arsenal win");
   assert.equal(consensus.count, 2);
@@ -167,8 +224,13 @@ test("a split or empty crowd has no consensus", () => {
 });
 
 test("the same side counts together however the match was listed", () => {
-  const reversed = item("r", 2, { fixture: { home: "Arsenal", away: "Newcastle United", competition: null, startISO: KICKOFF, subject: "home" } });
-  assert.equal(consensusOf(followedCallsOn([followed("ada", item("a", 1)), followed("bob", reversed)], page))!.count, 2);
+  const reversed = item("r", 2, {
+    fixture: { home: "Arsenal", away: "Newcastle United", competition: null, startISO: KICKOFF, subject: "home" },
+  });
+  assert.equal(
+    consensusOf(followedCallsOn([followed("ada", item("a", 1)), followed("bob", reversed)], page))!.count,
+    2,
+  );
 });
 
 test("a new call is with or against the crowd, by what it means", () => {
@@ -177,21 +239,37 @@ test("a new call is with or against the crowd, by what it means", () => {
   assert.equal(followedStance(fixture, 0.6, calls), "with");
   assert.equal(followedStance(fixture, 0.4, calls), "against");
   // The same side, listed the other way round.
-  assert.equal(followedStance({ home: "Arsenal", away: "Newcastle", startISO: KICKOFF, subject: "home" }, 0.6, calls), "with");
+  assert.equal(
+    followedStance({ home: "Arsenal", away: "Newcastle", startISO: KICKOFF, subject: "home" }, 0.6, calls),
+    "with",
+  );
 });
 
 test("no crowd means no stance", () => {
   assert.equal(followedStance(pick("x").fixture, 0.6, []), undefined);
   const no = item("n", 2, { side: "NO", lean: "Arsenal doesn't win" });
-  assert.equal(followedStance(pick("x").fixture, 0.6, followedCallsOn([followed("ada", item("a", 1)), followed("cal", no)], page)), undefined);
+  assert.equal(
+    followedStance(pick("x").fixture, 0.6, followedCallsOn([followed("ada", item("a", 1)), followed("cal", no)], page)),
+    undefined,
+  );
 });
 
 async function feedHarness(picks: PickRecord[] = [], listFails = false) {
   const { data, env } = kvFake();
-  const store = { list: async () => { if (listFails) throw new Error("walrus down"); return picks; } } as unknown as RecallStore;
+  const store = {
+    list: async () => {
+      if (listFails) throw new Error("walrus down");
+      return picks;
+    },
+  } as unknown as RecallStore;
   const userKey = await userKeyFor(INSTALL);
   const call = async (path: string, headers: Record<string, string> = { "X-Soothia-Install": INSTALL }) => {
-    const response = await socialRoute(new Request(`https://x${path}`, { headers }), env, path.split("?")[0], { store: () => store, verify: async () => true, lookupName: async () => null, now: () => 0 });
+    const response = await socialRoute(new Request(`https://x${path}`, { headers }), env, path.split("?")[0], {
+      store: () => store,
+      verify: async () => true,
+      lookupName: async () => null,
+      now: () => 0,
+    });
     return { status: response.status, body: (await response.json()) as Record<string, any> };
   };
   return { data, userKey, call };
@@ -201,7 +279,10 @@ test("the feed route gives handle, score, item and my call on the match", async 
   const h = await feedHarness([pick("mine", { pYes: 0.6 })]);
   followAda(h.data, h.userKey);
   h.data.set("recent:ada", JSON.stringify([item("a", 1)]));
-  h.data.set("social:boards", JSON.stringify({ entries: [{ handle: "ada", periods: { all: { stats: { score: 612 } } } }] }));
+  h.data.set(
+    "social:boards",
+    JSON.stringify({ entries: [{ handle: "ada", periods: { all: { stats: { score: 612 } } } }] }),
+  );
   const { body } = await h.call("/social/feed");
   assert.equal(body.items.length, 1);
   assert.equal(body.items[0].handle, "ada");

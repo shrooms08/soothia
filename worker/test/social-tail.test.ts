@@ -12,7 +12,14 @@ import { applyTail } from "../src/social/tail";
 const NOW = Date.parse("2026-11-09T12:00:00.000Z");
 const KICKOFF = "2026-11-21T17:30:00.000Z";
 
-const source: FeedItem = { pickId: "s1", fixture: { home: "Newcastle", away: "Arsenal", competition: "Premier League", startISO: KICKOFF, subject: "away" }, lean: "Arsenal win", side: "YES", confidence: 70, at: "2026-11-09T10:00:00.000Z" };
+const source: FeedItem = {
+  pickId: "s1",
+  fixture: { home: "Newcastle", away: "Arsenal", competition: "Premier League", startISO: KICKOFF, subject: "away" },
+  lean: "Arsenal win",
+  side: "YES",
+  confidence: 70,
+  at: "2026-11-09T10:00:00.000Z",
+};
 
 const input = (overrides: Partial<PickInput> = {}): PickInput => ({
   question: "Will Arsenal beat Newcastle?",
@@ -39,16 +46,27 @@ const event = (overrides: Partial<ScoreboardEvent> = {}): ScoreboardEvent => ({
   ...overrides,
 });
 
-const board = (...events: ScoreboardEvent[]): ScoreboardFetcher => async (league) => ({ competition: "", events: league === "eng.1" ? events : [] });
+const board =
+  (...events: ScoreboardEvent[]): ScoreboardFetcher =>
+  async (league) => ({ competition: "", events: league === "eng.1" ? events : [] });
 
 function envWith(items: FeedItem[] | null, ownHandle?: string): Env {
   const data = new Map<string, string>();
   if (items) data.set("recent:ada", JSON.stringify(items));
   if (ownHandle) data.set("profileuser:u1", ownHandle);
-  return { SOOTHIA_CACHE: { get: async (key: string, type?: string) => { const value = data.get(key); if (value === undefined) return null; return type === "json" ? JSON.parse(value) : value; } } } as unknown as Env;
+  return {
+    SOOTHIA_CACHE: {
+      get: async (key: string, type?: string) => {
+        const value = data.get(key);
+        if (value === undefined) return null;
+        return type === "json" ? JSON.parse(value) : value;
+      },
+    },
+  } as unknown as Env;
 }
 
-const tail = (pick = input(), flip = false, env = envWith([source]), fetcher = board(event())) => applyTail(env, pick, { handle: "ada", flip }, "u1", fetcher, NOW);
+const tail = (pick = input(), flip = false, env = envWith([source]), fetcher = board(event())) =>
+  applyTail(env, pick, { handle: "ada", flip }, "u1", fetcher, NOW);
 
 test("a good tail keeps the handle and takes ESPN's kickoff", async () => {
   const result = await tail();
@@ -60,7 +78,9 @@ test("a good tail keeps the handle and takes ESPN's kickoff", async () => {
 });
 
 test("the same match listed the other way round is still the same match", async () => {
-  const result = await tail(input({ fixture: { home: "Arsenal", away: "Newcastle", startISO: KICKOFF, subject: "home" } }));
+  const result = await tail(
+    input({ fixture: { home: "Arsenal", away: "Newcastle", startISO: KICKOFF, subject: "home" } }),
+  );
   assert.ok(result.ok);
 });
 
@@ -84,13 +104,24 @@ test("asking to flip while on the same side isn't a flip", async () => {
 });
 
 test("the match must be the source call's match", async () => {
-  await refused(tail(input({ fixture: { home: "Chelsea", away: "Arsenal", startISO: KICKOFF, subject: "away" } })), "tail_source_not_found");
-  await refused(tail(input({ fixture: { home: "Newcastle", away: "Arsenal", startISO: "2026-11-22T17:30:00.000Z", subject: "away" } })), "tail_source_not_found");
+  await refused(
+    tail(input({ fixture: { home: "Chelsea", away: "Arsenal", startISO: KICKOFF, subject: "away" } })),
+    "tail_source_not_found",
+  );
+  await refused(
+    tail(
+      input({ fixture: { home: "Newcastle", away: "Arsenal", startISO: "2026-11-22T17:30:00.000Z", subject: "away" } }),
+    ),
+    "tail_source_not_found",
+  );
   await refused(tail(input(), false, envWith(null)), "tail_source_not_found");
 });
 
 test("the question must be the same one", async () => {
-  await refused(tail(input({ fixture: { home: "Newcastle", away: "Arsenal", startISO: KICKOFF, subject: "home" } })), "tail_wrong_question");
+  await refused(
+    tail(input({ fixture: { home: "Newcastle", away: "Arsenal", startISO: KICKOFF, subject: "home" } })),
+    "tail_wrong_question",
+  );
 });
 
 test("you can't tail yourself, and a tail needs a match", async () => {
@@ -101,13 +132,26 @@ test("you can't tail yourself, and a tail needs a match", async () => {
 test("ESPN decides whether the match is still to come", async () => {
   await refused(tail(input(), false, envWith([source]), board()), "fixture_not_on_espn");
   await refused(tail(input(), false, envWith([source]), board(event({ state: "in" }))), "fixture_not_open");
-  await refused(tail(input(), false, envWith([source]), board(event({ statusName: "STATUS_POSTPONED" }))), "fixture_not_open");
-  await refused(tail(input(), false, envWith([source]), board(event({ startISO: new Date(NOW + 60_000).toISOString() }))), "too_close_to_kickoff");
-  await refused(tail(input(), false, envWith([source]), async () => { throw new Error("down"); }), "espn_unavailable");
+  await refused(
+    tail(input(), false, envWith([source]), board(event({ statusName: "STATUS_POSTPONED" }))),
+    "fixture_not_open",
+  );
+  await refused(
+    tail(input(), false, envWith([source]), board(event({ startISO: new Date(NOW + 60_000).toISOString() }))),
+    "too_close_to_kickoff",
+  );
+  await refused(
+    tail(input(), false, envWith([source]), async () => {
+      throw new Error("down");
+    }),
+    "espn_unavailable",
+  );
 });
 
 test("a page's different kickoff that day never reaches the pick", async () => {
-  const result = await tail(input({ fixture: { home: "Newcastle", away: "Arsenal", startISO: "2026-11-21T23:59:00.000Z", subject: "away" } }));
+  const result = await tail(
+    input({ fixture: { home: "Newcastle", away: "Arsenal", startISO: "2026-11-21T23:59:00.000Z", subject: "away" } }),
+  );
   assert.ok(result.ok);
   assert.equal(result.input.fixture?.startISO, KICKOFF);
 });

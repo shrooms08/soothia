@@ -59,7 +59,8 @@ function normalizeId(value: string): string {
 function toHex(value: unknown): string | null {
   if (Array.isArray(value) && value.every((item) => typeof item === "number")) return bytesToHex(value as number[]);
   if (typeof value !== "string") return null;
-  if (/^(0x)?[0-9a-f]+$/i.test(value) && value.replace(/^0x/, "").length % 2 === 0) return value.replace(/^0x/, "").toLowerCase();
+  if (/^(0x)?[0-9a-f]+$/i.test(value) && value.replace(/^0x/, "").length % 2 === 0)
+    return value.replace(/^0x/, "").toLowerCase();
   try {
     return bytesToHex(Buffer.from(value, "base64"));
   } catch {
@@ -104,7 +105,25 @@ async function accountEvents(packageId: string): Promise<{ events: AccountEvent[
 async function ownedMemwalObjects(address: string): Promise<{ id: string; type: string }[]> {
   const data = await graphql<{
     address: { objects: { nodes: { address: string; contents: { type: { repr: string } } | null }[] } } | null;
-  }>(`query($a:SuiAddress!){address(address:$a){objects(first:50){nodes{address contents{type{repr}}}}}}`, { a: address });
+  }>(
+    `
+      query ($a: SuiAddress!) {
+        address(address: $a) {
+          objects(first: 50) {
+            nodes {
+              address
+              contents {
+                type {
+                  repr
+                }
+              }
+            }
+          }
+        }
+      }
+    `,
+    { a: address },
+  );
   return (data.address?.objects.nodes ?? []).flatMap((node) => {
     const type = node.contents?.type.repr ?? "";
     return /memwal|account/i.test(type) ? [{ id: node.address, type }] : [];
@@ -113,8 +132,30 @@ async function ownedMemwalObjects(address: string): Promise<{ id: string; type: 
 
 async function readObject(id: string): Promise<ObjectRead> {
   const data = await graphql<{
-    object: { owner: { __typename: string } | null; asMoveObject: { contents: { type: { repr: string }; json: Record<string, unknown> } } | null } | null;
-  }>(`query($a:SuiAddress!){object(address:$a){owner{__typename} asMoveObject{contents{type{repr} json}}}}`, { a: id });
+    object: {
+      owner: { __typename: string } | null;
+      asMoveObject: { contents: { type: { repr: string }; json: Record<string, unknown> } } | null;
+    } | null;
+  }>(
+    `
+      query ($a: SuiAddress!) {
+        object(address: $a) {
+          owner {
+            __typename
+          }
+          asMoveObject {
+            contents {
+              type {
+                repr
+              }
+              json
+            }
+          }
+        }
+      }
+    `,
+    { a: id },
+  );
   if (!data.object) return { exists: false, type: null, owner: null, json: {}, via: "Sui GraphQL" };
   return {
     exists: true,
@@ -177,9 +218,13 @@ async function main(): Promise<void> {
   const named = (name: string): AccountEvent[] => events.filter((event) => event.name === name);
   const added = named("DelegateKeyAdded");
   const removed = named("DelegateKeyRemoved");
-  console.log(`   Read ${events.length} account events (${complete ? "complete" : "INCOMPLETE"}): ${added.length} delegate keys added, ${removed.length} removed`);
+  console.log(
+    `   Read ${events.length} account events (${complete ? "complete" : "INCOMPLETE"}): ${added.length} delegate keys added, ${removed.length} removed`,
+  );
   if (!complete) {
-    printVerdict("D) The on-chain event scan did not finish, so nothing can be concluded and the account id was not sent anywhere.");
+    printVerdict(
+      "D) The on-chain event scan did not finish, so nothing can be concluded and the account id was not sent anywhere.",
+    );
     return;
   }
 
@@ -193,7 +238,8 @@ async function main(): Promise<void> {
   if (keyLooksLikeId(key) && knownAccounts.has(normalizeId(key))) {
     const accountLine = accountRaw.replace(/^0x/, "").toLowerCase();
     const accountLineIsPublicKey = added.some(
-      (event) => normalizeId(String(event.json.account_id)) === normalizeId(key) && toHex(event.json.public_key) === accountLine,
+      (event) =>
+        normalizeId(String(event.json.account_id)) === normalizeId(key) && toHex(event.json.public_key) === accountLine,
     );
     printVerdict(
       accountLineIsPublicKey
@@ -211,7 +257,9 @@ async function main(): Promise<void> {
   if (isKeyShaped(accountRaw)) {
     const accountAsKeyPublic = bytesToHex(await delegateKeyToPublicKey(accountRaw));
     if (added.some((event) => isActive(event, accountAsKeyPublic))) {
-      printVerdict("D) MEMWAL_ACCOUNT_ID and MEMWAL_KEY look swapped: the value on the account id line is a registered delegate private key.");
+      printVerdict(
+        "D) MEMWAL_ACCOUNT_ID and MEMWAL_KEY look swapped: the value on the account id line is a registered delegate private key.",
+      );
       return;
     }
   }
@@ -220,7 +268,9 @@ async function main(): Promise<void> {
     return;
   }
 
-  const keyAccounts = [...new Set(added.filter((event) => isActive(event, publicKey)).map((event) => String(event.json.account_id)))];
+  const keyAccounts = [
+    ...new Set(added.filter((event) => isActive(event, publicKey)).map((event) => String(event.json.account_id))),
+  ];
   console.log(`   Accounts this key is registered on: ${keyAccounts.length ? keyAccounts.join(", ") : "none found"}`);
 
   const accountId = normalizeId(accountRaw);
@@ -231,8 +281,12 @@ async function main(): Promise<void> {
 
   if (!object.exists) {
     const owned = [
-      ...named("AccountCreated").filter((event) => normalizeId(String(event.json.owner)) === accountId).map((event) => String(event.json.account_id)),
-      ...named("AccountImported").filter((event) => normalizeId(String(event.json.owner)) === accountId).map((event) => String(event.json.new_account_id)),
+      ...named("AccountCreated")
+        .filter((event) => normalizeId(String(event.json.owner)) === accountId)
+        .map((event) => String(event.json.account_id)),
+      ...named("AccountImported")
+        .filter((event) => normalizeId(String(event.json.owner)) === accountId)
+        .map((event) => String(event.json.new_account_id)),
     ];
     try {
       for (const item of await ownedMemwalObjects(accountId)) {
@@ -255,24 +309,37 @@ async function main(): Promise<void> {
   console.log(`   Owner: ${JSON.stringify(object.owner)}`);
   console.log(`   Field names: ${Object.keys(object.json).join(", ") || "(none returned)"}`);
 
-  const imported = named("AccountImported").find((event) => normalizeId(String(event.json.legacy_account_id)) === accountId);
+  const imported = named("AccountImported").find(
+    (event) => normalizeId(String(event.json.legacy_account_id)) === accountId,
+  );
   if (!/::account::MemWalAccount/.test(object.type ?? "")) {
     printVerdict(`D) ACCOUNT_ID exists on Sui but is not a MemWal account; its type is ${object.type}.`);
     return;
   }
   const accountPackage = (object.type ?? "").split("::")[0];
   console.log(`   Account package: ${accountPackage}`);
-  console.log(`   Relayer package: ${config.packageId} (network ${config.network}, registry ${config.registryId ?? "not given"})`);
+  console.log(
+    `   Relayer package: ${config.packageId} (network ${config.network}, registry ${config.registryId ?? "not given"})`,
+  );
   if (imported) console.log(`   This account was migrated. New account id: ${String(imported.json.new_account_id)}`);
 
   const onObject = [...new Set(delegateKeysIn(object.json))];
-  const fromEvents = [...new Set(added.filter((event) => normalizeId(String(event.json.account_id)) === accountId).flatMap((event) => {
-    const hex = toHex(event.json.public_key);
-    return hex && isActive(event, hex) ? [hex] : [];
-  }))];
+  const fromEvents = [
+    ...new Set(
+      added
+        .filter((event) => normalizeId(String(event.json.account_id)) === accountId)
+        .flatMap((event) => {
+          const hex = toHex(event.json.public_key);
+          return hex && isActive(event, hex) ? [hex] : [];
+        }),
+    ),
+  ];
   const delegates = onObject.length ? onObject : fromEvents;
-  console.log(`   Registered delegate public keys (${onObject.length ? "from the object" : "from events"}): ${delegates.length}`);
-  for (const delegate of delegates) console.log(`     ${delegate}${delegate === publicKey ? "  <- matches MEMWAL_KEY" : ""}`);
+  console.log(
+    `   Registered delegate public keys (${onObject.length ? "from the object" : "from events"}): ${delegates.length}`,
+  );
+  for (const delegate of delegates)
+    console.log(`     ${delegate}${delegate === publicKey ? "  <- matches MEMWAL_KEY" : ""}`);
 
   if (!delegates.includes(publicKey)) {
     printVerdict("B) ACCOUNT_ID is a MemWal account, but the derived public key is NOT among its delegate keys");

@@ -25,8 +25,14 @@ const fieldOf = (body: Record<string, unknown>): string | null => {
 };
 
 test("the entity pattern reads both teams, with or without a competition", () => {
-  assert.deepEqual(entitiesFromQuestion("Will Arsenal beat Chelsea in English Premier League on Sat 21 Nov?"), ["Arsenal", "Chelsea"]);
-  assert.deepEqual(entitiesFromQuestion("Will Real Madrid beat FC Barcelona on Sun 22 Nov?"), ["Real Madrid", "FC Barcelona"]);
+  assert.deepEqual(entitiesFromQuestion("Will Arsenal beat Chelsea in English Premier League on Sat 21 Nov?"), [
+    "Arsenal",
+    "Chelsea",
+  ]);
+  assert.deepEqual(entitiesFromQuestion("Will Real Madrid beat FC Barcelona on Sun 22 Nov?"), [
+    "Real Madrid",
+    "FC Barcelona",
+  ]);
   assert.deepEqual(entitiesFromQuestion("Will Bitcoin reach 200k this year?"), []);
 });
 
@@ -59,7 +65,10 @@ test("the question is capped at 200 characters and source must be a web link", (
 });
 
 test("duplicates are caught by question and by fixture", () => {
-  const checked = validatePickBody({ ...good(), fixture: { home: "A", away: "B", startISO: FUTURE, subject: "home" } }, NOW);
+  const checked = validatePickBody(
+    { ...good(), fixture: { home: "A", away: "B", startISO: FUTURE, subject: "home" } },
+    NOW,
+  );
   assert.ok(checked.ok);
   const sameQuestion = { question: checked.input.question } as PickRecord;
   const sameFixture = { question: "other", fixture: checked.input.fixture } as PickRecord;
@@ -97,10 +106,13 @@ test("sweep keys group by user and ignore keys with no user", () => {
     { name: "rp:d" },
     { name: "other:e", metadata: { userKey: "u1" } },
   ]);
-  assert.deepEqual([...groups.entries()], [
-    ["u1", ["a", "c"]],
-    ["u2", ["b"]],
-  ]);
+  assert.deepEqual(
+    [...groups.entries()],
+    [
+      ["u1", ["a", "c"]],
+      ["u2", ["b"]],
+    ],
+  );
 });
 
 function fakeEnv(keys: { name: string; metadata: { userKey: string } }[]): { env: Env; deleted: string[] } {

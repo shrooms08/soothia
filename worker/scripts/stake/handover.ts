@@ -9,12 +9,26 @@ import { Transaction } from "@mysten/sui/transactions";
 import { resolverKeypair } from "../../src/recall/sui";
 import { readConfig } from "../../src/stake/readers";
 import { loadEnvOrExit, readDevVars, safeError, setDevVarComment } from "../recall/shared";
-import { balanceOf, execute, explorerTx, PROD_CHALLENGE_MS, PROD_MIN_RESOLVE_DELAY_MS, stakeContext, sui, type StakeContext } from "./shared";
+import {
+  balanceOf,
+  execute,
+  explorerTx,
+  PROD_CHALLENGE_MS,
+  PROD_MIN_RESOLVE_DELAY_MS,
+  stakeContext,
+  sui,
+  type StakeContext,
+} from "./shared";
 
 const SLUSH = "0x8e0e9fecb8141cc2635effcb1a0d25c96331eecae8eb998329c47241259abb6a";
 const RESOLVER_GAS = 200_000_000n;
 const UPGRADE_CAP_TYPE = "0x2::package::UpgradeCap";
-const UpgradeCapBcs = bcs.struct("UpgradeCap", { id: bcs.Address, package: bcs.Address, version: bcs.u64(), policy: bcs.u8() });
+const UpgradeCapBcs = bcs.struct("UpgradeCap", {
+  id: bcs.Address,
+  package: bcs.Address,
+  version: bcs.u64(),
+  policy: bcs.u8(),
+});
 
 const env = loadEnvOrExit();
 
@@ -52,9 +66,12 @@ async function main(context: StakeContext): Promise<void> {
 
   const config = await readConfig(context.client, ids.configId);
   if (config.minResolveDelayMs !== PROD_MIN_RESOLVE_DELAY_MS || config.challengeMs !== PROD_CHALLENGE_MS) {
-    throw new Error(`refusing to hand over: delays are ${config.minResolveDelayMs} and ${config.challengeMs}, not the production values`);
+    throw new Error(
+      `refusing to hand over: delays are ${config.minResolveDelayMs} and ${config.challengeMs}, not the production values`,
+    );
   }
-  if (config.treasury.toLowerCase() !== SLUSH) throw new Error("refusing to hand over: the treasury is not the Slush wallet");
+  if (config.treasury.toLowerCase() !== SLUSH)
+    throw new Error("refusing to hand over: the treasury is not the Slush wallet");
 
   const stakeUpgradeCap = await upgradeCapFor(context, ids.packageId);
   const recallUpgradeCap = await upgradeCapFor(context, required(vars, "SOOTHIA_RECALL_PACKAGE"));

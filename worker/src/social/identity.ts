@@ -4,7 +4,22 @@
 
 import { readJsonObject } from "../http";
 import { kvPut } from "../store";
-import { addressKey, followersKey, handleKey, HIDDEN_KEY, parseAddress, parseHandle, publicProfile, refuse, socialJson, recentKey, statsKey, userIndexKey, type ProfileIndex, type SocialContext } from "./context";
+import {
+  addressKey,
+  followersKey,
+  handleKey,
+  HIDDEN_KEY,
+  parseAddress,
+  parseHandle,
+  publicProfile,
+  refuse,
+  socialJson,
+  recentKey,
+  statsKey,
+  userIndexKey,
+  type ProfileIndex,
+  type SocialContext,
+} from "./context";
 
 export const CHALLENGE_TTL_SEC = 600;
 const ACTIONS = ["publish", "update", "unpublish"] as const;
@@ -34,18 +49,28 @@ export async function challengeRoute(context: SocialContext): Promise<Response> 
     `Expires: ${new Date(expiresAt).toISOString()}`,
   ].join("\n");
   const challenge: Challenge = { action, message, expiresAt };
-  if (!(await kvPut(context.env, challengeKey(address), JSON.stringify(challenge), { expirationTtl: CHALLENGE_TTL_SEC }))) refuse(503, "kv_unavailable");
+  if (
+    !(await kvPut(context.env, challengeKey(address), JSON.stringify(challenge), { expirationTtl: CHALLENGE_TTL_SEC }))
+  )
+    refuse(503, "kv_unavailable");
   return socialJson(context, { message, expiresAt });
 }
 
 /** Checks the signature against this address's open challenge, and uses the challenge up. */
-async function consumeChallenge(context: SocialContext, address: string, action: Action, signature: unknown): Promise<void> {
-  if (typeof signature !== "string" || signature.length === 0 || signature.length > 20_000) refuse(400, "invalid_signature");
+async function consumeChallenge(
+  context: SocialContext,
+  address: string,
+  action: Action,
+  signature: unknown,
+): Promise<void> {
+  if (typeof signature !== "string" || signature.length === 0 || signature.length > 20_000)
+    refuse(400, "invalid_signature");
   const key = challengeKey(address);
   const challenge = await context.env.SOOTHIA_CACHE.get<Challenge>(key, "json");
   if (!challenge || challenge.expiresAt <= context.nowMs) return refuse(401, "challenge_expired");
   if (challenge.action !== action) refuse(401, "challenge_expired");
-  if (!(await context.verify(new TextEncoder().encode(challenge.message), signature as string, address))) refuse(401, "invalid_signature");
+  if (!(await context.verify(new TextEncoder().encode(challenge.message), signature as string, address)))
+    refuse(401, "invalid_signature");
   await context.env.SOOTHIA_CACHE.delete(key);
 }
 
@@ -61,7 +86,8 @@ async function hide(context: SocialContext, handle: string): Promise<void> {
 
 async function unhide(context: SocialContext, handle: string): Promise<void> {
   const current = await hiddenHandles(context);
-  if (current.some((entry) => entry.handle === handle)) await kvPut(context.env, HIDDEN_KEY, JSON.stringify(current.filter((entry) => entry.handle !== handle)));
+  if (current.some((entry) => entry.handle === handle))
+    await kvPut(context.env, HIDDEN_KEY, JSON.stringify(current.filter((entry) => entry.handle !== handle)));
 }
 
 async function writeIndex(context: SocialContext, profile: ProfileIndex): Promise<void> {
@@ -74,7 +100,8 @@ async function writeIndex(context: SocialContext, profile: ProfileIndex): Promis
   if (!saved) refuse(503, "kv_unavailable");
 }
 
-const loadByAddress = (context: SocialContext, address: string): Promise<ProfileIndex | null> => context.env.SOOTHIA_CACHE.get<ProfileIndex>(addressKey(address), "json");
+const loadByAddress = (context: SocialContext, address: string): Promise<ProfileIndex | null> =>
+  context.env.SOOTHIA_CACHE.get<ProfileIndex>(addressKey(address), "json");
 
 export async function publishRoute(context: SocialContext, userKey: string): Promise<Response> {
   const { env, nowMs } = context;
@@ -107,7 +134,12 @@ export async function updateRoute(context: SocialContext): Promise<Response> {
   await consumeChallenge(context, address, "update", body.signature);
 
   const next: ProfileIndex = { ...profile, shareHistory: body.shareHistory };
-  await context.store(profile.userKey).write("profile", { address, handle: profile.handle, publicSince: profile.publicSince, shareHistory: next.shareHistory });
+  await context.store(profile.userKey).write("profile", {
+    address,
+    handle: profile.handle,
+    publicSince: profile.publicSince,
+    shareHistory: next.shareHistory,
+  });
   await writeIndex(context, next);
   if (!next.shareHistory) {
     // Older calls must disappear now, not at the next snapshot.
@@ -125,8 +157,23 @@ export async function unpublishRoute(context: SocialContext): Promise<Response> 
   if (!profile) return refuse(404, "not_public");
   await consumeChallenge(context, address, "unpublish", body.signature);
 
-  await context.store(profile.userKey).write("profile", { address, handle: profile.handle, publicSince: profile.publicSince, shareHistory: profile.shareHistory, unpublished: true });
-  await Promise.all([handleKey(profile.handle), addressKey(address), userIndexKey(profile.userKey), statsKey(profile.handle), followersKey(profile.handle), recentKey(profile.handle)].map((key) => env.SOOTHIA_CACHE.delete(key)));
+  await context.store(profile.userKey).write("profile", {
+    address,
+    handle: profile.handle,
+    publicSince: profile.publicSince,
+    shareHistory: profile.shareHistory,
+    unpublished: true,
+  });
+  await Promise.all(
+    [
+      handleKey(profile.handle),
+      addressKey(address),
+      userIndexKey(profile.userKey),
+      statsKey(profile.handle),
+      followersKey(profile.handle),
+      recentKey(profile.handle),
+    ].map((key) => env.SOOTHIA_CACHE.delete(key)),
+  );
   await hide(context, profile.handle);
   return socialJson(context, { ok: true });
 }
@@ -136,8 +183,15 @@ export async function byAddressRoute(context: SocialContext): Promise<Response> 
   const profile = await loadByAddress(context, address);
   if (!profile) return socialJson(context, { public: false });
   // So the extension shows the same score as the public page.
-  const snapshot = await context.env.SOOTHIA_CACHE.get<{ periods: { all: { stats: { score: number } } } }>(statsKey(profile.handle), "json");
-  return socialJson(context, { public: true, profile: publicProfile(profile), score: snapshot?.periods.all.stats.score ?? null });
+  const snapshot = await context.env.SOOTHIA_CACHE.get<{ periods: { all: { stats: { score: number } } } }>(
+    statsKey(profile.handle),
+    "json",
+  );
+  return socialJson(context, {
+    public: true,
+    profile: publicProfile(profile),
+    score: snapshot?.periods.all.stats.score ?? null,
+  });
 }
 
 /** "alice.sui" or "@alice" to a usable handle, or null. Only the first label of a subname. */

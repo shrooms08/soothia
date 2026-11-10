@@ -20,7 +20,9 @@ function fakeEnv(): { env: Env; kv: Map<string, { value: string; metadata?: unkn
         kv.set(key, { value, metadata: options?.metadata });
       },
       list: async ({ prefix }: { prefix: string }) => ({
-        keys: [...kv.entries()].filter(([key]) => key.startsWith(prefix)).map(([name, entry]) => ({ name, metadata: entry.metadata })),
+        keys: [...kv.entries()]
+          .filter(([key]) => key.startsWith(prefix))
+          .map(([name, entry]) => ({ name, metadata: entry.metadata })),
         list_complete: true,
       }),
     },

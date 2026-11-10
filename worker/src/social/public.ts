@@ -3,7 +3,19 @@
 import { cacheGet, cachePut } from "../store";
 import { followerCount } from "./follow";
 import { earningsKey, isHidden } from "./premium";
-import { BOARDS_KEY, followingKey, handleKey, HIDDEN_KEY, parseHandle, publicProfile, refuse, socialJson, statsKey, type ProfileIndex, type SocialContext } from "./context";
+import {
+  BOARDS_KEY,
+  followingKey,
+  handleKey,
+  HIDDEN_KEY,
+  parseHandle,
+  publicProfile,
+  refuse,
+  socialJson,
+  statsKey,
+  type ProfileIndex,
+  type SocialContext,
+} from "./context";
 import type { BoardsDocument, LockedPublicCall, ProfileSnapshot, PublicCall } from "./snapshots";
 import { BOARDS, findBreakdown, PERIODS, rankBoard, type Board, type BoardRow, type Period } from "./stats";
 
@@ -13,7 +25,14 @@ const MAX_FILTER_CHARS = 80;
 /** Before kickoff a premium call shows only that it exists, its price and its proof. */
 function publicCallView(call: PublicCall, nowMs: number): PublicCall | LockedPublicCall {
   if (!isHidden(call.premium, call.match.startISO, nowMs)) return call;
-  return { at: call.at, match: call.match, status: "open", proof: call.proof, premium: call.premium as { priceMist: string }, locked: true };
+  return {
+    at: call.at,
+    match: call.match,
+    status: "open",
+    proof: call.proof,
+    premium: call.premium as { priceMist: string },
+    locked: true,
+  };
 }
 
 export async function profileRoute(context: SocialContext, rawHandle: string): Promise<Response> {
@@ -74,14 +93,21 @@ export async function leaderboardRoute(context: SocialContext): Promise<Response
   if (cached) return socialJson(context, cached);
 
   const kv = context.env.SOOTHIA_CACHE;
-  const [document, hiddenEntries] = await Promise.all([kv.get<BoardsDocument>(BOARDS_KEY, "json"), kv.get<{ handle: string }[]>(HIDDEN_KEY, "json")]);
+  const [document, hiddenEntries] = await Promise.all([
+    kv.get<BoardsDocument>(BOARDS_KEY, "json"),
+    kv.get<{ handle: string }[]>(HIDDEN_KEY, "json"),
+  ]);
   const hidden = new Set((hiddenEntries ?? []).map((entry) => entry.handle));
   const entries = (document?.entries ?? []).filter((entry) => !hidden.has(entry.handle));
 
   let rows: BoardRow[];
   if (league || team) {
     const scoped = entries.flatMap((entry) => {
-      const stats = findBreakdown(league ? entry.periods[period].leagues : entry.periods[period].teams, (league ?? team) as string, league ? "league" : "team");
+      const stats = findBreakdown(
+        league ? entry.periods[period].leagues : entry.periods[period].teams,
+        (league ?? team) as string,
+        league ? "league" : "team",
+      );
       return stats ? [{ handle: entry.handle, stats }] : [];
     });
     rows = rankBoard(board, scoped);

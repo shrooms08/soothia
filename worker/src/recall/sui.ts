@@ -179,7 +179,10 @@ export async function latestCheckpoint(env: RecallEnv): Promise<{ checkpoint: st
   const sequence = response.checkpoint?.sequenceNumber;
   const timestamp = response.checkpoint?.summary?.timestamp;
   if (sequence === undefined || !timestamp) throw new Error("tatum_bad_checkpoint");
-  return { checkpoint: sequence.toString(), timestampMs: Number(timestamp.seconds) * 1000 + Math.floor(timestamp.nanos / 1_000_000) };
+  return {
+    checkpoint: sequence.toString(),
+    timestampMs: Number(timestamp.seconds) * 1000 + Math.floor(timestamp.nanos / 1_000_000),
+  };
 }
 
 export interface MemoryAccountInfo {

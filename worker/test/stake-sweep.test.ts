@@ -40,7 +40,11 @@ const pool = (overrides: Partial<StakePool> = {}): StakePool => ({
   ...overrides,
 });
 
-function event(homeScore: number | null, awayScore: number | null, overrides: Partial<ScoreboardEvent> = {}): ScoreboardEvent {
+function event(
+  homeScore: number | null,
+  awayScore: number | null,
+  overrides: Partial<ScoreboardEvent> = {},
+): ScoreboardEvent {
   return {
     espnId: "1",
     startISO: KICKOFF,
@@ -55,8 +59,13 @@ function event(homeScore: number | null, awayScore: number | null, overrides: Pa
   };
 }
 
-const boardWith = (...events: ScoreboardEvent[]): ScoreboardFetcher => async () => ({ competition: "", events });
-const OTHER_MATCH = event(1, 1, { home: { name: "Leeds United", short: "Leeds", abbreviation: "LEE", score: 1 }, away: { name: "Everton", short: "Everton", abbreviation: "EVE", score: 1 } });
+const boardWith =
+  (...events: ScoreboardEvent[]): ScoreboardFetcher =>
+  async () => ({ competition: "", events });
+const OTHER_MATCH = event(1, 1, {
+  home: { name: "Leeds United", short: "Leeds", abbreviation: "LEE", score: 1 },
+  away: { name: "Everton", short: "Everton", abbreviation: "EVE", score: 1 },
+});
 
 const entry = (poolId = POOL, overrides: Partial<PoolIndexEntry> = {}): PoolIndexEntry => ({
   poolId,
@@ -69,7 +78,9 @@ const entry = (poolId = POOL, overrides: Partial<PoolIndexEntry> = {}): PoolInde
   ...overrides,
 });
 
-function harness(options: { pools?: Map<string, StakePool>; pool?: StakePool; after?: StakePool; chain?: Partial<StakeChain> } = {}) {
+function harness(
+  options: { pools?: Map<string, StakePool>; pool?: StakePool; after?: StakePool; chain?: Partial<StakeChain> } = {},
+) {
   const data = new Map<string, { value: string; metadata?: unknown }>();
   const env = {
     SOOTHIA_CACHE: {
@@ -85,7 +96,9 @@ function harness(options: { pools?: Map<string, StakePool>; pool?: StakePool; af
         data.delete(key);
       },
       list: async ({ prefix }: { prefix: string }) => ({
-        keys: [...data.entries()].filter(([name]) => name.startsWith(prefix)).map(([name, found]) => ({ name, metadata: found.metadata })),
+        keys: [...data.entries()]
+          .filter(([name]) => name.startsWith(prefix))
+          .map(([name, found]) => ({ name, metadata: found.metadata })),
         list_complete: true,
       }),
     },
@@ -112,17 +125,30 @@ function harness(options: { pools?: Map<string, StakePool>; pool?: StakePool; af
     },
     ...options.chain,
   } as unknown as StakeChain;
-  const index = (poolId = POOL, phase: "open" | "resolved" = "open", dueMs = KICKOFF_MS + RESOLVE_DELAY, value = entry(poolId)): void => {
+  const index = (
+    poolId = POOL,
+    phase: "open" | "resolved" = "open",
+    dueMs = KICKOFF_MS + RESOLVE_DELAY,
+    value = entry(poolId),
+  ): void => {
     data.set(`stakepool:${poolId}`, { value: JSON.stringify(value), metadata: { phase, dueMs } });
   };
-  const run = (now: Date, fetcher: ScoreboardFetcher = boardWith(event(1, 2))) => sweepStake(env, { chain, fetcher, now });
+  const run = (now: Date, fetcher: ScoreboardFetcher = boardWith(event(1, 2))) =>
+    sweepStake(env, { chain, fetcher, now });
   return { data, calls, index, run };
 }
 
 beforeEach(() => clearMemoryCache());
 
-const RESOLVED_POOL = { status: "resolved", outcomeYes: true, yesTotal: 2n * SUI, noTotal: SUI, feeAmount: 30_000_000n } as const;
-const settledAfterWindow = (overrides: Partial<StakePool> = {}): StakePool => pool({ ...RESOLVED_POOL, resolvedAtMs: BigInt(AFTER_MATCH.getTime() - CHALLENGE), ...overrides });
+const RESOLVED_POOL = {
+  status: "resolved",
+  outcomeYes: true,
+  yesTotal: 2n * SUI,
+  noTotal: SUI,
+  feeAmount: 30_000_000n,
+} as const;
+const settledAfterWindow = (overrides: Partial<StakePool> = {}): StakePool =>
+  pool({ ...RESOLVED_POOL, resolvedAtMs: BigInt(AFTER_MATCH.getTime() - CHALLENGE), ...overrides });
 
 test("a finished match resolves the pool with ESPN's score as evidence", async () => {
   const opensAt = AFTER_MATCH.getTime() + CHALLENGE;
@@ -139,7 +165,8 @@ test("YES means the subject team won", () => {
     located: { event: event(home, away), league: "eng.1", reversed: false, notPlayed: false },
     eventsSeen: 1,
   });
-  const decide = (subject: "home" | "away", home: number, away: number) => decideSettlement(subject, search(home, away), KICKOFF_MS, AFTER_MATCH.getTime());
+  const decide = (subject: "home" | "away", home: number, away: number) =>
+    decideSettlement(subject, search(home, away), KICKOFF_MS, AFTER_MATCH.getTime());
   assert.equal((decide("away", 1, 2) as { outcomeYes: boolean }).outcomeYes, true);
   assert.equal((decide("away", 2, 1) as { outcomeYes: boolean }).outcomeYes, false);
   assert.equal((decide("home", 2, 1) as { outcomeYes: boolean }).outcomeYes, true);
@@ -148,14 +175,22 @@ test("YES means the subject team won", () => {
 test("a draw is NO for both pools on the match", () => {
   const search = { located: { event: event(1, 1), league: "eng.1", reversed: false, notPlayed: false }, eventsSeen: 1 };
   for (const subject of ["home", "away"] as const) {
-    assert.equal((decideSettlement(subject, search, KICKOFF_MS, AFTER_MATCH.getTime()) as { outcomeYes: boolean }).outcomeYes, false);
+    assert.equal(
+      (decideSettlement(subject, search, KICKOFF_MS, AFTER_MATCH.getTime()) as { outcomeYes: boolean }).outcomeYes,
+      false,
+    );
   }
 });
 
 test("a reversed listing still pays the team the question was about", async () => {
   const h = harness();
   // Stored as if the page listed Arsenal at home; ESPN has them away, and they won.
-  h.index(POOL, "open", KICKOFF_MS + RESOLVE_DELAY, entry(POOL, { home: "Arsenal", away: "Newcastle United", subject: "home" }));
+  h.index(
+    POOL,
+    "open",
+    KICKOFF_MS + RESOLVE_DELAY,
+    entry(POOL, { home: "Arsenal", away: "Newcastle United", subject: "home" }),
+  );
   await h.run(AFTER_MATCH);
   assert.equal(h.calls[0].split(" ")[2], "true");
 });

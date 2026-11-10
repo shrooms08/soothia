@@ -49,7 +49,9 @@ async function payment(shape: Shape = {}): Promise<string> {
   tx.moveCall({
     target: `${shape.packageId ?? PACKAGE}::${shape.module ?? "pay"}::${shape.fn ?? "pay"}`,
     arguments: [
-      shape.owned ? tx.object(Inputs.ObjectRef({ objectId: config, version: "1", digest: "11111111111111111111111111111111" })) : tx.object(Inputs.SharedObjectRef({ objectId: config, initialSharedVersion: "1", mutable: true })),
+      shape.owned
+        ? tx.object(Inputs.ObjectRef({ objectId: config, version: "1", digest: "11111111111111111111111111111111" }))
+        : tx.object(Inputs.SharedObjectRef({ objectId: config, initialSharedVersion: "1", mutable: true })),
       tx.pure.vector("u8", hexBytes(shape.nonce ?? NONCE)),
       tx.pure.address(shape.payTo ?? SELLER),
       shape.coinFromGas ? tx.gas : coin,
@@ -90,12 +92,37 @@ function harness(options: { proof?: boolean; profile?: boolean } = {}) {
     premium: { priceMist: PRICE },
     ...(options.proof === false ? {} : { proof: { digest: "D1", url: "https://suivision.xyz/txblock/D1" } }),
   };
-  data.set("premium:p1", JSON.stringify({ pickId: "p1", handle: "ada", payTo: SELLER, userKey: "seller-key", priceMist: PRICE, kickoffMs: Date.parse(KICKOFF), item }));
-  if (options.profile !== false) data.set("profile:ada", JSON.stringify({ handle: "ada", address: SELLER, userKey: "seller-key", publicSince: "2026-01-01T00:00:00.000Z", shareHistory: true }));
+  data.set(
+    "premium:p1",
+    JSON.stringify({
+      pickId: "p1",
+      handle: "ada",
+      payTo: SELLER,
+      userKey: "seller-key",
+      priceMist: PRICE,
+      kickoffMs: Date.parse(KICKOFF),
+      item,
+    }),
+  );
+  if (options.profile !== false)
+    data.set(
+      "profile:ada",
+      JSON.stringify({
+        handle: "ada",
+        address: SELLER,
+        userKey: "seller-key",
+        publicSince: "2026-01-01T00:00:00.000Z",
+        shareHistory: true,
+      }),
+    );
 
   const executed: { transaction: string; signature: string }[] = [];
   const memories: UnlockRecord[] = [];
-  let result = (): Executed => ({ digest: "DIGEST", succeeded: true, paid: [{ nonce: currentNonce(), payer: BUYER, recipient: SELLER, amount: BigInt(PRICE), fee: 2_000_000n }] });
+  let result = (): Executed => ({
+    digest: "DIGEST",
+    succeeded: true,
+    paid: [{ nonce: currentNonce(), payer: BUYER, recipient: SELLER, amount: BigInt(PRICE), fee: 2_000_000n }],
+  });
   let nonceForPaid = NONCE;
   const currentNonce = () => nonceForPaid;
   const built: unknown[][] = [];
@@ -106,28 +133,57 @@ function harness(options: { proof?: boolean; profile?: boolean } = {}) {
     buildWithdrawAll: async (...args) => (built.push(["withdraw", ...args]), "WITHDRAWN"),
     execute: async (transaction, signature) => (executed.push({ transaction, signature }), result()),
   };
-  const store = { write: async (_kind: string, record: UnlockRecord) => (memories.push(record), { jobId: "j" }) } as unknown as RecallStore;
-  const call = async (method: string, path: string, options2: { headers?: Record<string, string>; body?: unknown; now?: number } = {}) => {
+  const store = {
+    write: async (_kind: string, record: UnlockRecord) => (memories.push(record), { jobId: "j" }),
+  } as unknown as RecallStore;
+  const call = async (
+    method: string,
+    path: string,
+    options2: { headers?: Record<string, string>; body?: unknown; now?: number } = {},
+  ) => {
     const response = await premiumRoute(
-      new Request(`https://api.soothia.fun${path}`, { method, headers: { "X-Soothia-Install": INSTALL, ...options2.headers }, ...(options2.body === undefined ? {} : { body: JSON.stringify(options2.body) }) }),
+      new Request(`https://api.soothia.fun${path}`, {
+        method,
+        headers: { "X-Soothia-Install": INSTALL, ...options2.headers },
+        ...(options2.body === undefined ? {} : { body: JSON.stringify(options2.body) }),
+      }),
       env,
       path.split("?")[0],
       { chain, settings: SETTINGS, store: () => store, now: () => options2.now ?? NOW },
     );
     return { status: response.status, headers: response.headers, body: (await response.json()) as Record<string, any> };
   };
-  return { data, executed, memories, built, call, setResult: (fn: () => Executed) => (result = fn), setPaidNonce: (nonce: string) => (nonceForPaid = nonce) };
+  return {
+    data,
+    executed,
+    memories,
+    built,
+    call,
+    setResult: (fn: () => Executed) => (result = fn),
+    setPaidNonce: (nonce: string) => (nonceForPaid = nonce),
+  };
 }
 
 const decodeHeader = (value: string | null): Record<string, any> => JSON.parse(atob(value!));
 
 /** Asks for the call, then signs a transaction that matches the quote. */
-async function pay(h: ReturnType<typeof harness>, shape: Shape = {}, accepted?: (entry: Record<string, any>) => Record<string, any>) {
+async function pay(
+  h: ReturnType<typeof harness>,
+  shape: Shape = {},
+  accepted?: (entry: Record<string, any>) => Record<string, any>,
+) {
   const required = decodeHeader((await h.call("GET", "/premium/call/p1")).headers.get("PAYMENT-REQUIRED"));
   const quoted = required.accepts[0];
   h.setPaidNonce(quoted.extra.nonce);
   const transaction = await payment({ nonce: quoted.extra.nonce, ...shape });
-  const header = btoa(JSON.stringify({ x402Version: 2, resource: required.resource, accepted: accepted ? accepted(quoted) : quoted, payload: { signature: "c2lnbmF0dXJl", transaction } }));
+  const header = btoa(
+    JSON.stringify({
+      x402Version: 2,
+      resource: required.resource,
+      accepted: accepted ? accepted(quoted) : quoted,
+      payload: { signature: "c2lnbmF0dXJl", transaction },
+    }),
+  );
   return h.call("GET", "/premium/call/p1", { headers: { "PAYMENT-SIGNATURE": header } });
 }
 
@@ -140,9 +196,24 @@ test("no payment gets a 402 in the spec's format, and no sign of the call", asyn
   assert.deepEqual(body, { error: "payment_required" });
   const required = decodeHeader(headers.get("PAYMENT-REQUIRED"));
   assert.equal(required.x402Version, 2);
-  assert.deepEqual(required.resource, { url: "https://api.soothia.fun/premium/call/p1", description: "Premium call by @ada", mimeType: "application/json" });
+  assert.deepEqual(required.resource, {
+    url: "https://api.soothia.fun/premium/call/p1",
+    description: "Premium call by @ada",
+    mimeType: "application/json",
+  });
   const [entry] = required.accepts;
-  assert.deepEqual({ ...entry, extra: { ...entry.extra, nonce: "" } }, { scheme: "exact", network: "sui:mainnet", amount: PRICE, asset: "0x2::sui::SUI", payTo: SELLER, maxTimeoutSeconds: 300, extra: { payPackage: PACKAGE, payConfig: CONFIG, nonce: "" } });
+  assert.deepEqual(
+    { ...entry, extra: { ...entry.extra, nonce: "" } },
+    {
+      scheme: "exact",
+      network: "sui:mainnet",
+      amount: PRICE,
+      asset: "0x2::sui::SUI",
+      payTo: SELLER,
+      maxTimeoutSeconds: 300,
+      extra: { payPackage: PACKAGE, payConfig: CONFIG, nonce: "" },
+    },
+  );
   assert.match(entry.extra.nonce, /^[0-9a-f]{32}$/);
   assert.equal(ASSET, entry.asset);
   assert.equal(NETWORK, entry.network);
@@ -181,13 +252,27 @@ test("a good payment is broadcast, recorded, and answered with the call and the 
   assert.equal(body.call.lean, "Arsenal win");
   assert.equal(body.call.confidence, 70);
   assert.equal(body.handle, "ada");
-  assert.deepEqual(body.receipt, { digest: "DIGEST", priceMist: PRICE, at: new Date(NOW).toISOString(), url: "https://suivision.xyz/txblock/DIGEST" });
-  assert.deepEqual(decodeHeader(headers.get("PAYMENT-RESPONSE")), { success: true, transaction: "DIGEST", network: "sui:mainnet", payer: BUYER });
+  assert.deepEqual(body.receipt, {
+    digest: "DIGEST",
+    priceMist: PRICE,
+    at: new Date(NOW).toISOString(),
+    url: "https://suivision.xyz/txblock/DIGEST",
+  });
+  assert.deepEqual(decodeHeader(headers.get("PAYMENT-RESPONSE")), {
+    success: true,
+    transaction: "DIGEST",
+    network: "sui:mainnet",
+    payer: BUYER,
+  });
   assert.equal(h.executed.length, 1);
   assert.equal(h.executed[0].signature, "c2lnbmF0dXJl");
 
   const key = await userKeyFor(INSTALL);
-  assert.deepEqual(JSON.parse(h.data.get(`unlock:${key}:p1`)!), { digest: "DIGEST", priceMist: PRICE, at: new Date(NOW).toISOString() });
+  assert.deepEqual(JSON.parse(h.data.get(`unlock:${key}:p1`)!), {
+    digest: "DIGEST",
+    priceMist: PRICE,
+    at: new Date(NOW).toISOString(),
+  });
   assert.equal(JSON.parse(h.data.get(paymentKey(key, "p1"))!).consumed, true);
   assert.deepEqual(JSON.parse(h.data.get(`earnings:${SELLER}`)!), { totalMist: "18000000", unlocks: 1 });
   assert.equal(h.memories.length, 1);
@@ -220,7 +305,9 @@ test("a replayed payment is refused and not broadcast again", async () => {
   const quoted = required.accepts[0];
   h.setPaidNonce(quoted.extra.nonce);
   const transaction = await payment({ nonce: quoted.extra.nonce });
-  const header = btoa(JSON.stringify({ x402Version: 2, accepted: quoted, payload: { signature: "c2lnbmF0dXJl", transaction } }));
+  const header = btoa(
+    JSON.stringify({ x402Version: 2, accepted: quoted, payload: { signature: "c2lnbmF0dXJl", transaction } }),
+  );
   assert.equal((await h.call("GET", "/premium/call/p1", { headers: { "PAYMENT-SIGNATURE": header } })).status, 200);
   // Taking away the unlock forces the replay all the way to the nonce check.
   h.data.delete(`unlock:${await userKeyFor(INSTALL)}:p1`);
@@ -233,7 +320,13 @@ test("a replayed payment is refused and not broadcast again", async () => {
 
 test("a payment with no quote on file is refused", async () => {
   const h = harness();
-  const header = btoa(JSON.stringify({ x402Version: 2, accepted: {}, payload: { signature: "c2lnbmF0dXJl", transaction: await payment() } }));
+  const header = btoa(
+    JSON.stringify({
+      x402Version: 2,
+      accepted: {},
+      payload: { signature: "c2lnbmF0dXJl", transaction: await payment() },
+    }),
+  );
   const { status, body } = await h.call("GET", "/premium/call/p1", { headers: { "PAYMENT-SIGNATURE": header } });
   assert.equal(status, 402);
   assert.equal(body.reason, "nonce_expired");
@@ -251,7 +344,11 @@ const refusals: [string, Shape, string][] = [
   ["an owned object as the config", { owned: true }, "wrong_config"],
   ["the gas coin itself as the payment", { coinFromGas: true }, "wrong_coin"],
   ["someone else paying gas", { gasOwner: OTHER }, "sponsored_gas"],
-  ["an extra command", { extra: (tx) => void tx.transferObjects([tx.splitCoins(tx.gas, [1n])[0]], OTHER) }, "wrong_commands"],
+  [
+    "an extra command",
+    { extra: (tx) => void tx.transferObjects([tx.splitCoins(tx.gas, [1n])[0]], OTHER) },
+    "wrong_commands",
+  ],
 ];
 
 for (const [name, shape, code] of refusals) {
@@ -275,7 +372,13 @@ test("JSON or junk is not a transaction", () => {
 });
 
 test("the signed header must repeat exactly what was quoted", async () => {
-  for (const change of [{ amount: "1" }, { payTo: OTHER }, { network: "sui:testnet" }, { asset: "0x2::foo::FOO" }, { scheme: "upto" }]) {
+  for (const change of [
+    { amount: "1" },
+    { payTo: OTHER },
+    { network: "sui:testnet" },
+    { asset: "0x2::foo::FOO" },
+    { scheme: "upto" },
+  ]) {
     const h = harness();
     const { status, body } = await pay(h, {}, (entry) => ({ ...entry, ...change }));
     assert.equal(status, 402);
@@ -296,7 +399,19 @@ test("a transaction that fails on chain unlocks nothing and can be tried again",
   const key = await userKeyFor(INSTALL);
   assert.equal(h.data.has(`unlock:${key}:p1`), false);
   assert.equal(JSON.parse(h.data.get(paymentKey(key, "p1"))!).consumed, undefined);
-  h.setResult(() => ({ digest: "DIGEST", succeeded: true, paid: [{ nonce: JSON.parse(h.data.get(paymentKey(key, "p1"))!).nonce, payer: BUYER, recipient: SELLER, amount: BigInt(PRICE), fee: 2_000_000n }] }));
+  h.setResult(() => ({
+    digest: "DIGEST",
+    succeeded: true,
+    paid: [
+      {
+        nonce: JSON.parse(h.data.get(paymentKey(key, "p1"))!).nonce,
+        payer: BUYER,
+        recipient: SELLER,
+        amount: BigInt(PRICE),
+        fee: 2_000_000n,
+      },
+    ],
+  }));
   assert.equal((await pay(h)).status, 200);
 });
 
@@ -312,7 +427,9 @@ test("a success without the right Paid event unlocks nothing", async () => {
 });
 
 test("a call with no proof, or a caller gone private, can't be bought", async () => {
-  assert.deepEqual((await harness({ proof: false }).call("GET", "/premium/call/p1")).body, { error: "premium_no_proof" });
+  assert.deepEqual((await harness({ proof: false }).call("GET", "/premium/call/p1")).body, {
+    error: "premium_no_proof",
+  });
   const gone = await harness({ profile: false }).call("GET", "/premium/call/p1");
   assert.equal(gone.status, 410);
 });
@@ -325,7 +442,12 @@ test("an unknown call is 404, and an odd id is 400", async () => {
 
 test("the call route needs an install id", async () => {
   const h = harness();
-  const response = await premiumRoute(new Request("https://x/premium/call/p1"), { SOOTHIA_CACHE: {} } as unknown as Env, "/premium/call/p1", { chain: {} as PayChain, settings: SETTINGS });
+  const response = await premiumRoute(
+    new Request("https://x/premium/call/p1"),
+    { SOOTHIA_CACHE: {} } as unknown as Env,
+    "/premium/call/p1",
+    { chain: {} as PayChain, settings: SETTINGS },
+  );
   assert.equal(response.status, 400);
   assert.equal(h.executed.length, 0);
 });
@@ -338,17 +460,37 @@ test("building a payment uses the quote, not the client's numbers", async () => 
   assert.deepEqual(body, { transaction: "BUILT" });
   assert.deepEqual(h.built[0], ["payment", BUYER, stored.nonce, SELLER, BigInt(PRICE)]);
   assert.equal((await h.call("POST", "/premium/build", { body: { pickId: "other", sender: BUYER } })).status, 404);
-  assert.equal((await h.call("POST", "/premium/build", { body: { pickId: "p1", sender: "nope" } })).body.error, "invalid_sender");
+  assert.equal(
+    (await h.call("POST", "/premium/build", { body: { pickId: "p1", sender: "nope" } })).body.error,
+    "invalid_sender",
+  );
 });
 
 test("funding and withdrawing build the right transfer", async () => {
   const h = harness();
-  assert.deepEqual((await h.call("POST", "/premium/transfer/build", { body: { sender: BUYER, recipient: OTHER, amountMist: "50000000" } })).body, { transaction: "FUNDED" });
+  assert.deepEqual(
+    (
+      await h.call("POST", "/premium/transfer/build", {
+        body: { sender: BUYER, recipient: OTHER, amountMist: "50000000" },
+      })
+    ).body,
+    { transaction: "FUNDED" },
+  );
   assert.deepEqual(h.built[0], ["funding", BUYER, OTHER, 50_000_000n]);
-  assert.deepEqual((await h.call("POST", "/premium/transfer/build", { body: { sender: OTHER, recipient: BUYER } })).body, { transaction: "WITHDRAWN" });
+  assert.deepEqual(
+    (await h.call("POST", "/premium/transfer/build", { body: { sender: OTHER, recipient: BUYER } })).body,
+    { transaction: "WITHDRAWN" },
+  );
   assert.deepEqual(h.built[1], ["withdraw", OTHER, BUYER]);
-  assert.equal((await h.call("POST", "/premium/transfer/build", { body: { sender: BUYER, recipient: OTHER, amountMist: "1" } })).body.error, "invalid_amount");
-  assert.equal((await h.call("POST", "/premium/transfer/build", { body: { sender: BUYER, recipient: "x" } })).body.error, "invalid_recipient");
+  assert.equal(
+    (await h.call("POST", "/premium/transfer/build", { body: { sender: BUYER, recipient: OTHER, amountMist: "1" } }))
+      .body.error,
+    "invalid_amount",
+  );
+  assert.equal(
+    (await h.call("POST", "/premium/transfer/build", { body: { sender: BUYER, recipient: "x" } })).body.error,
+    "invalid_recipient",
+  );
 });
 
 async function withdrawal(): Promise<string> {
@@ -361,15 +503,24 @@ test("only a withdrawal of the whole gas coin is relayed", async () => {
   const h = harness();
   const good = await withdrawal();
   assert.deepEqual(checkWithdrawal(good), { ok: true, sender: OTHER });
-  assert.equal((await h.call("POST", "/premium/transfer/execute", { body: { transaction: good, signature: "c2ln" } })).body.digest, "DIGEST");
+  assert.equal(
+    (await h.call("POST", "/premium/transfer/execute", { body: { transaction: good, signature: "c2ln" } })).body.digest,
+    "DIGEST",
+  );
   assert.equal(h.executed.length, 1);
 
   const partial = new Transaction();
   partial.transferObjects([partial.splitCoins(partial.gas, [5n])[0]], BUYER);
-  const refused = await h.call("POST", "/premium/transfer/execute", { body: { transaction: await finish(partial, OTHER), signature: "c2ln" } });
+  const refused = await h.call("POST", "/premium/transfer/execute", {
+    body: { transaction: await finish(partial, OTHER), signature: "c2ln" },
+  });
   assert.equal(refused.status, 400);
   assert.equal(refused.body.error, "wrong_commands");
-  assert.equal((await h.call("POST", "/premium/transfer/execute", { body: { transaction: await payment(), signature: "c2ln" } })).status, 400);
+  assert.equal(
+    (await h.call("POST", "/premium/transfer/execute", { body: { transaction: await payment(), signature: "c2ln" } }))
+      .status,
+    400,
+  );
   assert.equal(h.executed.length, 1);
 });
 
@@ -380,6 +531,10 @@ test("a balance is read for a valid address only", async () => {
 });
 
 test("without the ids the routes say so", async () => {
-  const response = await premiumRoute(new Request("https://x/premium/eligible"), { SOOTHIA_CACHE: {} } as unknown as Env, "/premium/eligible");
+  const response = await premiumRoute(
+    new Request("https://x/premium/eligible"),
+    { SOOTHIA_CACHE: {} } as unknown as Env,
+    "/premium/eligible",
+  );
   assert.equal(response.status, 503);
 });

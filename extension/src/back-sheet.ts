@@ -104,7 +104,11 @@ export function openBackSheet(host: BackHost): Sheet {
   const estimate = el("p", "back-estimate");
   const fee = el("p", "note");
   const schedule = el("p", "note", "Results from ESPN, settled 2h15m after kickoff, 6h challenge window, then claim");
-  const notice = el("p", "note back-notice", "Staking may be restricted where you live. Unaudited beta: stake only what you can lose.");
+  const notice = el(
+    "p",
+    "note back-notice",
+    "Staking may be restricted where you live. Unaudited beta: stake only what you can lose.",
+  );
   const trust = externalLink("Who can do what", TRUST_DOC_URL, "link ext");
   form.append(sideRow, amountField, estimate, fee, schedule, notice, trust);
 
@@ -205,7 +209,9 @@ export function openBackSheet(host: BackHost): Sheet {
       balanceFailed = true;
     }
     if (positionsResponse.ok && positionsResponse.body) {
-      const found = (positionsResponse.body as { positions: StakePositionView[] }).positions.find((position) => position.pickId === called.pickId);
+      const found = (positionsResponse.body as { positions: StakePositionView[] }).positions.find(
+        (position) => position.pickId === called.pickId,
+      );
       held = found ? BigInt(found.amountMist) : 0n;
     }
     render();
@@ -253,7 +259,10 @@ export function openBackSheet(host: BackHost): Sheet {
     outcome.classList.add("success");
     const line = el("p", "question", `Backed ${formatSui(stake)} SUI on ${called.side}. Proof: `);
     line.append(externalLink(`${sent.slice(0, 8)}…`, explorerUrl(sent), "link ext"));
-    outcome.append(line, button("Done", "button wide", () => host.back()));
+    outcome.append(
+      line,
+      button("Done", "button wide", () => host.back()),
+    );
     host.layout();
     host.celebrate?.();
     host.sound?.("betPlaced");
@@ -271,12 +280,16 @@ export function openBackSheet(host: BackHost): Sheet {
         showDone(sent, stake);
         return;
       }
-      const notSeenYet = response.status === 404 && (response.body as ApiError | null)?.error === "transaction_not_found";
+      const notSeenYet =
+        response.status === 404 && (response.body as ApiError | null)?.error === "transaction_not_found";
       if (!notSeenYet || attempt >= CONFIRM_ATTEMPTS) break;
       await wait(CONFIRM_WAIT_MS);
       if (disposed) return;
     }
-    fail("Your stake went through on Sui, but Soothia couldn't record it yet. Press Try again. You won't be charged twice.", true);
+    fail(
+      "Your stake went through on Sui, but Soothia couldn't record it yet. Press Try again. You won't be charged twice.",
+      true,
+    );
     const proof = externalLink("See it on Sui", explorerUrl(sent), "link ext");
     status.append(" ", proof);
     host.layout();
@@ -330,7 +343,11 @@ export function openBackSheet(host: BackHost): Sheet {
     }
 
     setBusy("Preparing your stake…");
-    const response = await host.api<Built>("/stake/build", { pickId: called.pickId, amountMist: stake.toString(), sender: wallet.address });
+    const response = await host.api<Built>("/stake/build", {
+      pickId: called.pickId,
+      amountMist: stake.toString(),
+      sender: wallet.address,
+    });
     if (disposed) return;
     if (!response.ok || !response.body) {
       const { text, retry } = stakeErrorText(response.status, response.body as StakeErrorBody | null);

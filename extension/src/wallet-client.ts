@@ -3,7 +3,15 @@
 
 import { CHECK_TX } from "./messages";
 import type { ExpectedTx, TxVerdict } from "./tx-check";
-import { acceptResponse, BRIDGE_READY_ID, WALLET_CHANNEL, type ConnectedWallet, type MessageLike, type WalletMethod, type WalletRequest } from "./wallet-protocol";
+import {
+  acceptResponse,
+  BRIDGE_READY_ID,
+  WALLET_CHANNEL,
+  type ConnectedWallet,
+  type MessageLike,
+  type WalletMethod,
+  type WalletRequest,
+} from "./wallet-protocol";
 
 const READY_TIMEOUT_MS = 5_000;
 const LIST_TIMEOUT_MS = 5_000;
@@ -14,9 +22,19 @@ export interface WalletBridge {
   call(method: WalletMethod, params?: Record<string, unknown>): Promise<unknown>;
 }
 
-const timeoutFor = (method: WalletMethod): number => (method === "connect" || method === "signAndExecute" || method === "signPersonalMessage" || method === "signTransaction" ? APPROVAL_TIMEOUT_MS : LIST_TIMEOUT_MS);
+const timeoutFor = (method: WalletMethod): number =>
+  method === "connect" ||
+  method === "signAndExecute" ||
+  method === "signPersonalMessage" ||
+  method === "signTransaction"
+    ? APPROVAL_TIMEOUT_MS
+    : LIST_TIMEOUT_MS;
 
-export function createWalletBridge(scriptUrl: () => string, win: Window = window, doc: Document = document): WalletBridge {
+export function createWalletBridge(
+  scriptUrl: () => string,
+  win: Window = window,
+  doc: Document = document,
+): WalletBridge {
   const nonce = crypto.randomUUID();
   const pending = new Map<string, { resolve: (value: unknown) => void; reject: (error: Error) => void }>();
   let starting: Promise<void> | null = null;
@@ -83,19 +101,35 @@ export function createWalletBridge(scriptUrl: () => string, win: Window = window
 
 /** Only Soothia's own ownership message, for this address, may reach the wallet to sign. */
 export function isOwnershipMessage(message: unknown, address: string): message is string {
-  return typeof message === "string" && message.length < 400 && message.startsWith("Soothia: confirm you own this wallet.\n") && message.includes(`\nAddress: ${address.toLowerCase()}\n`);
+  return (
+    typeof message === "string" &&
+    message.length < 400 &&
+    message.startsWith("Soothia: confirm you own this wallet.\n") &&
+    message.includes(`\nAddress: ${address.toLowerCase()}\n`)
+  );
 }
 
 export type TxChecker = (txBytes: string, expected: ExpectedTx) => Promise<TxVerdict | undefined>;
 
 /** Asks the background service worker, where the page cannot reach the check. */
-export const checkInBackground: TxChecker = (txBytes, expected) => chrome.runtime.sendMessage({ type: CHECK_TX, txBytes, expected });
+export const checkInBackground: TxChecker = (txBytes, expected) =>
+  chrome.runtime.sendMessage({ type: CHECK_TX, txBytes, expected });
 
 /** Signs without executing. What comes back is checked too, as that is what gets broadcast. */
-export async function signOnlyChecked(bridge: WalletBridge, check: TxChecker, wallet: ConnectedWallet, txBytes: string, expected: ExpectedTx): Promise<{ bytes: string; signature: string }> {
+export async function signOnlyChecked(
+  bridge: WalletBridge,
+  check: TxChecker,
+  wallet: ConnectedWallet,
+  txBytes: string,
+  expected: ExpectedTx,
+): Promise<{ bytes: string; signature: string }> {
   const verdict = await check(txBytes, expected);
   if (!verdict?.ok) throw new Error(verdict?.reason ?? "The transaction could not be checked.");
-  const signed = (await bridge.call("signTransaction", { walletId: wallet.walletId, address: wallet.address, txBytes })) as { bytes: string; signature: string };
+  const signed = (await bridge.call("signTransaction", {
+    walletId: wallet.walletId,
+    address: wallet.address,
+    txBytes,
+  })) as { bytes: string; signature: string };
   const after = await check(signed.bytes, expected);
   if (!after?.ok) throw new Error(after?.reason ?? "The signed transaction could not be checked.");
   return signed;
@@ -114,5 +148,7 @@ export async function signChecked(
 ): Promise<{ digest: string }> {
   const verdict = await check(txBytes, expected);
   if (!verdict?.ok) throw new Error(verdict?.reason ?? "The transaction could not be checked.");
-  return (await bridge.call("signAndExecute", { walletId: wallet.walletId, address: wallet.address, txBytes })) as { digest: string };
+  return (await bridge.call("signAndExecute", { walletId: wallet.walletId, address: wallet.address, txBytes })) as {
+    digest: string;
+  };
 }

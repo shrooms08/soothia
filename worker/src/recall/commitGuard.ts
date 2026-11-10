@@ -58,7 +58,11 @@ const count = (value: string | null): number => Number(value) || 0;
  * Reserves one commit for this user. Returns null when the commit may go ahead,
  * or why it must be skipped. A slot is used even if the commit then fails.
  */
-export async function checkCommitGuard(env: Env, userKey: string, deps: GuardDeps = {}): Promise<CommitSkipReason | null> {
+export async function checkCommitGuard(
+  env: Env,
+  userKey: string,
+  deps: GuardDeps = {},
+): Promise<CommitSkipReason | null> {
   try {
     const balance = await walletBalance(env, deps.readBalance ?? (() => readWalletBalance(env)));
     if (balance < MIN_BALANCE_MIST) return "low_balance";
@@ -74,7 +78,10 @@ export async function checkCommitGuard(env: Env, userKey: string, deps: GuardDep
   let used: number;
   let total: number;
   try {
-    const [userValue, globalValue] = await Promise.all([env.SOOTHIA_CACHE.get(userCounter), env.SOOTHIA_CACHE.get(globalCounter)]);
+    const [userValue, globalValue] = await Promise.all([
+      env.SOOTHIA_CACHE.get(userCounter),
+      env.SOOTHIA_CACHE.get(globalCounter),
+    ]);
     used = count(userValue);
     total = count(globalValue);
   } catch {
@@ -85,6 +92,8 @@ export async function checkCommitGuard(env: Env, userKey: string, deps: GuardDep
   if (total >= GLOBAL_DAILY_CAP) return "global_cap";
 
   const options = { expirationTtl: COUNTER_TTL_SEC };
-  const saved = (await kvPut(env, userCounter, String(used + 1), options)) && (await kvPut(env, globalCounter, String(total + 1), options));
+  const saved =
+    (await kvPut(env, userCounter, String(used + 1), options)) &&
+    (await kvPut(env, globalCounter, String(total + 1), options));
   return saved ? null : "kv_unavailable";
 }

@@ -14,7 +14,9 @@ async function main(): Promise<number> {
     log: (line) => console.log(scrub(line, env)),
   });
 
-  console.log(`\nResolved this run: ${result.resolved}. Still pending: ${result.pending}. Not found: ${result.notFound}. Failed: ${result.failed}.`);
+  console.log(
+    `\nResolved this run: ${result.resolved}. Still pending: ${result.pending}. Not found: ${result.notFound}. Failed: ${result.failed}.`,
+  );
   console.log(`All time: ${result.totalResolved} resolved, ${result.hits} right, Brier ${result.brier ?? "n/a"}.`);
   if (result.newLessons.length) {
     console.log("\nNew lessons:");

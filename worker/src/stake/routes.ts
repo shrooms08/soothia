@@ -16,10 +16,25 @@ import { DRILL_ROUTES } from "./drill";
 import { stakeSettings, tatumStakeChain, type StakeChain, type StakeSettings } from "./chain";
 import { abortCodeOf, clearPoolCreation, parseAddress, refuse, StakeRefusal, type Context } from "./context";
 import { flipSubject, poolIdentity, type PoolFixture, type PoolIdentity, type Subject } from "./identity";
-import { claimOpensAtMs, inChallengeWindow, multiplierAfterFee, poolTotals, PROD_CHALLENGE_MS, PROD_MIN_RESOLVE_DELAY_MS } from "./math";
+import {
+  claimOpensAtMs,
+  inChallengeWindow,
+  multiplierAfterFee,
+  poolTotals,
+  PROD_CHALLENGE_MS,
+  PROD_MIN_RESOLVE_DELAY_MS,
+} from "./math";
 import { viewPosition } from "./positions";
 import type { StakeConfig, StakePool } from "./readers";
-import { poolIndexKey, releaseResolverLock, STAKE_LOG_KEY, STAKE_POOL_PREFIX, writePoolIndex, type PoolIndexEntry, type PoolIndexMeta } from "./sweep";
+import {
+  poolIndexKey,
+  releaseResolverLock,
+  STAKE_LOG_KEY,
+  STAKE_POOL_PREFIX,
+  writePoolIndex,
+  type PoolIndexEntry,
+  type PoolIndexMeta,
+} from "./sweep";
 import { buildClaim, buildStake } from "./transactions";
 
 const STAKE_GAS_BUDGET = 20_000_000;
@@ -42,7 +57,8 @@ export interface StakeDeps {
   now?: () => number;
 }
 
-const shortString = (value: unknown, max: number): value is string => typeof value === "string" && value.trim().length > 0 && value.length <= max;
+const shortString = (value: unknown, max: number): value is string =>
+  typeof value === "string" && value.trim().length > 0 && value.length <= max;
 
 function parseAmount(value: unknown): bigint {
   const text = typeof value === "number" && Number.isSafeInteger(value) ? String(value) : value;
@@ -52,7 +68,13 @@ function parseAmount(value: unknown): bigint {
 
 function parseFixtureQuestion(body: Record<string, unknown>): { fixture: PoolFixture; subject: Subject } {
   const raw = body.fixture as Partial<PoolFixture> | null | undefined;
-  if (typeof raw !== "object" || raw === null || !shortString(raw.home, 100) || !shortString(raw.away, 100) || !shortString(raw.startISO, 40)) {
+  if (
+    typeof raw !== "object" ||
+    raw === null ||
+    !shortString(raw.home, 100) ||
+    !shortString(raw.away, 100) ||
+    !shortString(raw.startISO, 40)
+  ) {
     refuse(400, "invalid_fixture");
   }
   if (body.subject !== "home" && body.subject !== "away") refuse(400, "invalid_subject");
@@ -84,7 +106,9 @@ async function poolRoute(context: Context): Promise<Response> {
 
   const config = await context.chain.readConfig();
   const poolId = await context.chain.findPoolId(config, identity.questionHash);
-  const view = poolId ? poolView(poolId, await context.chain.readPool(poolId), config) : emptyPoolView(identity, config);
+  const view = poolId
+    ? poolView(poolId, await context.chain.readPool(poolId), config)
+    : emptyPoolView(identity, config);
   await cachePut(cacheKey, view, POOL_CACHE_SEC);
   return json(context.request, view);
 }
@@ -121,7 +145,11 @@ function emptyPoolView(identity: PoolIdentity, config: StakeConfig): Record<stri
   };
 }
 
-async function loadPick(context: Context, userKey: string, pickId: unknown): Promise<PickRecord & { fixture: NonNullable<PickRecord["fixture"]> }> {
+async function loadPick(
+  context: Context,
+  userKey: string,
+  pickId: unknown,
+): Promise<PickRecord & { fixture: NonNullable<PickRecord["fixture"]> }> {
   if (!shortString(pickId, 100)) refuse(400, "invalid_pick_id");
   const pick = mergePicks(await context.store(userKey).list("pick")).find((candidate) => candidate.id === pickId);
   if (!pick) return refuse(404, "pick_not_found");
@@ -131,13 +159,23 @@ async function loadPick(context: Context, userKey: string, pickId: unknown): Pro
 
 const leanYes = (pick: PickRecord): boolean => pick.pYes >= 0.5;
 
-function checkStakeLimits(config: StakeConfig, pool: StakePool | null, held: { side: boolean; amount: bigint } | null, amount: bigint, side: boolean): void {
+function checkStakeLimits(
+  config: StakeConfig,
+  pool: StakePool | null,
+  held: { side: boolean; amount: bigint } | null,
+  amount: bigint,
+  side: boolean,
+): void {
   if (amount < config.minStake) refuse(400, "below_min_stake", { minStakeMist: config.minStake.toString() });
   if (held && held.side !== side) refuse(409, "side_switch");
   if ((held?.amount ?? 0n) + amount > config.maxStakePerUser) {
-    refuse(400, "above_user_limit", { maxStakePerUserMist: config.maxStakePerUser.toString(), heldMist: (held?.amount ?? 0n).toString() });
+    refuse(400, "above_user_limit", {
+      maxStakePerUserMist: config.maxStakePerUser.toString(),
+      heldMist: (held?.amount ?? 0n).toString(),
+    });
   }
-  if ((pool ? pool.yes + pool.no : 0n) + amount > config.maxPool) refuse(409, "pool_full", { maxPoolMist: config.maxPool.toString() });
+  if ((pool ? pool.yes + pool.no : 0n) + amount > config.maxPool)
+    refuse(409, "pool_full", { maxPoolMist: config.maxPool.toString() });
 }
 
 /**
@@ -151,7 +189,12 @@ async function verifiedFixture(context: Context, fixture: PoolFixture): Promise<
   return check.located;
 }
 
-function indexEntry(poolId: string, questionHash: string, pick: { fixture: PickRecord["fixture"] & object }, located?: LocatedFixture): PoolIndexEntry {
+function indexEntry(
+  poolId: string,
+  questionHash: string,
+  pick: { fixture: PickRecord["fixture"] & object },
+  located?: LocatedFixture,
+): PoolIndexEntry {
   const { fixture } = pick;
   // Stored the way ESPN lists the match, with the subject turned to match.
   return {
@@ -173,7 +216,8 @@ async function createPool(
 ): Promise<string> {
   const { env, chain } = context;
   // Pools copy the delays when created. While a drill has them shortened, a real pool must wait.
-  if (config.minResolveDelayMs !== PROD_MIN_RESOLVE_DELAY_MS || config.challengeMs !== PROD_CHALLENGE_MS) refuse(503, "staking_paused");
+  if (config.minResolveDelayMs !== PROD_MIN_RESOLVE_DELAY_MS || config.challengeMs !== PROD_CHALLENGE_MS)
+    refuse(503, "staking_paused");
   const located = await verifiedFixture(context, pick.fixture);
   await clearPoolCreation(context);
 
@@ -189,7 +233,10 @@ async function createPool(
   } finally {
     await releaseResolverLock(env);
   }
-  await writePoolIndex(env, indexEntry(poolId, identity.questionHash, pick, located), { phase: "open", dueMs: Number(closeMs + config.minResolveDelayMs) });
+  await writePoolIndex(env, indexEntry(poolId, identity.questionHash, pick, located), {
+    phase: "open",
+    dueMs: Number(closeMs + config.minResolveDelayMs),
+  });
   await forgetPool(identity.questionHash);
   return poolId;
 }
@@ -270,7 +317,9 @@ async function linkWallet(context: Context, userKey: string, address: string): P
   const key = `walletlink:${userKey}`;
   try {
     if ((await context.env.SOOTHIA_CACHE.get(key)) === address) return;
-    await context.store(userKey).write("pref", { kind: "wallet_link", at: new Date(context.nowMs).toISOString(), address });
+    await context
+      .store(userKey)
+      .write("pref", { kind: "wallet_link", at: new Date(context.nowMs).toISOString(), address });
     await kvPut(context.env, key, address);
   } catch (error) {
     console.warn(`Soothia: wallet link failed: ${String((error as Error)?.message ?? error).slice(0, 160)}`);
@@ -302,11 +351,14 @@ async function confirmRoute(context: Context, userKey: string): Promise<Response
   );
   if (!poolId || matching.length === 0) return refuse(400, "stake_mismatch");
   const sender = matching[0].staker.toLowerCase();
-  const amount = matching.filter((event) => event.staker.toLowerCase() === sender).reduce((sum, event) => sum + event.amount, 0n);
+  const amount = matching
+    .filter((event) => event.staker.toLowerCase() === sender)
+    .reduce((sum, event) => sum + event.amount, 0n);
 
   const addressKey = addressIndexKey(sender, poolId);
   const previous = await env.SOOTHIA_CACHE.get<AddressIndexValue>(addressKey, "json");
-  if (previous?.digests.includes(digest as string)) return json(context.request, { ok: true, duplicate: true, poolId, digest });
+  if (previous?.digests.includes(digest as string))
+    return json(context.request, { ok: true, duplicate: true, poolId, digest });
 
   const stake: StakeRecord = {
     pickId: pick.id,
@@ -329,11 +381,16 @@ async function confirmRoute(context: Context, userKey: string): Promise<Response
     startISO: pick.fixture.startISO,
     subject: pick.fixture.subject,
   };
-  const indexed = await kvPut(env, addressKey, JSON.stringify({ digests: [...(previous?.digests ?? []), digest] }), { metadata });
+  const indexed = await kvPut(env, addressKey, JSON.stringify({ digests: [...(previous?.digests ?? []), digest] }), {
+    metadata,
+  });
   // Pools are indexed when created. This covers a create whose index write failed.
   if ((await env.SOOTHIA_CACHE.get(poolIndexKey(poolId))) === null) {
     const pool = await chain.readPool(poolId);
-    await writePoolIndex(env, indexEntry(poolId, identity.questionHash, pick), { phase: "open", dueMs: Number(pool.closeMs + pool.minResolveDelayMs) });
+    await writePoolIndex(env, indexEntry(poolId, identity.questionHash, pick), {
+      phase: "open",
+      dueMs: Number(pool.closeMs + pool.minResolveDelayMs),
+    });
   }
   await forgetPool(identity.questionHash);
   await linkWallet(context, userKey, sender);
@@ -379,7 +436,8 @@ async function claimBuildRoute(context: Context): Promise<Response> {
   const poolId = parseAddress(body.poolId, "invalid_pool_id");
   const sender = parseAddress(body.sender, "invalid_sender");
   const pool = await chain.readPool(poolId).catch((error) => {
-    if (/not_a_stake_pool|not.?found|does not exist/i.test(String((error as Error)?.message))) refuse(404, "pool_not_found");
+    if (/not_a_stake_pool|not.?found|does not exist/i.test(String((error as Error)?.message)))
+      refuse(404, "pool_not_found");
     throw error;
   });
   const position = await chain.readPosition(pool, sender);
@@ -390,18 +448,26 @@ async function claimBuildRoute(context: Context): Promise<Response> {
     refuse(409, "not_claimable", { status: view.status, claimOpensAtMs: view.claimOpensAtMs });
   }
   const txBytes = await chain.buildForSender(buildClaim(settings, { poolId }), sender, CLAIM_GAS_BUDGET);
-  return json(context.request, { txBytes, summary: { poolId, status: view.status, amountMist: view.estimatedPayoutMist } });
+  return json(context.request, {
+    txBytes,
+    summary: { poolId, status: view.status, amountMist: view.estimatedPayoutMist },
+  });
 }
 
 async function adminPendingRoute(context: Context): Promise<Response> {
   const { env, chain, nowMs } = context;
   const listed = await env.SOOTHIA_CACHE.list<PoolIndexMeta>({ prefix: STAKE_POOL_PREFIX, limit: 1000 });
-  const windows = listed.keys.filter((key) => key.metadata?.phase === "resolved" && key.metadata.dueMs > nowMs).slice(0, MAX_PENDING);
+  const windows = listed.keys
+    .filter((key) => key.metadata?.phase === "resolved" && key.metadata.dueMs > nowMs)
+    .slice(0, MAX_PENDING);
 
   const pending = [];
   for (const key of windows) {
     const poolId = key.name.slice(STAKE_POOL_PREFIX.length);
-    const [entry, pool] = await Promise.all([env.SOOTHIA_CACHE.get<PoolIndexEntry>(key.name, "json"), chain.readPool(poolId)]);
+    const [entry, pool] = await Promise.all([
+      env.SOOTHIA_CACHE.get<PoolIndexEntry>(key.name, "json"),
+      chain.readPool(poolId),
+    ]);
     if (!inChallengeWindow(pool, BigInt(nowMs))) continue;
     const opens = Number(claimOpensAtMs(pool));
     pending.push({
@@ -420,16 +486,25 @@ async function adminPendingRoute(context: Context): Promise<Response> {
   return json(context.request, { pending, recentActions });
 }
 
-const USER_ROUTES = ["POST /stake/pool", "POST /stake/build", "POST /stake/confirm", "GET /stake/positions", "GET /stake/balance", "POST /stake/claim/build"];
+const USER_ROUTES = [
+  "POST /stake/pool",
+  "POST /stake/build",
+  "POST /stake/confirm",
+  "GET /stake/positions",
+  "GET /stake/balance",
+  "POST /stake/claim/build",
+];
 
 /** Answers a /stake/* request. */
 export async function stakeRoute(request: Request, env: Env, path: string, deps: StakeDeps = {}): Promise<Response> {
   try {
     const route = `${request.method} ${path}`;
-    const adminRoute = route === "GET /stake/admin/pending" ? adminPendingRoute : (ADMIN_ROUTES[route] ?? DRILL_ROUTES[route]);
+    const adminRoute =
+      route === "GET /stake/admin/pending" ? adminPendingRoute : (ADMIN_ROUTES[route] ?? DRILL_ROUTES[route]);
     const admin = adminRoute !== undefined;
     // Without the admin header these paths do not exist.
-    if (admin ? !isAdmin(request, env) : !USER_ROUTES.includes(route)) return json(request, { error: "not_found" }, 404);
+    if (admin ? !isAdmin(request, env) : !USER_ROUTES.includes(route))
+      return json(request, { error: "not_found" }, 404);
 
     const user = admin ? "" : await identify(request);
     if (typeof user !== "string") return user;
@@ -464,7 +539,9 @@ export async function stakeRoute(request: Request, env: Env, path: string, deps:
     }
   } catch (error) {
     if (error instanceof StakeRefusal) return json(request, { error: error.code, ...error.extra }, error.status);
-    console.warn(`Soothia: ${request.method} ${path} failed: ${String((error as Error)?.message ?? error).slice(0, 300)}`);
+    console.warn(
+      `Soothia: ${request.method} ${path} failed: ${String((error as Error)?.message ?? error).slice(0, 300)}`,
+    );
     return json(request, { error: "stake_unavailable" }, 502);
   }
 }

@@ -3,8 +3,27 @@
 
 import { Ed25519Keypair } from "@mysten/sui/keypairs/ed25519";
 import { fromBase64 } from "@mysten/sui/utils";
-import { AGENT_KEY, AGENT_RECEIPTS_KEY, AGENT_SETTINGS_KEY, AGENT_SPEND_KEY, SUI_WALLET_KEY, type ApiPath, type ApiResponse } from "./messages";
-import { agentCandidates, cleanAgentSettings, runUnlock, spentToday, utcDay, type AgentReceipt, type AgentSettings, type AgentSpend, type AgentStatus, type PremiumCallResponse } from "./premium-logic";
+import {
+  AGENT_KEY,
+  AGENT_RECEIPTS_KEY,
+  AGENT_SETTINGS_KEY,
+  AGENT_SPEND_KEY,
+  SUI_WALLET_KEY,
+  type ApiPath,
+  type ApiResponse,
+} from "./messages";
+import {
+  agentCandidates,
+  cleanAgentSettings,
+  runUnlock,
+  spentToday,
+  utcDay,
+  type AgentReceipt,
+  type AgentSettings,
+  type AgentSpend,
+  type AgentStatus,
+  type PremiumCallResponse,
+} from "./premium-logic";
 import { matchLine, type FeedEntry } from "./social-logic";
 import { checkTransaction, type ExpectedTx } from "./tx-check";
 
@@ -40,24 +59,38 @@ export function createAgent(deps: AgentDeps) {
     return typeof stored === "string" ? Ed25519Keypair.fromSecretKey(stored) : null;
   }
 
-  const readSettings = async (): Promise<AgentSettings> => cleanAgentSettings((await storage.get(AGENT_SETTINGS_KEY))[AGENT_SETTINGS_KEY]);
-  const readSpend = async (): Promise<AgentSpend | null> => ((await storage.get(AGENT_SPEND_KEY))[AGENT_SPEND_KEY] as AgentSpend | undefined) ?? null;
-  const readReceipts = async (): Promise<AgentReceipt[]> => ((await storage.get(AGENT_RECEIPTS_KEY))[AGENT_RECEIPTS_KEY] as AgentReceipt[] | undefined) ?? [];
+  const readSettings = async (): Promise<AgentSettings> =>
+    cleanAgentSettings((await storage.get(AGENT_SETTINGS_KEY))[AGENT_SETTINGS_KEY]);
+  const readSpend = async (): Promise<AgentSpend | null> =>
+    ((await storage.get(AGENT_SPEND_KEY))[AGENT_SPEND_KEY] as AgentSpend | undefined) ?? null;
+  const readReceipts = async (): Promise<AgentReceipt[]> =>
+    ((await storage.get(AGENT_RECEIPTS_KEY))[AGENT_RECEIPTS_KEY] as AgentReceipt[] | undefined) ?? [];
 
   async function changeSpend(change: bigint): Promise<void> {
     const now = nowMs();
     const spent = spentToday(await readSpend(), now) + change;
-    await storage.set({ [AGENT_SPEND_KEY]: { day: utcDay(now), spentMist: (spent < 0n ? 0n : spent).toString() } satisfies AgentSpend });
+    await storage.set({
+      [AGENT_SPEND_KEY]: { day: utcDay(now), spentMist: (spent < 0n ? 0n : spent).toString() } satisfies AgentSpend,
+    });
   }
 
-  async function signer(pair: Ed25519Keypair, txBytes: string, expected: ExpectedTx): Promise<{ bytes: string; signature: string }> {
+  async function signer(
+    pair: Ed25519Keypair,
+    txBytes: string,
+    expected: ExpectedTx,
+  ): Promise<{ bytes: string; signature: string }> {
     const verdict = checkTransaction(txBytes, expected, pair.toSuiAddress());
     if (!verdict.ok) throw new Error(verdict.reason);
     return pair.signTransaction(fromBase64(txBytes));
   }
 
   async function status(): Promise<AgentStatus> {
-    const [pair, settings, spend, receipts] = await Promise.all([keypair(), readSettings(), readSpend(), readReceipts()]);
+    const [pair, settings, spend, receipts] = await Promise.all([
+      keypair(),
+      readSettings(),
+      readSpend(),
+      readReceipts(),
+    ]);
     const address = pair?.toSuiAddress() ?? null;
     let balanceMist: string | null = null;
     if (address) {
@@ -74,7 +107,12 @@ export function createAgent(deps: AgentDeps) {
     const feed = await deps.relay("/social/feed", {});
     if (!feed.ok || !feed.body) return { unlocked: [], stopped: "feed_unavailable" };
     const sender = pair.toSuiAddress();
-    const candidates = agentCandidates((feed.body as { items: FeedEntry[] }).items, settings, spentToday(await readSpend(), nowMs()), nowMs());
+    const candidates = agentCandidates(
+      (feed.body as { items: FeedEntry[] }).items,
+      settings,
+      spentToday(await readSpend(), nowMs()),
+      nowMs(),
+    );
 
     const unlocked: AgentReceipt[] = [];
     for (const { handle, item } of candidates) {
@@ -101,7 +139,13 @@ export function createAgent(deps: AgentDeps) {
         await changeSpend(-price);
         continue;
       }
-      const receipt: AgentReceipt = { at: result.receipt.at, handle, match: matchLine(item.fixture), priceMist: result.receipt.priceMist, digest: result.receipt.digest };
+      const receipt: AgentReceipt = {
+        at: result.receipt.at,
+        handle,
+        match: matchLine(item.fixture),
+        priceMist: result.receipt.priceMist,
+        digest: result.receipt.digest,
+      };
       unlocked.push(receipt);
       await storage.set({ [AGENT_RECEIPTS_KEY]: [receipt, ...(await readReceipts())].slice(0, MAX_RECEIPTS) });
     }
@@ -124,7 +168,10 @@ export function createAgent(deps: AgentDeps) {
     } catch {
       return { error: "refused" };
     }
-    const sent = await deps.relay("/premium/transfer/execute", { transaction: signed.bytes, signature: signed.signature });
+    const sent = await deps.relay("/premium/transfer/execute", {
+      transaction: signed.bytes,
+      signature: signed.signature,
+    });
     return sent.ok ? { digest: (sent.body as { digest: string }).digest } : { error: codeOf(sent) };
   }
 

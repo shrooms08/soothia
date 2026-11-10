@@ -14,14 +14,33 @@ const { openBackSheet, TRUST_DOC_URL } = await import("../src/back-sheet");
 const { STYLES } = await import("../src/styles");
 
 const KICKOFF = "2026-11-21T17:30:00.000Z";
-const called: RecallCalled = { side: "Arsenal win", confidence: 60, pickId: "p1", committed: true, pYes: 0.6, fixture: { home: "Newcastle United", away: "Arsenal", startISO: KICKOFF, subject: "away" } };
+const called: RecallCalled = {
+  side: "Arsenal win",
+  confidence: 60,
+  pickId: "p1",
+  committed: true,
+  pYes: 0.6,
+  fixture: { home: "Newcastle United", away: "Arsenal", startISO: KICKOFF, subject: "away" },
+};
 const LIMITS = { minStakeMist: "100000000", maxStakePerUserMist: "5000000000", maxPoolMist: "50000000000" };
 const POOL_ID = `0x${"bb".repeat(32)}`;
-const pool: PoolView = { exists: true, poolId: POOL_ID, status: "open", closeMs: Date.parse(KICKOFF), yesTotal: "3000000000", noTotal: "1000000000", feeBps: 100, limits: LIMITS };
+const pool: PoolView = {
+  exists: true,
+  poolId: POOL_ID,
+  status: "open",
+  closeMs: Date.parse(KICKOFF),
+  yesTotal: "3000000000",
+  noTotal: "1000000000",
+  feeBps: 100,
+  limits: LIMITS,
+};
 const emptyPool: PoolView = { ...pool, exists: false, poolId: null, status: null, yesTotal: "0", noTotal: "0" };
 const WALLET: ConnectedWallet = { address: `0x${"aa".repeat(32)}`, walletId: "slush", walletName: "Slush" };
 const DIGEST = "8teWqYrBWopnhq2Wy22BQq1uvzepDoUzDzdRA6oE8iY";
-const BUILT = { txBytes: "BYTES", summary: { poolId: POOL_ID, side: "YES", amountMist: "100000000", multiplierNow: 1.2 } };
+const BUILT = {
+  txBytes: "BYTES",
+  summary: { poolId: POOL_ID, side: "YES", amountMist: "100000000", multiplierNow: 1.2 },
+};
 
 type Reply = { ok: boolean; status: number; body: unknown };
 const OK = (body: unknown): Reply => ({ ok: true, status: 200, body });
@@ -82,12 +101,17 @@ async function open(options: Options = {}) {
       backs += 1;
     },
     wait: async () => undefined,
-    api: async <T,>(path: ApiPath, body: unknown) => {
+    api: async <T>(path: ApiPath, body: unknown) => {
       asked.push([path, body as Record<string, unknown>]);
       let reply: Reply;
-      if (path === "/stake/pool") reply = options.poolFails ? NO(502, { error: "stake_unavailable" }) : OK(options.pool ?? pool);
-      else if (path === "/stake/balance") reply = options.balanceFails ? NO(502, { error: "stake_unavailable" }) : OK({ balanceMist: options.balance ?? "1000000000" });
-      else if (path === "/stake/positions") reply = OK({ positions: options.held ? [{ pickId: "p1", amountMist: options.held }] : [] });
+      if (path === "/stake/pool")
+        reply = options.poolFails ? NO(502, { error: "stake_unavailable" }) : OK(options.pool ?? pool);
+      else if (path === "/stake/balance")
+        reply = options.balanceFails
+          ? NO(502, { error: "stake_unavailable" })
+          : OK({ balanceMist: options.balance ?? "1000000000" });
+      else if (path === "/stake/positions")
+        reply = OK({ positions: options.held ? [{ pickId: "p1", amountMist: options.held }] : [] });
       else if (path === "/stake/build") reply = options.build ? options.build() : OK(BUILT);
       else if (path === "/stake/confirm") reply = (confirms.shift() ?? (() => OK({ ok: true })))();
       else reply = NO(404, null);
@@ -100,7 +124,8 @@ async function open(options: Options = {}) {
   const main = () => q<HTMLButtonElement>(".back-submit")!;
   const status = () => q(".status-line")?.textContent ?? "";
   const problem = status;
-  const chip = (label: string) => [...sheet.node.querySelectorAll<HTMLButtonElement>(".back-chip")].find((node) => node.textContent === label)!;
+  const chip = (label: string) =>
+    [...sheet.node.querySelectorAll<HTMLButtonElement>(".back-chip")].find((node) => node.textContent === label)!;
   const paths = () => asked.map(([path]) => path);
   return { sheet, asked, signed, q, main, status, problem, chip, paths, connects: () => connects, backs: () => backs };
 }
@@ -115,7 +140,10 @@ test("the sheet shows the fixed side, chips, estimate, fee, schedule and notice"
   const text = s.sheet.node.textContent ?? "";
   assert.ok(text.includes("Arsenal win"));
   assert.equal(s.sheet.node.querySelectorAll(".side").length, 0);
-  assert.deepEqual([...s.sheet.node.querySelectorAll(".back-chip")].map((node) => node.textContent), ["0.1 SUI", "0.5 SUI", "1 SUI", "5 SUI"]);
+  assert.deepEqual(
+    [...s.sheet.node.querySelectorAll(".back-chip")].map((node) => node.textContent),
+    ["0.1 SUI", "0.5 SUI", "1 SUI", "5 SUI"],
+  );
   // (4 + 0.1) * 0.99 / 3.1
   assert.ok(text.includes("Pays about 1.31x"));
   assert.ok(text.includes("About 0.1309 SUI back"));
@@ -127,7 +155,9 @@ test("the sheet shows the fixed side, chips, estimate, fee, schedule and notice"
 });
 
 test("a NO call backs the NO side", async () => {
-  const s = await open({ sideCalled: { ...called, pYes: 0.3, side: "Arsenal doesn't win (Newcastle United win or draw)" } });
+  const s = await open({
+    sideCalled: { ...called, pYes: 0.3, side: "Arsenal doesn't win (Newcastle United win or draw)" },
+  });
   await press(s);
   assert.equal((s.signed[0].expected as { side: boolean }).side, false);
 });
@@ -229,8 +259,18 @@ test("a failure stays on screen until the amount changes", async () => {
 test("the full path: build, check and sign, confirm, done with proof", async () => {
   const s = await open();
   await press(s);
-  assert.deepEqual(s.asked.find(([path]) => path === "/stake/build")?.[1], { pickId: "p1", amountMist: "100000000", sender: WALLET.address });
-  assert.deepEqual(s.signed, [{ wallet: WALLET, txBytes: "BYTES", expected: { kind: "stake", poolId: POOL_ID, side: true, amountMist: "100000000" } }]);
+  assert.deepEqual(s.asked.find(([path]) => path === "/stake/build")?.[1], {
+    pickId: "p1",
+    amountMist: "100000000",
+    sender: WALLET.address,
+  });
+  assert.deepEqual(s.signed, [
+    {
+      wallet: WALLET,
+      txBytes: "BYTES",
+      expected: { kind: "stake", poolId: POOL_ID, side: true, amountMist: "100000000" },
+    },
+  ]);
   assert.deepEqual(s.asked.find(([path]) => path === "/stake/confirm")?.[1], { pickId: "p1", digest: DIGEST });
   const done = s.q(".outcome")!;
   assert.equal((done as HTMLElement).hidden, false);
@@ -303,7 +343,13 @@ test("with no wallet connected, Back it connects first and then stakes", async (
 });
 
 test("several wallets show a picker in the sheet", async () => {
-  const s = await open({ wallet: null, wallets: [{ id: "slush", name: "Slush" }, { id: "phantom", name: "Phantom" }] });
+  const s = await open({
+    wallet: null,
+    wallets: [
+      { id: "slush", name: "Slush" },
+      { id: "phantom", name: "Phantom" },
+    ],
+  });
   await press(s);
   assert.equal(s.status(), "Choose a wallet.");
   assert.equal(s.signed.length, 0);
@@ -365,7 +411,12 @@ const buildRefusals: [string, Reply, RegExp, boolean][] = [
   ["kickoff too near", NO(409, { error: "too_close_to_kickoff" }), /about to start/, false],
   ["the limit reached", NO(400, { error: "above_user_limit" }), /over the limit/, false],
   ["the pool full", NO(409, { error: "pool_full" }), /full/, false],
-  ["not enough SUI", NO(400, { error: "insufficient_balance", neededMist: "120000000" }), /0\.12 SUI including gas/, true],
+  [
+    "not enough SUI",
+    NO(400, { error: "insufficient_balance", neededMist: "120000000" }),
+    /0\.12 SUI including gas/,
+    true,
+  ],
   ["a contract refusal", NO(409, { error: "stake_rejected", abortCode: "4" }), /pool has closed/, false],
   ["the server being down", NO(0, null), /reach Soothia/, true],
 ];

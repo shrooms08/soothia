@@ -3,7 +3,22 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { JSDOM } from "jsdom";
 import type { ApiResponse } from "../src/messages";
-import { badgeText, cachedFeedCount, callLine, canTail, FEED_CHECK_MS, followedLine, handleLine, initials, matchLine, pageFollowedCount, tailSheetFor, timeAgo, type FeedEntry, type OpenFollowedCall } from "../src/social-logic";
+import {
+  badgeText,
+  cachedFeedCount,
+  callLine,
+  canTail,
+  FEED_CHECK_MS,
+  followedLine,
+  handleLine,
+  initials,
+  matchLine,
+  pageFollowedCount,
+  tailSheetFor,
+  timeAgo,
+  type FeedEntry,
+  type OpenFollowedCall,
+} from "../src/social-logic";
 
 const { window } = new JSDOM("<!doctype html><body></body>");
 Object.assign(globalThis, { document: window.document });
@@ -11,15 +26,39 @@ const { createSocialView, followedRow } = await import("../src/social-view");
 
 const NOW = Date.parse("2026-11-09T12:00:00.000Z");
 const KICKOFF = "2026-11-21T17:30:00.000Z";
-const fixture = { home: "Newcastle", away: "Arsenal", competition: "Premier League", startISO: KICKOFF, subject: "away" as const };
+const fixture = {
+  home: "Newcastle",
+  away: "Arsenal",
+  competition: "Premier League",
+  startISO: KICKOFF,
+  subject: "away" as const,
+};
 const entry = (overrides: Partial<FeedEntry> = {}): FeedEntry => ({
   handle: "ada",
   score: 612,
-  item: { pickId: "a1", fixture, lean: "Arsenal win", side: "YES", confidence: 70, stakeMist: "1000000000", at: new Date(NOW - 3_600_000).toISOString() },
+  item: {
+    pickId: "a1",
+    fixture,
+    lean: "Arsenal win",
+    side: "YES",
+    confidence: 70,
+    stakeMist: "1000000000",
+    at: new Date(NOW - 3_600_000).toISOString(),
+  },
   myCall: null,
   ...overrides,
 });
-const call = (handle: string, overrides: Partial<OpenFollowedCall> = {}): OpenFollowedCall => ({ handle, lean: "Arsenal win", confidence: 70, stakeMist: null, side: "YES", pickId: "x", fixture, at: "x", ...overrides });
+const call = (handle: string, overrides: Partial<OpenFollowedCall> = {}): OpenFollowedCall => ({
+  handle,
+  lean: "Arsenal win",
+  confidence: 70,
+  stakeMist: null,
+  side: "YES",
+  pickId: "x",
+  fixture,
+  at: "x",
+  ...overrides,
+});
 
 test("time ago reads simply", () => {
   assert.equal(timeAgo(NOW - 5000, NOW), "just now");
@@ -40,9 +79,15 @@ test("names and lines", () => {
 
 test("the tile line names people and the consensus", () => {
   const consensus = { lean: "Arsenal win", count: 2, total: 2, text: "2 of 2 say Arsenal win" };
-  assert.equal(followedLine([call("ada"), call("tunde")], consensus), "@ada and @tunde called this · 2 say Arsenal win");
+  assert.equal(
+    followedLine([call("ada"), call("tunde")], consensus),
+    "@ada and @tunde called this · 2 say Arsenal win",
+  );
   assert.equal(followedLine([call("ada")], null), "@ada called this");
-  assert.equal(followedLine([call("a1a"), call("b2b"), call("c3c"), call("d4d")], null), "@a1a, @b2b and 2 more called this");
+  assert.equal(
+    followedLine([call("a1a"), call("b2b"), call("c3c"), call("d4d")], null),
+    "@a1a, @b2b and 2 more called this",
+  );
 });
 
 test("tailing closes two minutes before kickoff", () => {
@@ -109,14 +154,18 @@ function social(answers: Record<string, ApiResponse<unknown>>) {
     onTail: (handle, source) => tails.push([handle, source]),
     now: () => NOW,
   });
-  const named = (label: string) => [...pane.querySelectorAll("button")].find((node) => node.textContent === label) as HTMLButtonElement;
+  const named = (label: string) =>
+    [...pane.querySelectorAll("button")].find((node) => node.textContent === label) as HTMLButtonElement;
   return { pane, view, asked, tails, named };
 }
 
 test("Feed is the default, with Leaderboard and Following beside it", async () => {
   const s = social({ "/social/feed": ok({ items: [] }) });
   await s.view.render();
-  assert.deepEqual([...s.pane.querySelectorAll(".record-segment")].map((node) => node.textContent), ["Feed", "Leaderboard", "Following"]);
+  assert.deepEqual(
+    [...s.pane.querySelectorAll(".record-segment")].map((node) => node.textContent),
+    ["Feed", "Leaderboard", "Following"],
+  );
   assert.equal(s.pane.querySelector(".record-segment.selected")!.textContent, "Feed");
   assert.match(s.pane.textContent!, /Follow people to see their calls here/);
 });
@@ -134,7 +183,9 @@ test("a feed row shows the handle, match, call and time, with Tail", async () =>
 });
 
 test("if I already called the match, my call replaces Tail", async () => {
-  const s = social({ "/social/feed": ok({ items: [entry({ myCall: { side: "Newcastle win", confidence: 55, pickId: "m" } })] }) });
+  const s = social({
+    "/social/feed": ok({ items: [entry({ myCall: { side: "Newcastle win", confidence: 55, pickId: "m" } })] }),
+  });
   await s.view.render();
   assert.equal(s.pane.querySelector(".feed-mine")!.textContent, "You: Newcastle win · 55%");
   assert.equal(s.named("Tail"), undefined);
@@ -164,7 +215,10 @@ test("a failed feed offers a retry", async () => {
 });
 
 test("Leaderboard shows the existing board", async () => {
-  const s = social({ "/social/feed": ok({ items: [] }), "/social/leaderboard": ok({ rows: [{ rank: 1, handle: "amy", score: 720, calls: 14, hitRate: 0.75 }] }) });
+  const s = social({
+    "/social/feed": ok({ items: [] }),
+    "/social/leaderboard": ok({ rows: [{ rank: 1, handle: "amy", score: 720, calls: 14, hitRate: 0.75 }] }),
+  });
   await s.view.render();
   s.named("Leaderboard").click();
   await tick();
@@ -172,7 +226,16 @@ test("Leaderboard shows the existing board", async () => {
 });
 
 test("Following lists people with scores and Unfollow", async () => {
-  const s = social({ "/social/feed": ok({ items: [] }), "/social/following": ok({ following: [{ address: "0xada", handle: "ada", score: 612, public: true }, { address: "0xb0b", handle: null, score: null, public: false }] }), "/social/unfollow": ok({ ok: true }) });
+  const s = social({
+    "/social/feed": ok({ items: [] }),
+    "/social/following": ok({
+      following: [
+        { address: "0xada", handle: "ada", score: 612, public: true },
+        { address: "0xb0b", handle: null, score: null, public: false },
+      ],
+    }),
+    "/social/unfollow": ok({ ok: true }),
+  });
   await s.view.render();
   s.named("Following").click();
   await tick();
@@ -184,7 +247,17 @@ test("Following lists people with scores and Unfollow", async () => {
 });
 
 test("search finds people and Follow follows", async () => {
-  const s = social({ "/social/feed": ok({ items: [] }), "/social/following": ok({ following: [] }), "/social/search": ok({ results: [{ handle: "ada", score: 612, following: false }, { handle: "adam", score: null, following: true }] }), "/social/follow": ok({ ok: true }) });
+  const s = social({
+    "/social/feed": ok({ items: [] }),
+    "/social/following": ok({ following: [] }),
+    "/social/search": ok({
+      results: [
+        { handle: "ada", score: 612, following: false },
+        { handle: "adam", score: null, following: true },
+      ],
+    }),
+    "/social/follow": ok({ ok: true }),
+  });
   await s.view.render();
   s.named("Following").click();
   await tick();
@@ -201,7 +274,12 @@ test("search finds people and Follow follows", async () => {
 });
 
 test("a follow that fails says why and stays usable", async () => {
-  const s = social({ "/social/feed": ok({ items: [] }), "/social/following": ok({ following: [] }), "/social/search": ok({ results: [{ handle: "ada", score: 1, following: false }] }), "/social/follow": { ok: false, status: 400, body: { error: "cannot_follow_self" } } });
+  const s = social({
+    "/social/feed": ok({ items: [] }),
+    "/social/following": ok({ following: [] }),
+    "/social/search": ok({ results: [{ handle: "ada", score: 1, following: false }] }),
+    "/social/follow": { ok: false, status: 400, body: { error: "cannot_follow_self" } },
+  });
   await s.view.render();
   s.named("Following").click();
   await tick();
@@ -219,9 +297,17 @@ test("a follow that fails says why and stays usable", async () => {
 test("the tile line opens to a list, each with Tail", () => {
   const tailed: OpenFollowedCall[] = [];
   const consensus = { lean: "Arsenal win", count: 2, total: 2, text: "" };
-  const node = followedRow([call("ada"), call("tunde")], consensus, (item) => tailed.push(item), () => undefined);
+  const node = followedRow(
+    [call("ada"), call("tunde")],
+    consensus,
+    (item) => tailed.push(item),
+    () => undefined,
+  );
   assert.equal(node.querySelector(".followed-text")!.textContent, "@ada and @tunde called this · 2 say Arsenal win");
-  assert.deepEqual([...node.querySelectorAll(".followed-avatar")].map((item) => item.textContent), ["AD", "TU"]);
+  assert.deepEqual(
+    [...node.querySelectorAll(".followed-avatar")].map((item) => item.textContent),
+    ["AD", "TU"],
+  );
   const list = node.querySelector<HTMLElement>(".followed-list")!;
   assert.equal(list.hidden, true);
   node.querySelector<HTMLButtonElement>(".followed-head")!.click();

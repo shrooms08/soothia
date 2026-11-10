@@ -19,7 +19,8 @@ export interface AgentHost {
 
 const DEFAULT_FUNDING = "0.05";
 const txUrl = (digest: string): string => `https://suivision.xyz/txblock/${encodeURIComponent(digest)}`;
-const whenText = (iso: string): string => new Date(iso).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
+const whenText = (iso: string): string =>
+  new Date(iso).toLocaleString([], { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" });
 
 function suiInput(value: string, label: string): HTMLInputElement {
   const input = el("input", "input agent-input");
@@ -38,7 +39,13 @@ export function createAgentSection(host: AgentHost): HTMLElement {
 
   const refresh = async (): Promise<void> => {
     const status = await host.agent<AgentStatus>("status");
-    slot.replaceChildren(...(status ? (status.address ? agentView(status, status.address) : createView()) : [el("p", "note", "Couldn't load the agent wallet.")]));
+    slot.replaceChildren(
+      ...(status
+        ? status.address
+          ? agentView(status, status.address)
+          : createView()
+        : [el("p", "note", "Couldn't load the agent wallet.")]),
+    );
     host.layout();
   };
 
@@ -58,7 +65,12 @@ export function createAgentSection(host: AgentHost): HTMLElement {
         await refresh();
       })();
     });
-    return [el("p", "note", "A separate wallet that unlocks premium calls from people you follow, without a popup."), el("p", "warn", "Keep small amounts here."), create, note];
+    return [
+      el("p", "note", "A separate wallet that unlocks premium calls from people you follow, without a popup."),
+      el("p", "warn", "Keep small amounts here."),
+      create,
+      note,
+    ];
   }
 
   function agentView(status: AgentStatus, address: string): HTMLElement[] {
@@ -70,7 +82,11 @@ export function createAgentSection(host: AgentHost): HTMLElement {
     };
 
     const info = el("div", "agent-info");
-    info.append(el("p", "note mono", `Address ${shortId(address)}`), el("p", "note", `Balance ${status.balanceMist === null ? "unknown" : `${formatSui(status.balanceMist, 4)} SUI`}`), el("p", "warn", "Keep small amounts here. Uninstalling Soothia deletes this wallet's key."));
+    info.append(
+      el("p", "note mono", `Address ${shortId(address)}`),
+      el("p", "note", `Balance ${status.balanceMist === null ? "unknown" : `${formatSui(status.balanceMist, 4)} SUI`}`),
+      el("p", "warn", "Keep small amounts here. Uninstalling Soothia deletes this wallet's key."),
+    );
 
     const amount = suiInput(DEFAULT_FUNDING, "Amount to fund, in SUI");
     const fund: HTMLButtonElement = button("Fund from my wallet", "button small", () => void fundAgent());
@@ -82,14 +98,26 @@ export function createAgentSection(host: AgentHost): HTMLElement {
       if (mist === null) return report("Enter an amount in SUI.");
       fund.disabled = true;
       report("Preparing…");
-      const built = await host.api<{ transaction: string }>("/premium/transfer/build", { sender: host.connected.address, recipient: address, amountMist: mist.toString() });
+      const built = await host.api<{ transaction: string }>("/premium/transfer/build", {
+        sender: host.connected.address,
+        recipient: address,
+        amountMist: mist.toString(),
+      });
       if (!built.ok || !built.body) {
         fund.disabled = false;
-        return report((built.body as ApiError | null)?.error === "insufficient_balance" ? "Your wallet doesn't have enough SUI." : "Couldn't prepare that. Please try again.");
+        return report(
+          (built.body as ApiError | null)?.error === "insufficient_balance"
+            ? "Your wallet doesn't have enough SUI."
+            : "Couldn't prepare that. Please try again.",
+        );
       }
       report("Waiting for your wallet…");
       try {
-        await host.wallet.sign(host.connected, (built.body as { transaction: string }).transaction, { kind: "fund", recipient: address, amountMist: mist.toString() });
+        await host.wallet.sign(host.connected, (built.body as { transaction: string }).transaction, {
+          kind: "fund",
+          recipient: address,
+          amountMist: mist.toString(),
+        });
       } catch (error) {
         fund.disabled = false;
         return report(walletErrorText(String((error as Error)?.message ?? error), "Nothing was sent.").text);
@@ -104,7 +132,11 @@ export function createAgentSection(host: AgentHost): HTMLElement {
         const result = await host.agent<{ digest?: string; error?: string }>("withdraw");
         if (!result?.digest) {
           withdraw.disabled = false;
-          report(result?.error === "insufficient_balance" ? "There's too little here to send." : "That didn't work. Please try again.");
+          report(
+            result?.error === "insufficient_balance"
+              ? "There's too little here to send."
+              : "That didn't work. Please try again.",
+          );
           return;
         }
         await refresh();
@@ -134,14 +166,25 @@ export function createAgentSection(host: AgentHost): HTMLElement {
         if (budgetMist === null || maxMist === null) return report("Enter amounts in SUI.");
         if (maxMist > AGENT_HARD_CAP_MIST) return report(`The most per call is ${formatSui(AGENT_HARD_CAP_MIST)} SUI.`);
         save.disabled = true;
-        await host.agent<AgentSettings>("settings", { enabled: enabled.checked, dailyBudgetMist: budgetMist.toString(), maxPerCallMist: maxMist.toString() });
+        await host.agent<AgentSettings>("settings", {
+          enabled: enabled.checked,
+          dailyBudgetMist: budgetMist.toString(),
+          maxPerCallMist: maxMist.toString(),
+        });
         await refresh();
       })();
     });
 
     const receipts = status.receipts.map((receipt) => {
       const row = el("div", "agent-receipt");
-      row.append(el("span", "", `${whenText(receipt.at)} · @${receipt.handle} · ${receipt.match} · ${formatSui(receipt.priceMist, 4)} SUI`), externalLink(shortId(receipt.digest), txUrl(receipt.digest), "link mono"));
+      row.append(
+        el(
+          "span",
+          "",
+          `${whenText(receipt.at)} · @${receipt.handle} · ${receipt.match} · ${formatSui(receipt.priceMist, 4)} SUI`,
+        ),
+        externalLink(shortId(receipt.digest), txUrl(receipt.digest), "link mono"),
+      );
       return row;
     });
 
@@ -154,7 +197,11 @@ export function createAgentSection(host: AgentHost): HTMLElement {
       field("Daily budget (SUI)", budget),
       field("Max per call (SUI)", max),
       el("p", "note", "Only callers I follow: always on"),
-      el("p", "note", `Spent today ${formatSui(status.spentTodayMist, 4)} of ${formatSui(status.settings.dailyBudgetMist, 4)} SUI`),
+      el(
+        "p",
+        "note",
+        `Spent today ${formatSui(status.spentTodayMist, 4)} of ${formatSui(status.settings.dailyBudgetMist, 4)} SUI`,
+      ),
       save,
       ...(receipts.length > 0 ? [el("p", "field-label", "Receipts"), ...receipts] : []),
     ];

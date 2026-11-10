@@ -80,14 +80,23 @@ test("a wallet link survives a round trip and reads as a sentence", () => {
 
 test("a stake reads as a sentence, in exact SUI", () => {
   assert.equal(sentenceFor("stake", stake), "Staked 1 SUI on Arsenal win vs Hull City on 2026-11-08.");
-  assert.equal(sentenceFor("stake", { ...stake, side: "NO", amountMist: "250000000" }), "Staked 0.25 SUI against Arsenal win vs Hull City on 2026-11-08.");
-  assert.equal(sentenceFor("stake", { ...stake, amountMist: "1000000001" }), "Staked 1.000000001 SUI on Arsenal win vs Hull City on 2026-11-08.");
+  assert.equal(
+    sentenceFor("stake", { ...stake, side: "NO", amountMist: "250000000" }),
+    "Staked 0.25 SUI against Arsenal win vs Hull City on 2026-11-08.",
+  );
+  assert.equal(
+    sentenceFor("stake", { ...stake, amountMist: "1000000001" }),
+    "Staked 1.000000001 SUI on Arsenal win vs Hull City on 2026-11-08.",
+  );
 });
 
 test("canonicalPick ignores field order and is unchanged by hash and commit", () => {
   const reordered = Object.fromEntries(Object.entries(pick).reverse()) as unknown as PickRecord;
   assert.equal(canonicalPick(reordered), canonicalPick(pick));
-  assert.equal(canonicalPick({ ...pick, hash: "other", commit: { digest: "d", network: "mainnet" } } as PickRecord), canonicalPick(pick));
+  assert.equal(
+    canonicalPick({ ...pick, hash: "other", commit: { digest: "d", network: "mainnet" } } as PickRecord),
+    canonicalPick(pick),
+  );
 });
 
 test("canonicalPick covers the anchor", () => {

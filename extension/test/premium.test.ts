@@ -69,8 +69,13 @@ function payTx(shape: PayShape = {}): Promise<string> {
   tx.moveCall({
     target: `${shape.packageId ?? PAY_PACKAGE}::pay::${shape.fn ?? "pay"}`,
     arguments: [
-      tx.object(Inputs.SharedObjectRef({ objectId: shape.config ?? PAY_CONFIG, initialSharedVersion: "1", mutable: true })),
-      tx.pure.vector("u8", (shape.nonce ?? NONCE).match(/../g)!.map((pair) => parseInt(pair, 16))),
+      tx.object(
+        Inputs.SharedObjectRef({ objectId: shape.config ?? PAY_CONFIG, initialSharedVersion: "1", mutable: true }),
+      ),
+      tx.pure.vector(
+        "u8",
+        (shape.nonce ?? NONCE).match(/../g)!.map((pair) => parseInt(pair, 16)),
+      ),
       tx.pure.address(shape.payTo ?? SELLER),
       shape.gasCoin ? tx.gas : coin,
     ],
@@ -98,7 +103,11 @@ const tampered: [string, PayShape, RegExp][] = [
   ["another function", { fn: "drain" }, /other than pay/],
   ["another config", { config: OTHER }, /different config/],
   ["the whole gas coin", { gasCoin: true }, /split coin/],
-  ["an extra step", { extra: (tx) => void tx.transferObjects([tx.splitCoins(tx.gas, [1n])[0]], OTHER) }, /more than split/],
+  [
+    "an extra step",
+    { extra: (tx) => void tx.transferObjects([tx.splitCoins(tx.gas, [1n])[0]], OTHER) },
+    /more than split/,
+  ],
   ["a huge gas budget", { budget: 500_000_000 }, /too much gas/],
   ["someone else's gas", { owner: OTHER }, /Someone else/],
 ];
@@ -145,14 +154,33 @@ const accepted = (overrides: Record<string, unknown> = {}, extra: Record<string,
   extra: { payPackage: PAY_PACKAGE, payConfig: PAY_CONFIG, nonce: NONCE, ...extra },
   ...overrides,
 });
-const header = (entry = accepted(), version = 2): string => btoa(JSON.stringify({ x402Version: version, resource: { url: "https://api.soothia.fun/premium/call/p1" }, accepts: [entry] }));
+const header = (entry = accepted(), version = 2): string =>
+  btoa(
+    JSON.stringify({
+      x402Version: version,
+      resource: { url: "https://api.soothia.fun/premium/call/p1" },
+      accepts: [entry],
+    }),
+  );
 
 test("a requirement is read when it is exactly Soothia's kind", () => {
   const read = readRequirement(header());
   assert.equal(read?.amount, PRICE);
   assert.equal(read?.payTo, SELLER);
   assert.equal(read?.nonce, NONCE);
-  for (const bad of [header(accepted({ network: "sui:testnet" })), header(accepted({ asset: "0x2::foo::FOO" })), header(accepted({ scheme: "upto" })), header(accepted({ payTo: "0x1" })), header(accepted({ amount: "0" })), header(accepted({}, { payPackage: OTHER })), header(accepted({}, { payConfig: OTHER })), header(accepted({}, { nonce: "xyz" })), header(accepted(), 1), "not base64!", null]) {
+  for (const bad of [
+    header(accepted({ network: "sui:testnet" })),
+    header(accepted({ asset: "0x2::foo::FOO" })),
+    header(accepted({ scheme: "upto" })),
+    header(accepted({ payTo: "0x1" })),
+    header(accepted({ amount: "0" })),
+    header(accepted({}, { payPackage: OTHER })),
+    header(accepted({}, { payConfig: OTHER })),
+    header(accepted({}, { nonce: "xyz" })),
+    header(accepted(), 1),
+    "not base64!",
+    null,
+  ]) {
     assert.equal(readRequirement(bad), null);
   }
 });
@@ -165,10 +193,34 @@ test("the payment header repeats the requirement and carries the signed bytes", 
   assert.deepEqual(parsed.payload, { signature: "SIG", transaction: "BYTES" });
 });
 
-const openCall = { pickId: "p1", fixture: { home: "Newcastle", away: "Arsenal", competition: "Premier League", startISO: KICKOFF, subject: "away" as const }, lean: "Arsenal win", side: "YES" as const, confidence: 70, at: "2026-11-09T11:59:00.000Z", premium: { priceMist: PRICE }, proof: { digest: "D1", url: "https://suivision.xyz/txblock/D1" } };
-const receipt = { digest: "TX9", priceMist: PRICE, at: "2026-11-09T12:00:00.000Z", url: "https://suivision.xyz/txblock/TX9" };
+const openCall = {
+  pickId: "p1",
+  fixture: {
+    home: "Newcastle",
+    away: "Arsenal",
+    competition: "Premier League",
+    startISO: KICKOFF,
+    subject: "away" as const,
+  },
+  lean: "Arsenal win",
+  side: "YES" as const,
+  confidence: 70,
+  at: "2026-11-09T11:59:00.000Z",
+  premium: { priceMist: PRICE },
+  proof: { digest: "D1", url: "https://suivision.xyz/txblock/D1" },
+};
+const receipt = {
+  digest: "TX9",
+  priceMist: PRICE,
+  at: "2026-11-09T12:00:00.000Z",
+  url: "https://suivision.xyz/txblock/TX9",
+};
 const required: PremiumCallResponse = { status: 402, required: header(), body: { error: "payment_required" } };
-const paid: PremiumCallResponse = { status: 200, required: null, body: { handle: "ada", call: openCall, access: "unlocked", receipt } };
+const paid: PremiumCallResponse = {
+  status: 200,
+  required: null,
+  body: { handle: "ada", call: openCall, access: "unlocked", receipt },
+};
 
 function unlockDeps(responses: PremiumCallResponse[], overrides: Partial<Parameters<typeof runUnlock>[0]> = {}) {
   const payments: (string | undefined)[] = [];
@@ -180,7 +232,10 @@ function unlockDeps(responses: PremiumCallResponse[], overrides: Partial<Paramet
       expectedPriceMist: PRICE,
       fetchCall: async (payment?: string) => (payments.push(payment), responses.shift()!),
       build: async () => "BUILT",
-      sign: async (_bytes: string, expected: ExpectedTx) => (signed.push(expected), { bytes: "SIGNED", signature: "SIG" }),
+      sign: async (_bytes: string, expected: ExpectedTx) => (
+        signed.push(expected),
+        { bytes: "SIGNED", signature: "SIG" }
+      ),
       ...overrides,
     },
   };
@@ -198,7 +253,9 @@ test("unlocking asks, signs what was asked for, and retries with the payment", a
 });
 
 test("an already open call costs nothing and asks no wallet", async () => {
-  const { deps, signed } = unlockDeps([{ status: 200, required: null, body: { handle: "ada", call: openCall, access: "kickoff", receipt: null } }]);
+  const { deps, signed } = unlockDeps([
+    { status: 200, required: null, body: { handle: "ada", call: openCall, access: "kickoff", receipt: null } },
+  ]);
   const result = await runUnlock(deps);
   assert.equal(result.ok && result.receipt, null);
   assert.equal(signed.length, 0);
@@ -214,7 +271,10 @@ test("a cancelled wallet says so and charges nothing", async () => {
   const { deps } = unlockDeps([required], { sign: async () => Promise.reject(new Error("User rejected the request")) });
   const result = (await runUnlock(deps)) as Extract<UnlockResult, { ok: false }>;
   assert.equal(result.maybePaid, false);
-  assert.match(unlockFailureText(result, (text) => `wallet: ${text}`), /User rejected/);
+  assert.match(
+    unlockFailureText(result, (text) => `wallet: ${text}`),
+    /User rejected/,
+  );
 });
 
 test("a build error keeps its code", async () => {
@@ -227,13 +287,27 @@ test("a build error keeps its code", async () => {
 test("a lost answer after paying may have been paid, and a refusal hasn't", async () => {
   const lost = unlockDeps([required, { status: 0, required: null, body: null }]);
   assert.deepEqual(await runUnlock(lost.deps), { ok: false, code: "network", maybePaid: true });
-  const refusedPayment = unlockDeps([required, { status: 402, required: null, body: { error: "payment_failed", reason: "wrong_amount" } }]);
+  const refusedPayment = unlockDeps([
+    required,
+    { status: 402, required: null, body: { error: "payment_failed", reason: "wrong_amount" } },
+  ]);
   assert.deepEqual(await runUnlock(refusedPayment.deps), { ok: false, code: "wrong_amount", maybePaid: false });
-  const unclear = unlockDeps([required, { status: 402, required: null, body: { error: "payment_failed", reason: "broadcast_failed" } }]);
+  const unclear = unlockDeps([
+    required,
+    { status: 402, required: null, body: { error: "payment_failed", reason: "broadcast_failed" } },
+  ]);
   assert.deepEqual(await runUnlock(unclear.deps), { ok: false, code: "broadcast_failed", maybePaid: true });
 });
 
-const locked = (pickId: string, priceMist = "10000000", overrides: Partial<LockedFeedItem> = {}): LockedFeedItem => ({ pickId, fixture: { home: "Newcastle", away: "Arsenal", competition: null, startISO: KICKOFF }, at: "2026-11-09T11:00:00.000Z", premium: { priceMist }, proof: { digest: "D", url: "https://x" }, locked: true, ...overrides });
+const locked = (pickId: string, priceMist = "10000000", overrides: Partial<LockedFeedItem> = {}): LockedFeedItem => ({
+  pickId,
+  fixture: { home: "Newcastle", away: "Arsenal", competition: null, startISO: KICKOFF },
+  at: "2026-11-09T11:00:00.000Z",
+  premium: { priceMist },
+  proof: { digest: "D", url: "https://x" },
+  locked: true,
+  ...overrides,
+});
 const lockedEntry = (item: LockedFeedItem) => ({ handle: "ada", item });
 const on = { ...DEFAULT_AGENT_SETTINGS, enabled: true };
 
@@ -243,10 +317,20 @@ test("the agent is off until it is turned on", () => {
 });
 
 test("the agent buys locked calls within the per-call cap and the day's budget", () => {
-  const entries = [lockedEntry(locked("a", "40000000")), lockedEntry(locked("b", "60000000")), lockedEntry(locked("c", "30000000"))];
+  const entries = [
+    lockedEntry(locked("a", "40000000")),
+    lockedEntry(locked("b", "60000000")),
+    lockedEntry(locked("c", "30000000")),
+  ];
   const settings = { enabled: true, dailyBudgetMist: "70000000", maxPerCallMist: "50000000" };
-  assert.deepEqual(agentCandidates(entries, settings, 0n, NOW).map((row) => row.item.pickId), ["a", "c"]);
-  assert.deepEqual(agentCandidates(entries, settings, 40_000_000n, NOW).map((row) => row.item.pickId), ["c"]);
+  assert.deepEqual(
+    agentCandidates(entries, settings, 0n, NOW).map((row) => row.item.pickId),
+    ["a", "c"],
+  );
+  assert.deepEqual(
+    agentCandidates(entries, settings, 40_000_000n, NOW).map((row) => row.item.pickId),
+    ["c"],
+  );
   assert.deepEqual(agentCandidates(entries, settings, 70_000_000n, NOW), []);
 });
 
@@ -259,7 +343,11 @@ test("the agent's per-call cap can't exceed the hard cap", () => {
 
 test("the agent skips calls without proof, near kickoff, or already open, and stops at three", () => {
   const near = new Date(NOW + 60_000).toISOString();
-  const skipped = [lockedEntry(locked("a", "10000000", { proof: undefined })), lockedEntry(locked("b", "10000000", { fixture: { home: "A", away: "B", competition: null, startISO: near } })), { handle: "ada", item: openCall }];
+  const skipped = [
+    lockedEntry(locked("a", "10000000", { proof: undefined })),
+    lockedEntry(locked("b", "10000000", { fixture: { home: "A", away: "B", competition: null, startISO: near } })),
+    { handle: "ada", item: openCall },
+  ];
   assert.deepEqual(agentCandidates(skipped as Pick<FeedEntry, "handle" | "item">[], on, 0n, NOW), []);
   const many = ["a", "b", "c", "d"].map((id) => lockedEntry(locked(id)));
   assert.equal(agentCandidates(many, on, 0n, NOW).length, 3);
@@ -272,9 +360,15 @@ test("a new UTC day starts the spend again", () => {
 });
 
 test("agent settings out of range go back to the defaults", () => {
-  assert.deepEqual(cleanAgentSettings({ enabled: "yes", dailyBudgetMist: "1", maxPerCallMist: "abc" }), DEFAULT_AGENT_SETTINGS);
+  assert.deepEqual(
+    cleanAgentSettings({ enabled: "yes", dailyBudgetMist: "1", maxPerCallMist: "abc" }),
+    DEFAULT_AGENT_SETTINGS,
+  );
   assert.deepEqual(cleanAgentSettings(null), DEFAULT_AGENT_SETTINGS);
-  assert.equal(cleanAgentSettings({ enabled: true, dailyBudgetMist: "50000000", maxPerCallMist: "20000000" }).dailyBudgetMist, "50000000");
+  assert.equal(
+    cleanAgentSettings({ enabled: true, dailyBudgetMist: "50000000", maxPerCallMist: "20000000" }).dailyBudgetMist,
+    "50000000",
+  );
 });
 
 test("custom prices run from 0.01 to 0.5 SUI", () => {
@@ -302,7 +396,8 @@ function feed(items: unknown[], overrides: Partial<SocialHost> = {}) {
     now: () => NOW,
     ...overrides,
   });
-  const named = (label: string) => [...pane.querySelectorAll("button")].find((node) => node.textContent === label) as HTMLButtonElement | undefined;
+  const named = (label: string) =>
+    [...pane.querySelectorAll("button")].find((node) => node.textContent === label) as HTMLButtonElement | undefined;
   return { pane, view, named };
 }
 
@@ -335,7 +430,9 @@ test("Unlock opens the call in place with a receipt", async () => {
 });
 
 test("a failed Unlock explains itself and can be tried again", async () => {
-  const f = feed([feedEntry()], { unlock: async () => ({ ok: false, code: "insufficient_balance", maybePaid: false }) });
+  const f = feed([feedEntry()], {
+    unlock: async () => ({ ok: false, code: "insufficient_balance", maybePaid: false }),
+  });
   await f.view.render();
   f.named("Unlock")!.click();
   await tick();
@@ -368,8 +465,22 @@ test("a call with no proof yet has no Unlock", async () => {
 });
 
 test("a locked call on a tile shows the price, with Unlock and no Tail", () => {
-  const call: FollowedCall = { handle: "ada", pickId: "p1", fixture: locked("p1").fixture, at: "x", premium: { priceMist: PRICE }, proof: { digest: "D", url: "https://x" }, locked: true };
-  const node = followedRow([call], null, () => undefined, () => undefined, unlocked);
+  const call: FollowedCall = {
+    handle: "ada",
+    pickId: "p1",
+    fixture: locked("p1").fixture,
+    at: "x",
+    premium: { priceMist: PRICE },
+    proof: { digest: "D", url: "https://x" },
+    locked: true,
+  };
+  const node = followedRow(
+    [call],
+    null,
+    () => undefined,
+    () => undefined,
+    unlocked,
+  );
   assert.match(node.textContent!, /Premium · 0\.02 SUI/);
   assert.equal(/Arsenal/.test(node.textContent!), false);
   const labels = [...node.querySelectorAll("button")].map((button) => button.textContent);
@@ -379,8 +490,26 @@ test("a locked call on a tile shows the price, with Unlock and no Tail", () => {
 
 test("the line for a price reads simply", () => assert.equal(premiumLine("10000000"), "Premium · 0.01 SUI"));
 
-const FIXTURE: FixtureSignal = { home: "Arsenal", away: "Chelsea", startISO: KICKOFF, dateLabel: "Sat 21 Nov", sourceUrl: "https://espn.com/x", evidence: [] };
-const fixtureTile = (): Tile => ({ claim: { id: "c1", question: "Will Arsenal beat Chelsea on Sat 21 Nov?", category: "sports", endTime: "2026-11-21T18:00:00.000Z", resolution: { type: "sports_result", details: "", sources: [] }, confidence: 0.8, sourceQuote: "", fromFixture: true } });
+const FIXTURE: FixtureSignal = {
+  home: "Arsenal",
+  away: "Chelsea",
+  startISO: KICKOFF,
+  dateLabel: "Sat 21 Nov",
+  sourceUrl: "https://espn.com/x",
+  evidence: [],
+};
+const fixtureTile = (): Tile => ({
+  claim: {
+    id: "c1",
+    question: "Will Arsenal beat Chelsea on Sat 21 Nov?",
+    category: "sports",
+    endTime: "2026-11-21T18:00:00.000Z",
+    resolution: { type: "sports_result", details: "", sources: [] },
+    confidence: 0.8,
+    sourceQuote: "",
+    fromFixture: true,
+  },
+});
 
 function sheet(eligible: boolean, overrides: Partial<CallHost> = {}) {
   const sent: { path: string; body: RecallPickBody }[] = [];
@@ -427,14 +556,19 @@ test("a tail never offers premium", async () => {
   const s = sheet(true, { prefill: { side: "yes", percent: 70, tailOf: "ada" } });
   await tick();
   assert.equal(s.q<HTMLElement>(".premium-field").hidden, true);
-  assert.equal(s.sent.some(({ path }) => path === "/premium/eligible"), false);
+  assert.equal(
+    s.sent.some(({ path }) => path === "/premium/eligible"),
+    false,
+  );
 });
 
 test("a premium call sends the chosen price, and an ordinary one sends none", async () => {
   const s = sheet(true);
   await tick();
   s.toggle();
-  [...s.opened.node.querySelectorAll<HTMLButtonElement>(".premium-price")].find((node) => node.textContent === "0.05")!.click();
+  [...s.opened.node.querySelectorAll<HTMLButtonElement>(".premium-price")]
+    .find((node) => node.textContent === "0.05")!
+    .click();
   await s.lock();
   assert.deepEqual(s.sent.find(({ path }) => path === "/recall/pick")!.body.premium, { priceMist: "50000000" });
   assert.match(s.opened.node.textContent!, /Premium · 0\.05 SUI/);
@@ -466,6 +600,9 @@ test("a premium call doesn't offer Back it, which would show its side on Sui", a
   await tick();
   s.toggle();
   await s.lock();
-  assert.equal([...s.opened.node.querySelectorAll("button")].some((node) => node.textContent === "Back it"), false);
+  assert.equal(
+    [...s.opened.node.querySelectorAll("button")].some((node) => node.textContent === "Back it"),
+    false,
+  );
   assert.equal(offered, false);
 });

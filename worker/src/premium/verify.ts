@@ -31,7 +31,8 @@ const refuseIf = (condition: boolean, code: string): void => {
 };
 
 const sameAddress = (a: string, b: string): boolean => normalizeSuiAddress(a) === normalizeSuiAddress(b);
-const toHex = (bytes: ArrayLike<number>): string => Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
+const toHex = (bytes: ArrayLike<number>): string =>
+  Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 
 function inputOf(data: Data, argument: Argument | undefined): Input {
   const input = argument?.$kind === "Input" ? data.inputs[argument.Input] : undefined;
@@ -86,7 +87,9 @@ function checkShape(transaction: unknown, expected: ExpectedPayment): string {
   refuseIf(toHex(bcs.vector(bcs.u8()).parse(pureBytes(data, nonce))) !== expected.nonce, "wrong_nonce");
   const payTo = pureBytes(data, recipient);
   refuseIf(payTo.length !== 32 || !sameAddress(bcs.Address.parse(payTo), expected.payTo), "wrong_recipient");
-  const fromSplit = (coin.$kind === "NestedResult" && coin.NestedResult[0] === 0 && coin.NestedResult[1] === 0) || (coin.$kind === "Result" && coin.Result === 0);
+  const fromSplit =
+    (coin.$kind === "NestedResult" && coin.NestedResult[0] === 0 && coin.NestedResult[1] === 0) ||
+    (coin.$kind === "Result" && coin.Result === 0);
   refuseIf(!fromSplit, "wrong_coin");
   return sender;
 }
@@ -101,7 +104,8 @@ function outcome(run: () => string): PaymentCheck {
 }
 
 /** Exactly SplitCoins(GasCoin, [price]) then pay(config, nonce, payTo, coin). Never throws. */
-export const checkPayment = (transaction: unknown, expected: ExpectedPayment): PaymentCheck => outcome(() => checkShape(transaction, expected));
+export const checkPayment = (transaction: unknown, expected: ExpectedPayment): PaymentCheck =>
+  outcome(() => checkShape(transaction, expected));
 
 /** Exactly one transfer of the whole gas coin to one address: how an agent wallet is emptied. */
 export const checkWithdrawal = (transaction: unknown): PaymentCheck =>

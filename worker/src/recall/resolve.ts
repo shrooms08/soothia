@@ -55,7 +55,12 @@ const UNLOCK_SETTLES_PER_RUN = 2;
 const MATCH_LENGTH_MS = 3 * 3_600_000;
 
 /** Bought calls, one each, marking any whose match has finished. Only a bonus, so it never throws. */
-async function settleUnlocks(store: RecallStore, now: Date, fetcher: ScoreboardFetcher, log: (line: string) => void): Promise<UnlockRecord[]> {
+async function settleUnlocks(
+  store: RecallStore,
+  now: Date,
+  fetcher: ScoreboardFetcher,
+  log: (line: string) => void,
+): Promise<UnlockRecord[]> {
   const records = await store.list("unlock", true).catch(() => []);
   const byPick = new Map<string, UnlockRecord>();
   for (const record of records) {
@@ -96,7 +101,9 @@ export async function resolveUser(store: RecallStore, now: Date, options: Resolv
   }
   const extra = options.extraPicks ?? [];
   const picks = mergePicks([...walrusPicks, ...extra]);
-  log(`Picks: ${picks.length} (${mergePicks(walrusPicks).length} on Walrus, ${mergePicks(extra).length} in the local backup)`);
+  log(
+    `Picks: ${picks.length} (${mergePicks(walrusPicks).length} on Walrus, ${mergePicks(extra).length} in the local backup)`,
+  );
 
   // If these reads fail, stop: guessing "none yet" would write duplicates.
   const previousOutcomes = await store.list("outcome", true);

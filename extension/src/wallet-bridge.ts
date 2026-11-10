@@ -2,8 +2,22 @@
 // answers the content script and nothing else. It is given the session nonce through
 // its own script tag, and removes the tag at once.
 
-import { connectWallet, disconnectWallet, listWallets, signAndExecute, signOnly, signPersonalMessage, walletAccounts } from "./sui-wallet-core";
-import { acceptRequest, BRIDGE_READY_ID, WALLET_CHANNEL, type WalletRequest, type WalletResponse } from "./wallet-protocol";
+import {
+  connectWallet,
+  disconnectWallet,
+  listWallets,
+  signAndExecute,
+  signOnly,
+  signPersonalMessage,
+  walletAccounts,
+} from "./sui-wallet-core";
+import {
+  acceptRequest,
+  BRIDGE_READY_ID,
+  WALLET_CHANNEL,
+  type WalletRequest,
+  type WalletResponse,
+} from "./wallet-protocol";
 
 const script = document.currentScript as HTMLScriptElement | null;
 const nonce = script?.dataset.soothiaNonce ?? "";
@@ -42,7 +56,8 @@ if (nonce) {
       .then(() => run(request))
       .then(
         (result) => reply(request.id, { ok: true, result }),
-        (error: unknown) => reply(request.id, { ok: false, error: String((error as Error)?.message ?? error).slice(0, 200) }),
+        (error: unknown) =>
+          reply(request.id, { ok: false, error: String((error as Error)?.message ?? error).slice(0, 200) }),
       );
   });
   reply(BRIDGE_READY_ID, { ok: true });

@@ -32,7 +32,8 @@ const MESSAGES: Record<string, string> = {
   pool_not_resolved: "That pool is not in a challenge window.",
   pool_not_found: "That pool was not found.",
   rate_limited: "Too many requests. Wait a minute and try again.",
-  admin_wallet_low_balance: "The wallet holding the AdminCap needs at least 0.02 SUI for gas. Send it some SUI and try again.",
+  admin_wallet_low_balance:
+    "The wallet holding the AdminCap needs at least 0.02 SUI for gas. Send it some SUI and try again.",
 };
 
 export function errorText(code: string, messages: Record<string, string> = MESSAGES): string {
@@ -62,13 +63,15 @@ export function drillStepEnabled(step: DrillStep, state: DrillState, isOwner: bo
 }
 
 export const DRILL_MESSAGES: Record<string, string> = {
-  delays_not_shortened: "The delays are not shortened on chain yet. If you just signed, wait a few seconds and press again.",
+  delays_not_shortened:
+    "The delays are not shortened on chain yet. If you just signed, wait a few seconds and press again.",
   drill_pool_closed: "The pool has closed without a stake. Press Start over, then begin again from Create drill pool.",
   drill_pool_not_closed: "The pool has not closed yet. Wait for the countdown, then press again.",
   nothing_staked: "Nothing was staked in this pool. Press Start over, then begin again from Create drill pool.",
   pool_not_void: "The pool is not overturned on chain yet. If you just signed, wait a few seconds and press again.",
   pool_not_open: "The pool is no longer open.",
-  pool_not_resolved: "The pool is not resolved on chain yet. If you just pressed Resolve, wait a few seconds and press again.",
+  pool_not_resolved:
+    "The pool is not resolved on chain yet. If you just pressed Resolve, wait a few seconds and press again.",
   already_staked: "The gas wallet has already staked in this pool.",
   already_refunded: "The refund has already been claimed.",
   resolver_busy: "Another resolver transaction is running. Wait a minute and press again.",

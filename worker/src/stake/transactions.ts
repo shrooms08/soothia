@@ -16,9 +16,13 @@ function hashBytes(name: string, hex: string): number[] {
   return Array.from(hexToBytes(hex));
 }
 
-const target = (ids: Pick<StakeIds, "packageId">, fn: string): `${string}::${string}::${string}` => `${ids.packageId}::pool::${fn}`;
+const target = (ids: Pick<StakeIds, "packageId">, fn: string): `${string}::${string}::${string}` =>
+  `${ids.packageId}::pool::${fn}`;
 
-export function buildCreatePool(ids: StakeIds, input: { resolverCap: string; questionHash: string; closeMs: bigint }): Transaction {
+export function buildCreatePool(
+  ids: StakeIds,
+  input: { resolverCap: string; questionHash: string; closeMs: bigint },
+): Transaction {
   const tx = new Transaction();
   tx.moveCall({
     target: target(ids, "create_pool"),
@@ -34,7 +38,10 @@ export function buildCreatePool(ids: StakeIds, input: { resolverCap: string; que
 }
 
 /** Stakes from the sender's gas coin. */
-export function buildStake(ids: StakeIds, input: { poolId: string; side: boolean; amount: bigint; pickHash: string }): Transaction {
+export function buildStake(
+  ids: StakeIds,
+  input: { poolId: string; side: boolean; amount: bigint; pickHash: string },
+): Transaction {
   const tx = new Transaction();
   const [payment] = tx.splitCoins(tx.gas, [input.amount]);
   tx.moveCall({
@@ -72,7 +79,10 @@ export function buildResolve(
 }
 
 /** Voids an open pool, so every staker can take their stake back. */
-export function buildVoid(ids: Pick<StakeIds, "packageId">, input: { resolverCap: string; poolId: string }): Transaction {
+export function buildVoid(
+  ids: Pick<StakeIds, "packageId">,
+  input: { resolverCap: string; poolId: string },
+): Transaction {
   const tx = new Transaction();
   tx.moveCall({ target: target(ids, "void"), arguments: [tx.object(input.resolverCap), tx.object(input.poolId)] });
   return tx;
@@ -94,7 +104,10 @@ export function buildCollectFee(ids: StakeIds, input: { poolId: string }): Trans
   return tx;
 }
 
-export function buildOverturn(ids: Pick<StakeIds, "packageId">, input: { adminCap: string; poolId: string }): Transaction {
+export function buildOverturn(
+  ids: Pick<StakeIds, "packageId">,
+  input: { adminCap: string; poolId: string },
+): Transaction {
   const tx = new Transaction();
   tx.moveCall({
     target: target(ids, "overturn"),
@@ -103,7 +116,10 @@ export function buildOverturn(ids: Pick<StakeIds, "packageId">, input: { adminCa
   return tx;
 }
 
-export function buildSetDelays(ids: StakeIds, input: { adminCap: string; minResolveDelayMs: bigint; challengeMs: bigint }): Transaction {
+export function buildSetDelays(
+  ids: StakeIds,
+  input: { adminCap: string; minResolveDelayMs: bigint; challengeMs: bigint },
+): Transaction {
   const tx = new Transaction();
   tx.moveCall({
     target: target(ids, "set_delays"),

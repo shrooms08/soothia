@@ -15,7 +15,8 @@ const AMOUNT = 250_000_000n;
 const CLOCK = "0x6";
 const GAS = { objectId: `0x${"dd".repeat(32)}`, version: "1", digest: "11111111111111111111111111111111" };
 
-const shared = (tx: Transaction, objectId: string, mutable = true) => tx.object(Inputs.SharedObjectRef({ objectId, initialSharedVersion: "1", mutable }));
+const shared = (tx: Transaction, objectId: string, mutable = true) =>
+  tx.object(Inputs.SharedObjectRef({ objectId, initialSharedVersion: "1", mutable }));
 
 async function finish(tx: Transaction, sender = SENDER, owner?: string): Promise<string> {
   tx.setSender(sender);
@@ -48,7 +49,8 @@ function stakeTx(shape: StakeShape = {}): Promise<string> {
   const tx = new Transaction();
   shape.before?.(tx);
   const amounts = shape.twoAmounts ? [shape.amount ?? AMOUNT, 1n] : [shape.amount ?? AMOUNT];
-  const [payment] = shape.coinFromGas === false ? tx.splitCoins(shared(tx, OTHER), amounts) : tx.splitCoins(tx.gas, amounts);
+  const [payment] =
+    shape.coinFromGas === false ? tx.splitCoins(shared(tx, OTHER), amounts) : tx.splitCoins(tx.gas, amounts);
   tx.moveCall({
     target: `${shape.packageId ?? STAKE_PACKAGE}::${shape.module ?? "pool"}::${shape.fn ?? "stake"}`,
     arguments: [
@@ -56,7 +58,12 @@ function stakeTx(shape: StakeShape = {}): Promise<string> {
       shared(tx, shape.pool ?? POOL),
       tx.pure.bool(shape.side ?? true),
       payment,
-      tx.pure.vector("u8", Array(32).fill(0).map((_, i) => parseInt((shape.hash ?? HASH).slice(i * 2, i * 2 + 2), 16))),
+      tx.pure.vector(
+        "u8",
+        Array(32)
+          .fill(0)
+          .map((_, i) => parseInt((shape.hash ?? HASH).slice(i * 2, i * 2 + 2), 16)),
+      ),
       shared(tx, shape.clock ?? CLOCK, false),
     ],
   });
@@ -64,7 +71,9 @@ function stakeTx(shape: StakeShape = {}): Promise<string> {
   return finish(tx, shape.sender, shape.owner);
 }
 
-function claimTx(shape: Pick<StakeShape, "packageId" | "fn" | "pool" | "sender" | "after" | "clock"> = {}): Promise<string> {
+function claimTx(
+  shape: Pick<StakeShape, "packageId" | "fn" | "pool" | "sender" | "after" | "clock"> = {},
+): Promise<string> {
   const tx = new Transaction();
   tx.moveCall({
     target: `${shape.packageId ?? STAKE_PACKAGE}::pool::${shape.fn ?? "claim"}`,
@@ -88,7 +97,9 @@ test("a correct stake passes", async () => {
 });
 
 test("a correct NO stake passes, and a pick hash can be pinned", async () => {
-  assert.deepEqual(checkTransaction(await stakeTx({ side: false }), { ...STAKE, side: false } as ExpectedTx, SENDER), { ok: true });
+  assert.deepEqual(checkTransaction(await stakeTx({ side: false }), { ...STAKE, side: false } as ExpectedTx, SENDER), {
+    ok: true,
+  });
   assert.deepEqual(checkTransaction(await stakeTx(), { ...STAKE, pickHash: HASH } as ExpectedTx, SENDER), { ok: true });
 });
 
@@ -129,7 +140,14 @@ test("a stake that spends a different coin than the split is refused", async () 
   tx.splitCoins(tx.gas, [AMOUNT]);
   tx.moveCall({
     target: `${STAKE_PACKAGE}::pool::stake`,
-    arguments: [shared(tx, STAKE_CONFIG, false), shared(tx, POOL), tx.pure.bool(true), tx.gas, tx.pure.vector("u8", Array(32).fill(17)), shared(tx, CLOCK, false)],
+    arguments: [
+      shared(tx, STAKE_CONFIG, false),
+      shared(tx, POOL),
+      tx.pure.bool(true),
+      tx.gas,
+      tx.pure.vector("u8", Array(32).fill(17)),
+      shared(tx, CLOCK, false),
+    ],
   });
   refusedWith(await finish(tx), STAKE, /split coin/);
 });
@@ -144,7 +162,14 @@ test("the two steps must be in order", async () => {
 test("an extra input nobody uses is refused", async () => {
   const tx = new Transaction();
   const [payment] = tx.splitCoins(tx.gas, [AMOUNT]);
-  const args = [shared(tx, STAKE_CONFIG, false), shared(tx, POOL), tx.pure.bool(true), payment, tx.pure.vector("u8", Array(32).fill(17)), shared(tx, CLOCK, false)];
+  const args = [
+    shared(tx, STAKE_CONFIG, false),
+    shared(tx, POOL),
+    tx.pure.bool(true),
+    payment,
+    tx.pure.vector("u8", Array(32).fill(17)),
+    shared(tx, CLOCK, false),
+  ];
   tx.moveCall({ target: `${STAKE_PACKAGE}::pool::stake`, arguments: args });
   tx.pure.u64(9n);
   refusedWith(await finish(tx), STAKE, /extra inputs/);

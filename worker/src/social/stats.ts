@@ -73,7 +73,8 @@ const round = (value: number, places: number): number => Number(value.toFixed(pl
 export function computeStats(calls: CallEntry[], stakes: StakeEntry[]): Stats {
   const settled = calls.filter((call) => call.result !== null);
   const hits = settled.filter((call) => call.result!.hit).length;
-  const brier = settled.length > 0 ? round(settled.reduce((sum, call) => sum + call.result!.brier, 0) / settled.length, 4) : null;
+  const brier =
+    settled.length > 0 ? round(settled.reduce((sum, call) => sum + call.result!.brier, 0) / settled.length, 4) : null;
   const { current, best } = streaks(calls);
 
   let staked = 0n;
@@ -132,12 +133,21 @@ export interface PeriodStats {
   teams: Record<string, Stats>;
 }
 
-const inPeriod = (kickoffMs: number, period: Period, nowMs: number): boolean => period === "all" || kickoffMs >= nowMs - PERIOD_MS[period];
+const inPeriod = (kickoffMs: number, period: Period, nowMs: number): boolean =>
+  period === "all" || kickoffMs >= nowMs - PERIOD_MS[period];
 
-function groupKeys(keys: (entry: { competition: string; teams: string[] }) => string[], calls: CallEntry[], stakes: StakeEntry[]): Record<string, Stats> {
+function groupKeys(
+  keys: (entry: { competition: string; teams: string[] }) => string[],
+  calls: CallEntry[],
+  stakes: StakeEntry[],
+): Record<string, Stats> {
   const names = new Set([...calls, ...stakes].flatMap(keys).filter(Boolean));
   const out: Record<string, Stats> = {};
-  for (const name of names) out[name] = computeStats(calls.filter((call) => keys(call).includes(name)), stakes.filter((stake) => keys(stake).includes(name)));
+  for (const name of names)
+    out[name] = computeStats(
+      calls.filter((call) => keys(call).includes(name)),
+      stakes.filter((stake) => keys(stake).includes(name)),
+    );
   return out;
 }
 

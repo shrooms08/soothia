@@ -21,11 +21,13 @@ export interface SocialDeps {
 function chainVerifier(env: Env): SignatureVerifier {
   // False for a bad or malformed signature. It only throws when it couldn't check, and
   // the client is only used for zkLogin wallets, whose keys rotate by epoch.
-  return (message, signature, address) => isValidPersonalMessageSignature(message, signature, { address, client: tatumSuiClient(env.TATUM_API_KEY.trim()) });
+  return (message, signature, address) =>
+    isValidPersonalMessageSignature(message, signature, { address, client: tatumSuiClient(env.TATUM_API_KEY.trim()) });
 }
 
 function chainNames(env: Env): NameLookup {
-  return async (address) => (await tatumSuiClient(env.TATUM_API_KEY.trim()).core.defaultNameServiceName({ address })).data.name;
+  return async (address) =>
+    (await tatumSuiClient(env.TATUM_API_KEY.trim()).core.defaultNameServiceName({ address })).data.name;
 }
 
 /** Answers a /social/* request. */
@@ -79,7 +81,9 @@ export async function socialRoute(request: Request, env: Env, path: string, deps
     }
   } catch (error) {
     if (error instanceof SocialRefusal) return json(request, { error: error.code, ...error.extra }, error.status);
-    console.warn(`Soothia: ${request.method} ${path} failed: ${String((error as Error)?.message ?? error).slice(0, 300)}`);
+    console.warn(
+      `Soothia: ${request.method} ${path} failed: ${String((error as Error)?.message ?? error).slice(0, 300)}`,
+    );
     return json(request, { error: "social_unavailable" }, 502);
   }
 }

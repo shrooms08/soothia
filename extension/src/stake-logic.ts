@@ -28,7 +28,8 @@ export interface PoolView {
   claimOpensAtMs?: number;
 }
 
-export type PositionStatus = "open" | "awaiting_result" | "challenge_window" | "claimable" | "lost" | "refundable" | "claimed";
+export type PositionStatus =
+  "open" | "awaiting_result" | "challenge_window" | "claimable" | "lost" | "refundable" | "claimed";
 
 /** One entry of GET /stake/positions. */
 export interface StakePositionView {
@@ -71,13 +72,19 @@ export const backsYes = (called: Pick<RecallCalled, "pYes">): boolean => (called
  * One tile per call shows the staking row. Both questions on a match settle to the
  * same call, so it goes on the tile that asks what the call was about.
  */
-export function stakeTileIds(tiles: Tile[], calledByClaim: (claimId: string) => RecallCalled | null | undefined, nowMs: number): Set<string> {
+export function stakeTileIds(
+  tiles: Tile[],
+  calledByClaim: (claimId: string) => RecallCalled | null | undefined,
+  nowMs: number,
+): Set<string> {
   const chosen = new Map<string, { claimId: string; exact: boolean }>();
   for (const { claim } of tiles) {
     const called = calledByClaim(claim.id);
     if (!called?.fixture || !stakeEligible(called, nowMs)) continue;
     const { home, away, subject } = called.fixture;
-    const exact = claim.question.toLowerCase().startsWith(`will ${(subject === "home" ? home : away).toLowerCase()} beat`);
+    const exact = claim.question
+      .toLowerCase()
+      .startsWith(`will ${(subject === "home" ? home : away).toLowerCase()} beat`);
     const current = chosen.get(called.pickId);
     if (!current || (exact && !current.exact)) chosen.set(called.pickId, { claimId: claim.id, exact });
   }
@@ -93,7 +100,11 @@ const totalsFor = (pool: Pick<PoolView, "yesTotal" | "noTotal">, side: boolean) 
 const multiplierText = (multiplier: number): string => `${multiplier.toFixed(2)}x`;
 
 /** What each SUI on this side pays with `addedMist` more on it, after the fee. Null with nothing on the side. */
-export function multiplierWith(pool: Pick<PoolView, "yesTotal" | "noTotal" | "feeBps">, side: boolean, addedMist: bigint): number | null {
+export function multiplierWith(
+  pool: Pick<PoolView, "yesTotal" | "noTotal" | "feeBps">,
+  side: boolean,
+  addedMist: bigint,
+): number | null {
   const { mine, other } = totalsFor(pool, side);
   const sideTotal = mine + addedMist;
   if (sideTotal <= 0n) return null;
@@ -144,10 +155,13 @@ export function amountProblem(input: {
   const limit = BigInt(limits.maxStakePerUserMist);
   const room = limit - heldMist;
   if (amountMist > room) {
-    return heldMist > 0n ? `Above your ${formatSui(limit)} SUI limit: you can add ${formatSui(room < 0n ? 0n : room)} more` : `Above your ${formatSui(limit)} SUI limit`;
+    return heldMist > 0n
+      ? `Above your ${formatSui(limit)} SUI limit: you can add ${formatSui(room < 0n ? 0n : room)} more`
+      : `Above your ${formatSui(limit)} SUI limit`;
   }
   const poolRoom = BigInt(limits.maxPoolMist) - poolTotalMist;
-  if (amountMist > poolRoom) return poolRoom > 0n ? `Pool is nearly full: room for ${formatSui(poolRoom)} SUI more` : "Pool is full";
+  if (amountMist > poolRoom)
+    return poolRoom > 0n ? `Pool is nearly full: room for ${formatSui(poolRoom)} SUI more` : "Pool is full";
   if (balanceMist !== null && amountMist + GAS_RESERVE_MIST > balanceMist) {
     return `Not enough SUI: you have ${formatSui(balanceMist, 4)}, need ${formatSui(amountMist + GAS_RESERVE_MIST)} with gas`;
   }
@@ -179,7 +193,14 @@ export function backButtonState(input: {
   let reason: string | null;
   if (!pool) reason = poolFailed ? "Couldn't load this pool. Trying again\u2026" : "Loading the pool\u2026";
   else if (!poolIsOpenForStakes(pool, nowMs)) reason = "Pool closed";
-  else reason = amountProblem({ amountMist, limits: pool.limits, heldMist, poolTotalMist: BigInt(pool.yesTotal) + BigInt(pool.noTotal), balanceMist });
+  else
+    reason = amountProblem({
+      amountMist,
+      limits: pool.limits,
+      heldMist,
+      poolTotalMist: BigInt(pool.yesTotal) + BigInt(pool.noTotal),
+      balanceMist,
+    });
   return {
     label: walletConnected ? "Back it" : "Connect wallet to back it",
     enabled: reason === null,
@@ -195,7 +216,12 @@ export interface StakeEstimate {
   payoutMist: bigint;
 }
 
-export function stakeEstimate(pool: Pick<PoolView, "yesTotal" | "noTotal" | "feeBps">, side: boolean, amountMist: bigint, heldMist: bigint): StakeEstimate {
+export function stakeEstimate(
+  pool: Pick<PoolView, "yesTotal" | "noTotal" | "feeBps">,
+  side: boolean,
+  amountMist: bigint,
+  heldMist: bigint,
+): StakeEstimate {
   const { mine, other } = totalsFor(pool, side);
   const sideTotal = mine + amountMist;
   const pot = sideTotal + other;
@@ -232,7 +258,8 @@ const ABORT_TEXT: Record<string, string> = {
 /** A Worker refusal in plain words, and whether trying again could help. */
 export function stakeErrorText(status: number, body: StakeErrorBody | null): { text: string; retry: boolean } {
   if (status === 0) return { text: "I couldn't reach Soothia's server. Check your connection.", retry: true };
-  if (status === 429 && body?.error !== "pool_cap_reached") return { text: "Too many requests just now. Try again in a minute.", retry: true };
+  if (status === 429 && body?.error !== "pool_cap_reached")
+    return { text: "Too many requests just now. Try again in a minute.", retry: true };
   switch (body?.error) {
     case "too_close_to_kickoff":
     case "pool_not_open":
@@ -247,7 +274,10 @@ export function stakeErrorText(status: number, body: StakeErrorBody | null): { t
     case "side_switch":
       return { text: "You already backed the other side of this pool.", retry: false };
     case "insufficient_balance":
-      return { text: `You don't have enough SUI. This needs ${formatSui(body.neededMist ?? "0")} SUI including gas.`, retry: true };
+      return {
+        text: `You don't have enough SUI. This needs ${formatSui(body.neededMist ?? "0")} SUI including gas.`,
+        retry: true,
+      };
     case "stake_rejected":
       return { text: ABORT_TEXT[body.abortCode ?? ""] ?? "The contract refused this stake.", retry: false };
     case "staking_paused":
@@ -277,16 +307,29 @@ export function stakeErrorText(status: number, body: StakeErrorBody | null): { t
 }
 
 /** A wallet or bridge failure in plain words. */
-export function walletErrorText(message: string, nothingHappened = "Nothing was staked."): { text: string; retry: boolean } {
-  if (/reject|denied|declined|cancel/i.test(message)) return { text: `You cancelled in your wallet. ${nothingHappened}`, retry: true };
-  if (/insufficient|not enough|no valid gas|gas (coin|balance)/i.test(message)) return { text: "Your wallet doesn't have enough SUI to cover this and gas.", retry: true };
-  if (/did not respond in time/i.test(message)) return { text: "Your wallet didn't answer in time. If you approved it, check your wallet before trying again.", retry: true };
-  if (/^Transaction refused\./.test(message)) return { text: `${message} Nothing was sent to your wallet.`, retry: false };
+export function walletErrorText(
+  message: string,
+  nothingHappened = "Nothing was staked.",
+): { text: string; retry: boolean } {
+  if (/reject|denied|declined|cancel/i.test(message))
+    return { text: `You cancelled in your wallet. ${nothingHappened}`, retry: true };
+  if (/insufficient|not enough|no valid gas|gas (coin|balance)/i.test(message))
+    return { text: "Your wallet doesn't have enough SUI to cover this and gas.", retry: true };
+  if (/did not respond in time/i.test(message))
+    return {
+      text: "Your wallet didn't answer in time. If you approved it, check your wallet before trying again.",
+      retry: true,
+    };
+  if (/^Transaction refused\./.test(message))
+    return { text: `${message} Nothing was sent to your wallet.`, retry: false };
   return { text: message.slice(0, 160) || "Your wallet reported a problem.", retry: true };
 }
 
 /** A position's status in words. `when` formats a time for the reader. */
-export function positionStatusText(position: Pick<StakePositionView, "status" | "estimatedPayoutMist" | "claimOpensAtMs" | "result">, when: (ms: number) => string): string {
+export function positionStatusText(
+  position: Pick<StakePositionView, "status" | "estimatedPayoutMist" | "claimOpensAtMs" | "result">,
+  when: (ms: number) => string,
+): string {
   const payout = `${formatSui(position.estimatedPayoutMist, 4)} SUI`;
   switch (position.status) {
     case "open":
@@ -294,7 +337,9 @@ export function positionStatusText(position: Pick<StakePositionView, "status" | 
     case "awaiting_result":
       return "Awaiting result";
     case "challenge_window":
-      return position.claimOpensAtMs === null ? "In challenge window" : `In challenge window until ${when(position.claimOpensAtMs)}`;
+      return position.claimOpensAtMs === null
+        ? "In challenge window"
+        : `In challenge window until ${when(position.claimOpensAtMs)}`;
     case "claimable":
       return `Won ${payout}`;
     case "lost":
@@ -307,7 +352,8 @@ export function positionStatusText(position: Pick<StakePositionView, "status" | 
   }
 }
 
-export const isClaimable = (status: PositionStatus | null | undefined): boolean => status === "claimable" || status === "refundable";
+export const isClaimable = (status: PositionStatus | null | undefined): boolean =>
+  status === "claimable" || status === "refundable";
 
 export interface WalletSummary {
   stakedMist: bigint;

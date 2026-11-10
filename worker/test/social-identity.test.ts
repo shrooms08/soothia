@@ -16,7 +16,9 @@ const keypair = Ed25519Keypair.generate();
 const ADDRESS = keypair.toSuiAddress();
 const OTHER = `0x${"ab".repeat(32)}`;
 
-function harness(options: { now?: number; name?: string | null; verify?: SocialDeps["verify"]; putFails?: boolean } = {}) {
+function harness(
+  options: { now?: number; name?: string | null; verify?: SocialDeps["verify"]; putFails?: boolean } = {},
+) {
   const data = new Map<string, { value: string; metadata?: unknown; ttl?: number }>();
   const written: ProfileRecord[] = [];
   let now = options.now ?? NOW;
@@ -35,7 +37,9 @@ function harness(options: { now?: number; name?: string | null; verify?: SocialD
     },
   };
   const env = { SOOTHIA_CACHE: kv } as unknown as Env;
-  const store = { write: async (_kind: string, record: ProfileRecord) => (written.push(record), { jobId: "j" }) } as unknown as RecallStore;
+  const store = {
+    write: async (_kind: string, record: ProfileRecord) => (written.push(record), { jobId: "j" }),
+  } as unknown as RecallStore;
   const deps: SocialDeps = {
     now: () => now,
     store: () => store,
@@ -52,8 +56,22 @@ function harness(options: { now?: number; name?: string | null; verify?: SocialD
         }
       }),
   };
-  const call = async (method: string, path: string, body?: unknown, headers: Record<string, string> = { "X-Soothia-Install": INSTALL }) => {
-    const response = await socialRoute(new Request(`https://x${path}`, { method, headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }) }), env, path.split("?")[0], deps);
+  const call = async (
+    method: string,
+    path: string,
+    body?: unknown,
+    headers: Record<string, string> = { "X-Soothia-Install": INSTALL },
+  ) => {
+    const response = await socialRoute(
+      new Request(`https://x${path}`, {
+        method,
+        headers,
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      }),
+      env,
+      path.split("?")[0],
+      deps,
+    );
     return { status: response.status, body: (await response.json()) as Record<string, any> };
   };
   return { data, written, call, advance: (ms: number) => (now += ms) };
@@ -84,17 +102,33 @@ test("a challenge names the address and action, and expires in 10 minutes", asyn
 });
 
 test("challenges check their input and fail closed when KV is down", async () => {
-  assert.equal((await harness().call("POST", "/social/profile/challenge", { address: "0x12" })).body.error, "invalid_address");
-  assert.equal((await harness().call("POST", "/social/profile/challenge", { address: ADDRESS, action: "steal" })).body.error, "invalid_action");
-  assert.equal((await harness({ putFails: true }).call("POST", "/social/profile/challenge", { address: ADDRESS })).body.error, "kv_unavailable");
+  assert.equal(
+    (await harness().call("POST", "/social/profile/challenge", { address: "0x12" })).body.error,
+    "invalid_address",
+  );
+  assert.equal(
+    (await harness().call("POST", "/social/profile/challenge", { address: ADDRESS, action: "steal" })).body.error,
+    "invalid_action",
+  );
+  assert.equal(
+    (await harness({ putFails: true }).call("POST", "/social/profile/challenge", { address: ADDRESS })).body.error,
+    "kv_unavailable",
+  );
 });
 
 test("a signed publish stores the memory and the index, with the handle lowered", async () => {
   const h = harness();
   const { status, body } = await publish(h);
   assert.equal(status, 200);
-  assert.deepEqual(body.profile, { handle: "arsenal_fan", address: ADDRESS, publicSince: new Date(NOW).toISOString(), shareHistory: false });
-  assert.deepEqual(h.written, [{ address: ADDRESS, handle: "arsenal_fan", publicSince: new Date(NOW).toISOString(), shareHistory: false }]);
+  assert.deepEqual(body.profile, {
+    handle: "arsenal_fan",
+    address: ADDRESS,
+    publicSince: new Date(NOW).toISOString(),
+    shareHistory: false,
+  });
+  assert.deepEqual(h.written, [
+    { address: ADDRESS, handle: "arsenal_fan", publicSince: new Date(NOW).toISOString(), shareHistory: false },
+  ]);
   const index = JSON.parse(h.data.get("profile:arsenal_fan")!.value);
   assert.equal(index.address, ADDRESS);
   assert.ok(index.userKey);
@@ -105,7 +139,10 @@ test("a signed publish stores the memory and the index, with the handle lowered"
 test("a signature is used once", async () => {
   const h = harness();
   const signature = await signed(h, "publish");
-  assert.equal((await h.call("POST", "/social/profile/publish", { handle: "first", address: ADDRESS, signature })).status, 200);
+  assert.equal(
+    (await h.call("POST", "/social/profile/publish", { handle: "first", address: ADDRESS, signature })).status,
+    200,
+  );
   await h.call("POST", "/social/profile/unpublish", { address: ADDRESS, signature: await signed(h, "unpublish") });
   const again = await h.call("POST", "/social/profile/publish", { handle: "second", address: ADDRESS, signature });
   assert.equal(again.status, 401);
@@ -114,7 +151,11 @@ test("a signature is used once", async () => {
 
 test("a wrong wallet's signature is refused and stores nothing", async () => {
   const h = harness();
-  const { status, body } = await h.call("POST", "/social/profile/publish", { handle: "thief", address: ADDRESS, signature: await signed(h, "publish", ADDRESS, Ed25519Keypair.generate()) });
+  const { status, body } = await h.call("POST", "/social/profile/publish", {
+    handle: "thief",
+    address: ADDRESS,
+    signature: await signed(h, "publish", ADDRESS, Ed25519Keypair.generate()),
+  });
   assert.equal(status, 401);
   assert.equal(body.error, "invalid_signature");
   assert.equal(h.written.length, 0);
@@ -134,12 +175,20 @@ test("an expired challenge is refused", async () => {
   const h = harness();
   const signature = await signed(h, "publish");
   h.advance(600_001);
-  assert.equal((await h.call("POST", "/social/profile/publish", { handle: "late", address: ADDRESS, signature })).body.error, "challenge_expired");
+  assert.equal(
+    (await h.call("POST", "/social/profile/publish", { handle: "late", address: ADDRESS, signature })).body.error,
+    "challenge_expired",
+  );
 });
 
 test("handles are 3-20 characters of a-z 0-9 and underscore", async () => {
   for (const handle of ["ab", "a".repeat(21), "has space", "dash-ed", "émile", 7, ""]) {
-    assert.equal((await harness().call("POST", "/social/profile/publish", { handle, address: ADDRESS, signature: "x" })).body.error, "invalid_handle", String(handle));
+    assert.equal(
+      (await harness().call("POST", "/social/profile/publish", { handle, address: ADDRESS, signature: "x" })).body
+        .error,
+      "invalid_handle",
+      String(handle),
+    );
   }
 });
 
@@ -156,12 +205,23 @@ test("a taken handle is refused whatever its case, without using the signature",
 test("one address and one record get one profile", async () => {
   const h = harness();
   await publish(h, "first");
-  assert.equal((await h.call("POST", "/social/profile/publish", { handle: "second", address: ADDRESS, signature: "x" })).body.error, "already_public");
-  assert.equal((await h.call("POST", "/social/profile/publish", { handle: "third", address: OTHER, signature: "x" })).body.error, "record_already_public");
+  assert.equal(
+    (await h.call("POST", "/social/profile/publish", { handle: "second", address: ADDRESS, signature: "x" })).body
+      .error,
+    "already_public",
+  );
+  assert.equal(
+    (await h.call("POST", "/social/profile/publish", { handle: "third", address: OTHER, signature: "x" })).body.error,
+    "record_already_public",
+  );
 });
 
 test("publishing needs an install id", async () => {
-  assert.equal((await harness().call("POST", "/social/profile/publish", { handle: "abc", address: ADDRESS, signature: "x" }, {})).body.error, "missing_install");
+  assert.equal(
+    (await harness().call("POST", "/social/profile/publish", { handle: "abc", address: ADDRESS, signature: "x" }, {}))
+      .body.error,
+    "missing_install",
+  );
 });
 
 test("if the KV index cannot be written, publish says so", async () => {
@@ -169,13 +229,20 @@ test("if the KV index cannot be written, publish says so", async () => {
   const signature = await signed(h, "publish");
   const failing = harness({ putFails: true });
   for (const [key, value] of h.data) failing.data.set(key, value);
-  assert.equal((await failing.call("POST", "/social/profile/publish", { handle: "abc", address: ADDRESS, signature })).body.error, "kv_unavailable");
+  assert.equal(
+    (await failing.call("POST", "/social/profile/publish", { handle: "abc", address: ADDRESS, signature })).body.error,
+    "kv_unavailable",
+  );
 });
 
 test("update turns history sharing on, signed", async () => {
   const h = harness();
   await publish(h);
-  const { body } = await h.call("POST", "/social/profile/update", { address: ADDRESS, shareHistory: true, signature: await signed(h, "update") });
+  const { body } = await h.call("POST", "/social/profile/update", {
+    address: ADDRESS,
+    shareHistory: true,
+    signature: await signed(h, "update"),
+  });
   assert.equal(body.profile.shareHistory, true);
   assert.equal(h.written.at(-1)?.shareHistory, true);
   assert.equal(JSON.parse(h.data.get("profile:arsenal_fan")!.value).shareHistory, true);
@@ -186,17 +253,35 @@ test("turning history off removes old calls now, not at the next snapshot", asyn
   const h = harness();
   await publish(h);
   h.data.set("socialstats:arsenal_fan", { value: "{}" });
-  await h.call("POST", "/social/profile/update", { address: ADDRESS, shareHistory: false, signature: await signed(h, "update") });
+  await h.call("POST", "/social/profile/update", {
+    address: ADDRESS,
+    shareHistory: false,
+    signature: await signed(h, "update"),
+  });
   assert.equal(h.data.has("socialstats:arsenal_fan"), false);
-  assert.deepEqual(JSON.parse(h.data.get("social:hidden")!.value).map((entry: { handle: string }) => entry.handle), ["arsenal_fan"]);
+  assert.deepEqual(
+    JSON.parse(h.data.get("social:hidden")!.value).map((entry: { handle: string }) => entry.handle),
+    ["arsenal_fan"],
+  );
 });
 
 test("update and unpublish need a profile and a real signature", async () => {
   const h = harness();
-  assert.equal((await h.call("POST", "/social/profile/update", { address: ADDRESS, shareHistory: true, signature: "x" })).body.error, "not_public");
-  assert.equal((await h.call("POST", "/social/profile/unpublish", { address: ADDRESS, signature: "x" })).body.error, "not_public");
+  assert.equal(
+    (await h.call("POST", "/social/profile/update", { address: ADDRESS, shareHistory: true, signature: "x" })).body
+      .error,
+    "not_public",
+  );
+  assert.equal(
+    (await h.call("POST", "/social/profile/unpublish", { address: ADDRESS, signature: "x" })).body.error,
+    "not_public",
+  );
   await publish(h);
-  assert.equal((await h.call("POST", "/social/profile/update", { address: ADDRESS, shareHistory: "yes", signature: "x" })).body.error, "invalid_share_history");
+  assert.equal(
+    (await h.call("POST", "/social/profile/update", { address: ADDRESS, shareHistory: "yes", signature: "x" })).body
+      .error,
+    "invalid_share_history",
+  );
   assert.equal((await h.call("POST", "/social/profile/unpublish", { address: ADDRESS, signature: "x" })).status, 401);
 });
 
@@ -205,7 +290,10 @@ test("unpublish removes every index entry, hides the handle and frees it", async
   await publish(h);
   h.data.set("socialstats:arsenal_fan", { value: "{}" });
   await h.call("POST", "/social/profile/unpublish", { address: ADDRESS, signature: await signed(h, "unpublish") });
-  assert.deepEqual([...h.data.keys()].filter((key) => key.startsWith("profile") || key.startsWith("socialstats")), []);
+  assert.deepEqual(
+    [...h.data.keys()].filter((key) => key.startsWith("profile") || key.startsWith("socialstats")),
+    [],
+  );
   assert.equal(h.written.at(-1)?.unpublished, true);
   assert.equal(JSON.parse(h.data.get("social:hidden")!.value)[0].handle, "arsenal_fan");
   assert.equal((await publish(h)).status, 200);
@@ -226,21 +314,32 @@ test("by-address says whether an address is public, without the user key", async
 });
 
 test("a SuiNS name becomes a suggested handle", async () => {
-  assert.deepEqual((await harness({ name: "alice.sui" }).call("GET", `/social/suins?address=${ADDRESS}`)).body, { name: "alice.sui", suggestion: "alice" });
-  assert.deepEqual((await harness({ name: null }).call("GET", `/social/suins?address=${ADDRESS}`)).body, { name: null, suggestion: null });
+  assert.deepEqual((await harness({ name: "alice.sui" }).call("GET", `/social/suins?address=${ADDRESS}`)).body, {
+    name: "alice.sui",
+    suggestion: "alice",
+  });
+  assert.deepEqual((await harness({ name: null }).call("GET", `/social/suins?address=${ADDRESS}`)).body, {
+    name: null,
+    suggestion: null,
+  });
   assert.equal(handleFromName("@my-name"), "my_name");
   assert.equal(handleFromName("sub.alice.sui"), "sub");
   assert.equal(handleFromName("ab.sui"), null);
 });
 
 test("a failed name lookup is the same as no name", async () => {
-  const response = await socialRoute(new Request(`https://x/social/suins?address=${ADDRESS}`), { SOOTHIA_CACHE: {} } as unknown as Env, "/social/suins", {
-    lookupName: async () => {
-      throw new Error("down");
+  const response = await socialRoute(
+    new Request(`https://x/social/suins?address=${ADDRESS}`),
+    { SOOTHIA_CACHE: {} } as unknown as Env,
+    "/social/suins",
+    {
+      lookupName: async () => {
+        throw new Error("down");
+      },
+      verify: async () => true,
+      store: () => ({}) as RecallStore,
     },
-    verify: async () => true,
-    store: () => ({}) as RecallStore,
-  });
+  );
   assert.deepEqual(await response.json(), { name: null, suggestion: null });
 });
 

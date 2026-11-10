@@ -35,7 +35,15 @@ const pool = (overrides: Partial<StakePool> = {}): StakePool => ({
 const RESOLVED_AT = 50_000_000n;
 const OPENS = RESOLVED_AT + 21_600_000n;
 const resolved = (overrides: Partial<StakePool> = {}): StakePool =>
-  pool({ status: "resolved", outcomeYes: true, yesTotal: 4n * SUI, noTotal: 2n * SUI, feeAmount: 60_000_000n, resolvedAtMs: RESOLVED_AT, ...overrides });
+  pool({
+    status: "resolved",
+    outcomeYes: true,
+    yesTotal: 4n * SUI,
+    noTotal: 2n * SUI,
+    feeAmount: 60_000_000n,
+    resolvedAtMs: RESOLVED_AT,
+    ...overrides,
+  });
 const yesStake: StakePosition = { side: true, amount: SUI, claimed: false };
 const noStake: StakePosition = { side: false, amount: SUI, claimed: false };
 
@@ -104,7 +112,10 @@ const ENV = {} as RecallEnv;
 
 test("the same transaction read twice from Walrus counts once", () => {
   const groups = groupStakes([stake(), stake(), stake({ digest: "d2", at: "2026-11-08T11:00:00.000Z" })]);
-  assert.deepEqual(groups.get("p1")?.map((entry) => entry.digest), ["d2", "d1"]);
+  assert.deepEqual(
+    groups.get("p1")?.map((entry) => entry.digest),
+    ["d2", "d1"],
+  );
 });
 
 test("the record shows the chain's amount, status and payout", async () => {
@@ -126,7 +137,16 @@ test("the record shows the chain's amount, status and payout", async () => {
 });
 
 test("a chain failure still returns what Walrus knows", async () => {
-  const summaries = await stakeSummaries(ENV, [stake(), stake({ digest: "d2" })], 0, fakeChain({ readPool: async () => { throw new Error("down"); } }));
+  const summaries = await stakeSummaries(
+    ENV,
+    [stake(), stake({ digest: "d2" })],
+    0,
+    fakeChain({
+      readPool: async () => {
+        throw new Error("down");
+      },
+    }),
+  );
   assert.equal(summaries.get("p1")?.amountMist, (2n * SUI).toString());
   assert.equal(summaries.get("p1")?.status, null);
 });

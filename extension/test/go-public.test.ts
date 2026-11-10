@@ -76,11 +76,21 @@ async function panel(options: Options = {}) {
   });
   await view.load();
   const q = <T extends Element>(selector: string) => view.node.querySelector<T>(selector);
-  const named = (label: string) => [...view.node.querySelectorAll("button")].find((node) => node.textContent === label) as HTMLButtonElement;
+  const named = (label: string) =>
+    [...view.node.querySelectorAll("button")].find((node) => node.textContent === label) as HTMLButtonElement;
   const type = (text: string) => {
     q<HTMLInputElement>(".go-public-handle")!.value = text;
   };
-  return { view, asked, signed, q, named, type, status: () => q(".go-public-status")?.textContent ?? "", paths: () => asked.map(([path]) => path) };
+  return {
+    view,
+    asked,
+    signed,
+    q,
+    named,
+    type,
+    status: () => q(".go-public-status")?.textContent ?? "",
+    paths: () => asked.map(([path]) => path),
+  };
 }
 
 test("handles are checked before anything is signed", () => {
@@ -111,8 +121,15 @@ test("publishing signs the Worker's message and shows the public state", async (
   p.named("Go public").click();
   await tick();
   assert.deepEqual(p.signed, [MESSAGE]);
-  assert.deepEqual(p.asked.find(([path]) => path === "/social/profile/challenge")?.[1], { address: ADDRESS, action: "publish" });
-  assert.deepEqual(p.asked.find(([path]) => path === "/social/profile/publish")?.[1], { address: ADDRESS, signature: "SIG", handle: "amy_1" });
+  assert.deepEqual(p.asked.find(([path]) => path === "/social/profile/challenge")?.[1], {
+    address: ADDRESS,
+    action: "publish",
+  });
+  assert.deepEqual(p.asked.find(([path]) => path === "/social/profile/publish")?.[1], {
+    address: ADDRESS,
+    signature: "SIG",
+    handle: "amy_1",
+  });
   assert.equal(p.q(".go-public-title")?.textContent, "You're public as @amy_1");
   assert.equal(p.q<HTMLAnchorElement>("a")?.href, "https://soothia.fun/u/amy_1");
 });
@@ -134,7 +151,11 @@ test("sharing history at publish takes a second signature", async () => {
   p.named("Go public").click();
   await tick();
   assert.equal(p.signed.length, 2);
-  assert.deepEqual(p.asked.find(([path]) => path === "/social/profile/update")?.[1], { address: ADDRESS, signature: "SIG", shareHistory: true });
+  assert.deepEqual(p.asked.find(([path]) => path === "/social/profile/update")?.[1], {
+    address: ADDRESS,
+    signature: "SIG",
+    shareHistory: true,
+  });
 });
 
 test("no wallet: the button offers to connect, then publishes", async () => {
@@ -157,7 +178,13 @@ test("connecting a wallet that is already public shows that instead of publishin
 });
 
 test("several wallets show a picker", async () => {
-  const p = await panel({ wallet: null, wallets: [{ id: "slush", name: "Slush" }, { id: "phantom", name: "Phantom" }] });
+  const p = await panel({
+    wallet: null,
+    wallets: [
+      { id: "slush", name: "Slush" },
+      { id: "phantom", name: "Phantom" },
+    ],
+  });
   p.type("amy");
   p.named("Connect wallet to go public").click();
   await tick();
@@ -203,7 +230,11 @@ test("the history toggle updates, signed", async () => {
   box.checked = true;
   box.dispatchEvent(new dom.window.Event("change"));
   await tick();
-  assert.deepEqual(p.asked.find(([path]) => path === "/social/profile/update")?.[1], { address: ADDRESS, signature: "SIG", shareHistory: true });
+  assert.deepEqual(p.asked.find(([path]) => path === "/social/profile/update")?.[1], {
+    address: ADDRESS,
+    signature: "SIG",
+    shareHistory: true,
+  });
   assert.equal(p.q<HTMLInputElement>(".toggle-box")!.checked, true);
 });
 
@@ -232,7 +263,11 @@ test("unpublish returns to the form", async () => {
 
 test("the wallet layer signs only the ownership message", async () => {
   const calls: unknown[] = [];
-  const access = createWalletAccess({ call: async (method, params) => (calls.push([method, params]), { signature: "S" }) }, { read: async () => WALLET, write: async () => undefined, clear: async () => undefined }, async () => ({ ok: true }));
+  const access = createWalletAccess(
+    { call: async (method, params) => (calls.push([method, params]), { signature: "S" }) },
+    { read: async () => WALLET, write: async () => undefined, clear: async () => undefined },
+    async () => ({ ok: true }),
+  );
   await assert.rejects(access.signMessage(WALLET, "transfer everything"), /refused/);
   assert.equal(calls.length, 0);
   const message = `Soothia: confirm you own this wallet.\nAddress: ${ADDRESS}\nNonce: n`;
@@ -245,7 +280,10 @@ const ROW = { rank: 1, handle: "amy", score: 720, calls: 14, hitRate: 0.75 };
 async function board(reply: Reply = OK({ rows: [ROW] })) {
   const pane = document.createElement("div");
   const asked: unknown[] = [];
-  const view = createLeaderboardView(pane, { layout: () => undefined, api: (async (_path: string, body: unknown) => (asked.push(body), reply)) as never });
+  const view = createLeaderboardView(pane, {
+    layout: () => undefined,
+    api: (async (_path: string, body: unknown) => (asked.push(body), reply)) as never,
+  });
   await view.render();
   return { pane, asked, text: () => pane.textContent ?? "", view };
 }

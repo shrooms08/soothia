@@ -2,12 +2,13 @@
 
 All notable changes to Soothia. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Versions are the Chrome extension's manifest version; the Workers deploy continuously alongside it.
 
-## Total Recall (in progress)
+## [1.0.0-total-recall] - 2026-11-10
 
-Branch `total-recall`. A local CLI that locks football predictions as memories on Walrus Memory mainnet, then scores them after the matches. No Worker deploy and no extension changes.
+Total Recall: calls proven on Sui and remembered on Walrus Memory, lessons from the record, SUI staking, public profiles and following, and premium calls paid over x402. Extension 0.16.0. Tagged `v1.0.0-total-recall`.
 
 ### Added
 
+- Docs for judges: a rewritten README, `docs/total-recall.md`, `docs/numbers.md` (written by `worker/scripts/numbers.ts` from Walrus, Sui through Tatum, and KV), a blog post, a demo script, an X thread and a submission checklist.
 - Scaffold: record shapes, scoring and lessons, Walrus Memory client, Tatum Sui RPC, and the `soothia_recall` Move package (`worker/src/recall`, `move/soothia_recall`).
 - ESPN fixtures and results for six leagues (`worker/src/recall/espn.ts`).
 - Optional Sui checkpoint anchor on each pick, read through Tatum's gRPC gateway and covered by the pick's hash. An anchor shows a call was made after checkpoint N.

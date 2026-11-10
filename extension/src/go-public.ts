@@ -48,7 +48,8 @@ export function socialErrorText(code: string | undefined, message?: string): str
     case "rate_limited":
       return "Too many tries just now. Wait a minute.";
   }
-  if (message && /reject|denied|declined|cancel/i.test(message)) return "You cancelled in your wallet. Nothing changed.";
+  if (message && /reject|denied|declined|cancel/i.test(message))
+    return "You cancelled in your wallet. Nothing changed.";
   return message ? message.slice(0, 140) : "That didn't work. Please try again.";
 }
 
@@ -86,9 +87,16 @@ export function createGoPublicPanel(host: GoPublicHost): { node: HTMLElement; lo
   }
 
   /** Runs one signed step. True when the Worker accepted it. */
-  async function signedStep(action: Action, path: ApiPath, extra: Record<string, unknown>): Promise<ApiResponse<unknown> | null> {
+  async function signedStep(
+    action: Action,
+    path: ApiPath,
+    extra: Record<string, unknown>,
+  ): Promise<ApiResponse<unknown> | null> {
     const current = wallet as ConnectedWallet;
-    const challenge = await host.api<{ message: string }>("/social/profile/challenge", { address: current.address, action });
+    const challenge = await host.api<{ message: string }>("/social/profile/challenge", {
+      address: current.address,
+      action,
+    });
     if (!challenge.ok || !challenge.body) {
       say(socialErrorText((challenge.body as ApiError | null)?.error));
       return null;
@@ -112,14 +120,16 @@ export function createGoPublicPanel(host: GoPublicHost): { node: HTMLElement; lo
   async function act(run: () => Promise<void>): Promise<void> {
     if (busy) return;
     busy = true;
-    for (const control of node.querySelectorAll<HTMLButtonElement | HTMLInputElement>("button, input")) control.disabled = true;
+    for (const control of node.querySelectorAll<HTMLButtonElement | HTMLInputElement>("button, input"))
+      control.disabled = true;
     try {
       await run();
     } catch (error) {
       say(socialErrorText(undefined, String((error as Error)?.message ?? error)));
     }
     busy = false;
-    for (const control of node.querySelectorAll<HTMLButtonElement | HTMLInputElement>("button, input")) control.disabled = false;
+    for (const control of node.querySelectorAll<HTMLButtonElement | HTMLInputElement>("button, input"))
+      control.disabled = false;
     host.layout();
   }
 
@@ -149,25 +159,35 @@ export function createGoPublicPanel(host: GoPublicHost): { node: HTMLElement; lo
     const share = el("input", "toggle-box");
     share.type = "checkbox";
     toggleRow.append(share, el("span", "toggle-label", "Also show the calls I made before today"));
-    const publish = button(wallet ? "Go public" : "Connect wallet to go public", "button small go-public-action", () => {
-      void act(async () => {
-        const problem = handleProblem(handle.value);
-        if (problem) return say(problem);
-        if (!(await ensureWallet())) return;
-        const done = await signedStep("publish", "/social/profile/publish", { handle: handle.value.trim().toLowerCase() });
-        if (!done) return;
-        profile = (done.body as { profile: PublicProfile }).profile;
-        if (share.checked) {
-          say("Approve once more to share your earlier calls.");
-          const updated = await signedStep("update", "/social/profile/update", { shareHistory: true });
-          if (updated) profile = (updated.body as { profile: PublicProfile }).profile;
-        }
-        render();
-      });
-    });
+    const publish = button(
+      wallet ? "Go public" : "Connect wallet to go public",
+      "button small go-public-action",
+      () => {
+        void act(async () => {
+          const problem = handleProblem(handle.value);
+          if (problem) return say(problem);
+          if (!(await ensureWallet())) return;
+          const done = await signedStep("publish", "/social/profile/publish", {
+            handle: handle.value.trim().toLowerCase(),
+          });
+          if (!done) return;
+          profile = (done.body as { profile: PublicProfile }).profile;
+          if (share.checked) {
+            say("Approve once more to share your earlier calls.");
+            const updated = await signedStep("update", "/social/profile/update", { shareHistory: true });
+            if (updated) profile = (updated.body as { profile: PublicProfile }).profile;
+          }
+          render();
+        });
+      },
+    );
     node.replaceChildren(
       el("h3", "field-label", "Go public"),
-      el("p", "note", "Your Call Score and new calls appear on the leaderboard and a public page. Private until you do this."),
+      el(
+        "p",
+        "note",
+        "Your Call Score and new calls appear on the leaderboard and a public page. Private until you do this.",
+      ),
       handle,
       toggleRow,
       publish,
@@ -224,7 +244,9 @@ export function createGoPublicPanel(host: GoPublicHost): { node: HTMLElement; lo
   }
 
   async function lookUp(current: ConnectedWallet): Promise<PublicProfile | null> {
-    const response = await host.api<{ public: boolean; profile?: PublicProfile }>("/social/profile/by-address", { address: current.address });
+    const response = await host.api<{ public: boolean; profile?: PublicProfile }>("/social/profile/by-address", {
+      address: current.address,
+    });
     const body = response.ok ? (response.body as { public: boolean; profile?: PublicProfile } | null) : null;
     return body?.public && body.profile ? body.profile : null;
   }

@@ -52,7 +52,12 @@ export function createLeaderboardView(pane: HTMLElement, host: LeaderboardHost):
     }
     const list = el("div", "board-list");
     const status = el("p", "note", "Loading…");
-    pane.replaceChildren(switcher, status, list, externalLink("See all", `${SITE_URL}/leaderboard`, "link ext board-all"));
+    pane.replaceChildren(
+      switcher,
+      status,
+      list,
+      externalLink("See all", `${SITE_URL}/leaderboard`, "link ext board-all"),
+    );
     host.layout();
     const response = await host.api<{ rows: LeaderboardRow[] }>("/social/leaderboard", { board: "score", period });
     if (current !== seq) return;

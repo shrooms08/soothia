@@ -63,7 +63,9 @@ async function main(): Promise<void> {
 
   const live = await readConfig(context.client, config);
   console.log(`\nOn-chain config: treasury ${live.treasury}`);
-  console.log(`  fee ${live.feeBps} bps, min ${sui(live.minStake)}, per user ${sui(live.maxStakePerUser)}, pool ${sui(live.maxPool)}, refund after ${live.refundAfterMs} ms`);
+  console.log(
+    `  fee ${live.feeBps} bps, min ${sui(live.minStake)}, per user ${sui(live.maxStakePerUser)}, pool ${sui(live.maxPool)}, refund after ${live.refundAfterMs} ms`,
+  );
   console.log(`  resolve delay ${live.minResolveDelayMs} ms, challenge ${live.challengeMs} ms`);
 }
 

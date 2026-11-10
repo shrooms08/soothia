@@ -67,7 +67,8 @@ export interface LockedFollowedCall {
 
 export type FollowedCall = OpenFollowedCall | LockedFollowedCall;
 
-export const isLockedCall = (call: FollowedCall): call is LockedFollowedCall => (call as LockedFollowedCall).locked === true;
+export const isLockedCall = (call: FollowedCall): call is LockedFollowedCall =>
+  (call as LockedFollowedCall).locked === true;
 
 export interface ConsensusView {
   lean: string;
@@ -90,7 +91,8 @@ export function timeAgo(atMs: number, nowMs: number): string {
 
 export const initials = (handle: string): string => handle.replace(/_/g, "").slice(0, 2).toUpperCase();
 
-export const handleLine = (handle: string, score: number | null): string => (score === null ? `@${handle}` : `@${handle} · ${score}`);
+export const handleLine = (handle: string, score: number | null): string =>
+  score === null ? `@${handle}` : `@${handle} · ${score}`;
 
 export const matchLine = (fixture: Pick<FeedFixture, "home" | "away">): string => `${fixture.home} v ${fixture.away}`;
 
@@ -99,7 +101,8 @@ export function callLine(lean: string, confidence: number, stakeMist?: string | 
   return `${lean} · ${confidence}%${stakeMist ? ` · ${formatSui(stakeMist, 4)} SUI` : ""}`;
 }
 
-export const canTail = (fixture: Pick<FeedFixture, "startISO">, nowMs: number): boolean => Date.parse(fixture.startISO) - nowMs > MIN_KICKOFF_LEAD_MS;
+export const canTail = (fixture: Pick<FeedFixture, "startISO">, nowMs: number): boolean =>
+  Date.parse(fixture.startISO) - nowMs > MIN_KICKOFF_LEAD_MS;
 
 /** "@ada and @tunde called this · 2 say Arsenal win". */
 export function followedLine(calls: Pick<FollowedCall, "handle">[], consensus: ConsensusView | null): string {
@@ -120,7 +123,10 @@ export interface TailPrefill {
 const LONG_DATE = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" });
 
 /** The tile and sheet settings for tailing a call, including with no match page open. */
-export function tailSheetFor(handle: string, source: TailSource): { tile: Tile; fixture: FixtureSignal; prefill: TailPrefill } {
+export function tailSheetFor(
+  handle: string,
+  source: TailSource,
+): { tile: Tile; fixture: FixtureSignal; prefill: TailPrefill } {
   const { home, away, competition, startISO, subject } = source.fixture;
   const [team, other] = subject === "home" ? [home, away] : [away, home];
   const dateLabel = LONG_DATE.format(new Date(startISO));
@@ -137,8 +143,20 @@ export function tailSheetFor(handle: string, source: TailSource): { tile: Tile; 
         fromFixture: true,
       },
     },
-    fixture: { home, away, ...(competition ? { competition } : {}), startISO, dateLabel, sourceUrl: `https://soothia.fun/u/${handle}`, evidence: [] },
-    prefill: { side: source.side === "YES" ? "yes" : "no", percent: Math.min(MAX_PERCENT, Math.max(MIN_PERCENT, source.confidence)), tailOf: handle },
+    fixture: {
+      home,
+      away,
+      ...(competition ? { competition } : {}),
+      startISO,
+      dateLabel,
+      sourceUrl: `https://soothia.fun/u/${handle}`,
+      evidence: [],
+    },
+    prefill: {
+      side: source.side === "YES" ? "yes" : "no",
+      percent: Math.min(MAX_PERCENT, Math.max(MIN_PERCENT, source.confidence)),
+      tailOf: handle,
+    },
   };
 }
 
