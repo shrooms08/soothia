@@ -55,7 +55,8 @@ export function createRecallField(host: RecallFieldHost): { node: HTMLElement; r
     return row;
   }
 
-  function refresh(): void {
+  /** Draws the field. Never lays out on the first draw: the card may still be being built. */
+  function draw(): void {
     const linked = host.linked();
     if (linked && !editing) {
       const row = el("div", "recall-row recall-linked");
@@ -72,9 +73,13 @@ export function createRecallField(host: RecallFieldHost): { node: HTMLElement; r
     } else {
       body.replaceChildren(editor(Boolean(linked)));
     }
+  }
+
+  function refresh(): void {
+    draw();
     host.layout();
   }
 
-  refresh();
+  draw();
   return { node, refresh };
 }

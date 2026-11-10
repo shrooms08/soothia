@@ -6,6 +6,10 @@ All notable changes to Soothia. The format follows [Keep a Changelog](https://ke
 
 Total Recall: calls proven on Sui and remembered on Walrus Memory, lessons from the record, SUI staking, public profiles and following, and premium calls paid over x402. Extension 0.16.0. Tagged `v1.0.0-total-recall`.
 
+### Fixed
+
+- Extension 0.16.4: the orb didn't appear at all in 0.16.3. The new Link record field laid out the card while the card was still being built, before the orb's position was loaded, so mounting stopped with "Cannot access 'position' before initialization" and the script's guard hid it. The field no longer lays out while it is built, and a new test mounts the real content script from a cold start.
+
 ### Changed
 
 - Extension 0.16.3: the card's settings show only "Scan this page again", one wallet line ("Wallet: Slush 0x8e0e…bb6a · Disconnect", or Connect), and a Developer link that holds debug info, Link record, the replays and the proxy status. "Can't reach Soothia right now." appears outside Developer only when offline.

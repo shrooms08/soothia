@@ -374,9 +374,13 @@ async function mount(): Promise<void> {
     return value ? "Record linked." : "Record unlinked.";
   }
   function recallFieldNode(): HTMLElement {
-    const field = createRecallField({ linked: () => linkedRecallId, save: saveRecallId, layout });
+    // Built while the card itself is still being built, before layout's state exists.
+    const field = createRecallField({ linked: () => linkedRecallId, save: saveRecallId, layout: layoutIfOpen });
     shownRecallFields.add(field);
     return field.node;
+  }
+  function layoutIfOpen(): void {
+    if (!card.hidden) layout();
   }
   function setLinkedRecallId(value: string): void {
     linkedRecallId = value;
