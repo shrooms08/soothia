@@ -63,6 +63,11 @@ export interface PickRecord {
   tailFlipped?: boolean;
   /** Whether this call matched what the people followed had said when it was made. */
   followedConsensus?: "with" | "against";
+  /**
+   * 32 random bytes as hex, in the hash of premium calls only (v2). Never shown to anyone
+   * but the caller, or the hash could be searched for the call's side.
+   */
+  salt?: string;
   /** Hidden from everyone else until kickoff, and sold for this price. */
   premium?: { priceMist: string };
 }
@@ -298,6 +303,18 @@ export function canonicalPick(pick: Omit<PickRecord, "hash" | "commit">): string
       : null,
   });
 }
+
+/**
+ * The v2 hash input: the v1 fields plus a random salt. Premium calls use it, because v1's
+ * fields are all public or guessable, so anyone could search for a hidden call's side.
+ */
+export function canonicalPickV2(pick: Omit<PickRecord, "hash" | "commit">, salt: string): string {
+  return JSON.stringify({ v: 2, salt, pick: canonicalPick(pick) });
+}
+
+/** What a pick's hash covers: v2 when it has a salt, v1 otherwise. */
+export const pickHashInput = (pick: Omit<PickRecord, "hash" | "commit">): string =>
+  pick.salt ? canonicalPickV2(pick, pick.salt) : canonicalPick(pick);
 
 /** Normalised names for grouping: lower case, no accents, no "FC"/"AFC". */
 export function entityKey(name: string): string {

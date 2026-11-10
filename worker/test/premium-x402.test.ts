@@ -135,6 +135,7 @@ function harness(options: { proof?: boolean; profile?: boolean } = {}) {
   };
   const store = {
     write: async (_kind: string, record: UnlockRecord) => (memories.push(record), { jobId: "j" }),
+    list: async () => memories,
   } as unknown as RecallStore;
   const call = async (
     method: string,
@@ -311,6 +312,7 @@ test("a replayed payment is refused and not broadcast again", async () => {
   assert.equal((await h.call("GET", "/premium/call/p1", { headers: { "PAYMENT-SIGNATURE": header } })).status, 200);
   // Taking away the unlock forces the replay all the way to the nonce check.
   h.data.delete(`unlock:${await userKeyFor(INSTALL)}:p1`);
+  h.memories.length = 0;
   const replay = await h.call("GET", "/premium/call/p1", { headers: { "PAYMENT-SIGNATURE": header } });
   assert.equal(replay.status, 402);
   assert.equal(replay.body.reason, "nonce_used");
@@ -537,4 +539,15 @@ test("without the ids the routes say so", async () => {
     "/premium/eligible",
   );
   assert.equal(response.status, 503);
+});
+
+test("a paid unlock still opens when KV lost it, from the Walrus memory of the payment", async () => {
+  const h = harness();
+  await pay(h);
+  h.data.delete(`unlock:${await userKeyFor(INSTALL)}:p1`);
+  const again = await h.call("GET", "/premium/call/p1");
+  assert.equal(again.status, 200);
+  assert.equal(again.body.access, "unlocked");
+  assert.equal(again.body.receipt.digest, "DIGEST");
+  assert.equal(h.executed.length, 1);
 });

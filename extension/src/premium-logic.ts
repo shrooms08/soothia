@@ -99,7 +99,14 @@ export interface UnlockDeps {
 }
 
 export type UnlockResult =
-  | { ok: true; handle: string; call: FeedItem; receipt: UnlockReceipt | null }
+  | {
+      ok: true;
+      handle: string;
+      call: FeedItem;
+      receipt: UnlockReceipt | null;
+      /** A payment was signed and handed over, so it may have been spent whatever the answer says. */
+      signed: boolean;
+    }
   | {
       ok: false;
       code: string;
@@ -111,15 +118,15 @@ export type UnlockResult =
 
 const failed = (code: string, maybePaid = false): UnlockResult => ({ ok: false, code, maybePaid });
 const message = (error: unknown): string => String((error as Error)?.message ?? error);
-const opened = (response: PremiumCallResponse): UnlockResult => {
+const opened = (response: PremiumCallResponse, signed: boolean): UnlockResult => {
   const body = response.body as { handle: string; call: FeedItem; receipt: UnlockReceipt | null };
-  return { ok: true, handle: body.handle, call: body.call, receipt: body.receipt ?? null };
+  return { ok: true, handle: body.handle, call: body.call, receipt: body.receipt ?? null, signed };
 };
 
 /** The x402 round trip: ask, check what is being asked for, sign, retry. */
 export async function runUnlock(deps: UnlockDeps): Promise<UnlockResult> {
   const first = await deps.fetchCall();
-  if (first.status === 200) return opened(first);
+  if (first.status === 200) return opened(first, false);
   if (first.status !== 402) return failed((first.body as { error?: string } | null)?.error ?? "unavailable");
 
   const requirement = readRequirement(first.required);
@@ -147,13 +154,14 @@ export async function runUnlock(deps: UnlockDeps): Promise<UnlockResult> {
   } catch {
     return failed("network", true);
   }
-  if (second.status === 200) return opened(second);
+  if (second.status === 200) return opened(second, true);
   if (second.status === 0) return failed("network", true);
   const reason =
     (second.body as { reason?: string; error?: string } | null)?.reason ??
     (second.body as { error?: string } | null)?.error ??
     "unavailable";
-  return failed(reason, reason === "broadcast_failed" || reason === "no_payment_event");
+  // The Worker holds the signed payment and could have sent it whatever it answers.
+  return failed(reason, true);
 }
 
 export function unlockFailureText(
@@ -267,7 +275,10 @@ export function agentCandidates(
   const chosen: AgentCandidate[] = [];
   for (const { handle, item } of entries) {
     if (chosen.length >= AGENT_MAX_PER_RUN) break;
-    if (!isLockedItem(item) || !item.proof || Date.parse(item.fixture.startISO) - nowMs <= KICKOFF_MARGIN_MS) continue;
+    if (!isLockedItem(item) || !item.proof) continue;
+    const kickoffMs = Date.parse(item.fixture.startISO);
+    if (!Number.isFinite(kickoffMs) || kickoffMs - nowMs <= KICKOFF_MARGIN_MS) continue;
+    if (typeof item.premium?.priceMist !== "string" || !AMOUNT.test(item.premium.priceMist)) continue;
     const price = BigInt(item.premium.priceMist);
     if (price > perCall || price > left) continue;
     left -= price;

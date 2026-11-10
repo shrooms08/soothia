@@ -4,7 +4,7 @@
 
 import type { RecallEnv } from "./env";
 import type { Fixture } from "./espn";
-import { canonicalPick, type CommitSkipReason, type PickFixture, type PickRecord } from "./records";
+import { canonicalPick, canonicalPickV2, type CommitSkipReason, type PickFixture, type PickRecord } from "./records";
 import { commitConfigured, commitPick, latestCheckpoint } from "./sui";
 
 export interface PickInput {
@@ -97,7 +97,9 @@ export async function buildPick(input: PickInput, env: RecallEnv, options: Build
     ...(input.fixture ? { fixture: input.fixture } : {}),
     ...(anchor ? { anchor: { ...anchor, via: "tatum-sui-mainnet" as const } } : {}),
   };
-  const hash = await sha256Hex(canonicalPick(unsigned));
+  // A premium call's side must stay secret until kickoff, so its hash is salted.
+  const salt = input.premium ? hex(crypto.getRandomValues(new Uint8Array(32))) : undefined;
+  const hash = await sha256Hex(salt ? canonicalPickV2(unsigned, salt) : canonicalPick(unsigned));
 
   let commit: PickRecord["commit"] = null;
   let commitSkipped: CommitSkipReason | null = null;
@@ -113,6 +115,7 @@ export async function buildPick(input: PickInput, env: RecallEnv, options: Build
   }
   return {
     ...unsigned,
+    ...(salt ? { salt } : {}),
     hash,
     commit,
     ...(commitSkipped ? { commitSkipped } : {}),

@@ -4,13 +4,13 @@
 
 import { installId, isAdmin, json, readJsonObject, type Env } from "../http";
 import { recordNewCall } from "../stats";
-import { kvPut } from "../store";
+import { cacheGet, cachePut, kvPut } from "../store";
 import { checkCommitGuard } from "./commitGuard";
 import { memwalBackend, memwalHealth, RecallStore, userKeyFor } from "./memory";
 import { buildPick, mergePicks, type PickInput } from "./picks";
 import type { PickFixture, PickRecord, PrefKind } from "./records";
 import { resolveUser } from "./resolve";
-import { insightsFor, latestBy, quietSites, shrinkFactor, summarize, type RelatedHit } from "./scoring";
+import { insightsFor, latestBy, quietSites, sameMatch, shrinkFactor, summarize, type RelatedHit } from "./scoring";
 import { fetchScoreboard } from "./espn";
 import { commitConfigured, latestCheckpoint, memoryAccount, tatumConfigured, verifyCommit } from "./sui";
 import { SWEEP_PREFIX } from "./sweep";
@@ -91,7 +91,8 @@ export function validatePickBody(body: Record<string, unknown>, nowMs: number): 
     parsedFixture = {
       home: raw.home,
       away: raw.away,
-      startISO: raw.startISO,
+      // One spelling per moment, so the duplicate check and the hash see the same value.
+      startISO: new Date(Date.parse(raw.startISO)).toISOString(),
       subject: raw.subject,
       ...(raw.competition ? { competition: raw.competition } : {}),
     };
@@ -130,10 +131,11 @@ export function validatePickBody(body: Record<string, unknown>, nowMs: number): 
 
 /** True when the user already has a pick on this question or fixture. */
 export function isDuplicatePick(existing: PickRecord[], input: PickInput): boolean {
-  const key = (fixture: PickFixture): string => `${fixture.home}|${fixture.away}|${fixture.startISO}`;
+  // The same match however it is spelled or listed: team aliases, either order, the UTC day.
   return existing.some(
     (pick) =>
-      pick.question === input.question || (pick.fixture && input.fixture && key(pick.fixture) === key(input.fixture)),
+      pick.question === input.question ||
+      Boolean(pick.fixture && input.fixture && sameMatch(pick.fixture, input.fixture)),
   );
 }
 
@@ -150,17 +152,26 @@ export async function identify(request: Request): Promise<string | Response> {
   return userKeyFor(recallId);
 }
 
+const STATUS_CACHE_KEY = "recall:status";
+const STATUS_CACHE_SEC = 30;
+
+/** Cached, because anyone may call it and each call would cost Tatum and Walrus requests. */
 async function status(request: Request, env: Env): Promise<Response> {
+  const cached = await cacheGet<Record<string, unknown>>(STATUS_CACHE_KEY);
+  if (cached) return json(request, cached);
   const [memwal, latest] = await Promise.all([
     memwalHealth(env),
-    latestCheckpoint(env).catch((error: Error) => ({ error: String(error?.message ?? error).slice(0, 160) })),
+    // A short code only: upstream error text is not for the public.
+    latestCheckpoint(env).catch(() => ({ error: "tatum_unavailable" })),
   ]);
-  return json(request, {
+  const body = {
     version: RECALL_API_VERSION,
     memwal,
     tatum: { configured: tatumConfigured(env), latest },
     commit: { packageSet: Boolean(env.SOOTHIA_RECALL_PACKAGE?.trim()), ready: commitConfigured(env) },
-  });
+  };
+  await cachePut(STATUS_CACHE_KEY, body, STATUS_CACHE_SEC);
+  return json(request, body);
 }
 
 async function record(request: Request, env: Env, userKey: string): Promise<Response> {
@@ -341,7 +352,9 @@ async function createPick(request: Request, env: Env, userKey: string): Promise<
 export async function savePick(input: PickInput, env: Env, userKey: string, store: RecallStore): Promise<PickRecord> {
   const pick = await buildPick(input, env, { guard: () => checkCommitGuard(env, userKey) });
   await store.write("pick", pick);
-  await kvPut(env, `${SWEEP_PREFIX}${pick.id}`, JSON.stringify({ userKey }), { metadata: { userKey } });
+  // Only a match can be settled, so other calls would sit in the sweep forever.
+  if (pick.fixture)
+    await kvPut(env, `${SWEEP_PREFIX}${pick.id}`, JSON.stringify({ userKey }), { metadata: { userKey } });
   await recordNewCall(env, userKey, Boolean(pick.commit && pick.fixture));
   return pick;
 }

@@ -143,7 +143,7 @@ test("one wallet connects straight away and is saved", async () => {
   await s.view.load();
   s.named("Connect Sui wallet")!.click();
   await tick();
-  assert.deepEqual(s.store.value, { address: ADDRESS, walletId: "slush", walletName: "Slush" });
+  assert.deepEqual(s.store.value, { address: ADDRESS, walletId: "slush", walletName: "Slush", site: "" });
   assert.equal(s.note(), `Connected to Slush: ${shortAddress(ADDRESS)}`);
   assert.ok(s.named("Disconnect"));
   assert.equal(s.named("Connect Sui wallet"), undefined);

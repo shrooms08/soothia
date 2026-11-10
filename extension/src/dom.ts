@@ -21,8 +21,21 @@ export function button(label: string, className: string, onClick?: () => void): 
 }
 
 /** A link that opens in a new tab and tells the destination nothing about this page. */
+const LINK_HOSTS = new Set(["suivision.xyz", "soothia.fun", "github.com"]);
+
+/** Only https links to known hosts, because some hrefs come from the API. */
+export function isSafeLink(href: string): boolean {
+  try {
+    const url = new URL(href);
+    return url.protocol === "https:" && LINK_HOSTS.has(url.hostname);
+  } catch {
+    return false;
+  }
+}
+
 export function externalLink(label: string, href: string, className: string): HTMLAnchorElement {
   const node = el("a", className, label);
+  if (!isSafeLink(href)) return node;
   node.href = href;
   node.target = "_blank";
   node.rel = "noopener noreferrer";

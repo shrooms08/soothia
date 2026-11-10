@@ -206,9 +206,21 @@
     return `Staked ${amount}`;
   }
 
+  /** Only https links to SuiVision, because the URL comes from the API. */
+  function safeProofUrl(href) {
+    try {
+      const url = new URL(href);
+      return url.protocol === "https:" && url.hostname === "suivision.xyz" ? url.href : null;
+    } catch {
+      return null;
+    }
+  }
+
   function proofLink(call) {
+    const href = safeProofUrl(call.proof.url);
+    if (!href) return h("span", "social-proof", "Proof on Sui");
     const link = h("a", "social-proof", "Proof on Sui");
-    link.href = call.proof.url;
+    link.href = href;
     link.target = "_blank";
     link.rel = "noopener";
     return link;

@@ -152,11 +152,9 @@ export async function followingRoute(context: SocialContext, userKey: string): P
   const kv = context.env.SOOTHIA_CACHE;
   if ((await kv.get(followingKey(userKey))) === null) {
     // The index is only a shortcut, so it can always be rebuilt from Walrus.
-    await kvPut(
-      context.env,
-      followingKey(userKey),
-      JSON.stringify(followingFrom(await context.store(userKey).list("follow"))),
-    );
+    // Written only when there is something to remember, so a new install costs no KV write.
+    const rebuilt = followingFrom(await context.store(userKey).list("follow"));
+    if (rebuilt.length > 0) await kvPut(context.env, followingKey(userKey), JSON.stringify(rebuilt));
   }
   const [people, scores] = await Promise.all([
     readFollowing(context, userKey).then((addresses) => resolveFollowed(context, addresses)),

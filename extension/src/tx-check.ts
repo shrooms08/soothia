@@ -76,6 +76,7 @@ function checkStake(data: Data, expected: Extract<ExpectedTx, { kind: "stake" }>
   refuseIf(amountBytes.length !== 8, "The amount is malformed.");
   refuseIf(bcs.u64().parse(amountBytes) !== expected.amountMist, "The amount differs from what you chose.");
 
+  checkGasBudget(data);
   const call = checkTarget(data.commands[1], "stake");
   refuseIf(call.arguments.length !== STAKE_ARGUMENTS, "The stake call has the wrong arguments.");
   const [config, pool, side, coin, pickHash, clock] = call.arguments;
@@ -170,6 +171,7 @@ function checkWithdraw(data: Data, expected: Extract<ExpectedTx, { kind: "withdr
 
 function checkClaim(data: Data, expected: Extract<ExpectedTx, { kind: "claim" }>): void {
   refuseIf(data.commands.length !== 1, "It does more than claim.");
+  checkGasBudget(data);
   const call = checkTarget(data.commands[0], "claim");
   refuseIf(call.arguments.length !== 2, "The claim call has the wrong arguments.");
   refuseIf(

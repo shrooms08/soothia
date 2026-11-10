@@ -6,6 +6,13 @@ All notable changes to Soothia. The format follows [Keep a Changelog](https://ke
 
 Total Recall: calls proven on Sui and remembered on Walrus Memory, lessons from the record, SUI staking, public profiles and following, and premium calls paid over x402. Extension 0.16.0. Tagged `v1.0.0-total-recall`.
 
+### Security
+
+- Audit of 10 Nov 2026 in `docs/security-audit.md`: 0 Critical, 5 High, 11 Medium, 9 Low, 14 Info.
+- Extension 0.16.2: wallet actions run only on soothia.fun and ESPN pages, because any other page could forge the wallet's answers; Withdraw all refuses a wallet connected anywhere else. The agent counts a payment as spent once it is signed. Gas caps on stakes and claims, https-only links to known hosts, and malformed feed items skipped.
+- Worker: premium calls hash with a random salt (`canonicalPickV2`), so their side can't be searched from the Sui commit; no stake on a premium call before kickoff; one call per match however it is spelled; `/detect` caches by content and caps model calls per IP per day; `/recall/status` is cached and leaks no upstream errors; one-sided pools are voided instead of charging winners a fee; a paid unlock opens from Walrus if KV lost it; `nosniff` on every answer; fewer KV writes for new installs and unsettleable calls.
+- Site: proof links must be https on suivision.xyz; `.DS_Store` is never served.
+
 ### Fixed
 
 - Extension 0.16.1: the hidden attribute now always wins over a class's display rule inside the shadow root. "Make it premium" showed for callers who aren't eligible, and empty wallet pickers kept their space.

@@ -303,6 +303,17 @@ async function settle(context: Context, entry: PremiumEntry, userKey: string, he
   });
 }
 
+async function boughtInWalrus(context: Context, userKey: string, pickId: string): Promise<UnlockReceipt | null> {
+  let records: { pickId: string; digest: string; priceMist: string; at: string }[];
+  try {
+    records = await context.store(userKey).list("unlock");
+  } catch {
+    return null;
+  }
+  const found = records.find((record) => record.pickId === pickId);
+  return found ? { digest: found.digest, priceMist: found.priceMist, at: found.at } : null;
+}
+
 async function callRoute(context: Context, userKey: string, pickId: string): Promise<Response> {
   const { request, env, nowMs } = context;
   if (!PICK_ID.test(pickId)) return json(request, { error: "invalid_pick_id" }, 400);
@@ -312,6 +323,9 @@ async function callRoute(context: Context, userKey: string, pickId: string): Pro
   if (nowMs >= entry.kickoffMs) return reveal(context, entry, "kickoff", null);
   const bought = await env.SOOTHIA_CACHE.get<UnlockReceipt>(unlockKey(userKey, pickId), "json");
   if (bought) return reveal(context, entry, "unlocked", bought);
+  // KV can run out of writes for the day; the Walrus memory of a payment still counts.
+  const remembered = await boughtInWalrus(context, userKey, pickId);
+  if (remembered) return reveal(context, entry, "unlocked", remembered);
 
   // A call with no commit on Sui has nothing to prove it came before the match.
   if (!entry.item.proof) return json(request, { error: "premium_no_proof" }, 409);

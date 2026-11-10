@@ -2,7 +2,7 @@
 // Run: cd worker && npx tsx scripts/recall/verify.ts
 
 import { sha256Hex } from "../../src/recall/picks";
-import { canonicalPick } from "../../src/recall/records";
+import { pickHashInput } from "../../src/recall/records";
 import { verifyCommit } from "../../src/recall/sui";
 import { formatGap, loadEnvOrExit, loadPicks, openStore, safeError } from "./shared";
 
@@ -18,7 +18,7 @@ async function main(): Promise<number> {
   let proven = 0;
   for (const pick of committed) {
     const match = pick.fixture ? `${pick.fixture.home} vs ${pick.fixture.away}` : pick.question;
-    if ((await sha256Hex(canonicalPick(pick))) !== pick.hash) {
+    if ((await sha256Hex(pickHashInput(pick))) !== pick.hash) {
       console.log(`${pick.id} ${match}: PROBLEM: the saved pick does not match its hash`);
       continue;
     }

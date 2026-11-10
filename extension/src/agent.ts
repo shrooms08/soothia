@@ -26,6 +26,7 @@ import {
 } from "./premium-logic";
 import { matchLine, type FeedEntry } from "./social-logic";
 import { checkTransaction, type ExpectedTx } from "./tx-check";
+import { isWalletSite } from "./wallet-site";
 
 const MAX_RECEIPTS = 50;
 
@@ -135,8 +136,8 @@ export function createAgent(deps: AgentDeps) {
         continue;
       }
       if (!result.receipt) {
-        // Nothing was charged for this one: it was already open.
-        await changeSpend(-price);
+        // Already open and nothing was signed, so nothing was spent.
+        if (!result.signed) await changeSpend(-price);
         continue;
       }
       const receipt: AgentReceipt = {
@@ -155,10 +156,13 @@ export function createAgent(deps: AgentDeps) {
   async function withdraw(): Promise<{ digest?: string; error?: string }> {
     const pair = await keypair();
     if (!pair) return { error: "no_agent" };
-    const saved = (await storage.get(SUI_WALLET_KEY))[SUI_WALLET_KEY] as { address?: unknown } | undefined;
+    const saved = (await storage.get(SUI_WALLET_KEY))[SUI_WALLET_KEY] as
+      { address?: unknown; site?: unknown } | undefined;
     // From storage rather than the message, so only the connected wallet can receive it.
     const recipient = saved?.address;
     if (typeof recipient !== "string") return { error: "no_wallet" };
+    // A wallet saved on any other site may be a page's forgery, and this sends everything.
+    if (typeof saved?.site !== "string" || !isWalletSite(saved.site)) return { error: "wallet_untrusted" };
     const sender = pair.toSuiAddress();
     const built = await deps.relay("/premium/transfer/build", { sender, recipient });
     if (!built.ok) return { error: codeOf(built) };

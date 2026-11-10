@@ -284,14 +284,26 @@ test("a build error keeps its code", async () => {
   assert.match(unlockFailureText(result, String), /Not enough SUI/);
 });
 
-test("a lost answer after paying may have been paid, and a refusal hasn't", async () => {
+test("once a payment is signed, every failure counts as maybe paid", async () => {
   const lost = unlockDeps([required, { status: 0, required: null, body: null }]);
   assert.deepEqual(await runUnlock(lost.deps), { ok: false, code: "network", maybePaid: true });
   const refusedPayment = unlockDeps([
     required,
     { status: 402, required: null, body: { error: "payment_failed", reason: "wrong_amount" } },
   ]);
-  assert.deepEqual(await runUnlock(refusedPayment.deps), { ok: false, code: "wrong_amount", maybePaid: false });
+  assert.deepEqual(await runUnlock(refusedPayment.deps), { ok: false, code: "wrong_amount", maybePaid: true });
+  for (const answer of [
+    { status: 500, required: null, body: null },
+    { status: 402, required: null, body: { error: "payment_failed", reason: "nonce_used" } },
+  ]) {
+    const after = unlockDeps([required, answer]);
+    assert.equal(((await runUnlock(after.deps)) as { maybePaid: boolean }).maybePaid, true);
+  }
+  const noReceipt = unlockDeps([
+    required,
+    { status: 200, required: null, body: { handle: "ada", call: openCall, access: "kickoff", receipt: null } },
+  ]);
+  assert.equal(((await runUnlock(noReceipt.deps)) as { signed: boolean }).signed, true);
   const unclear = unlockDeps([
     required,
     { status: 402, required: null, body: { error: "payment_failed", reason: "broadcast_failed" } },
@@ -402,7 +414,13 @@ function feed(items: unknown[], overrides: Partial<SocialHost> = {}) {
 }
 
 const feedEntry = (item: unknown = locked("p1", PRICE)) => ({ handle: "ada", score: 612, item, myCall: null });
-const unlocked = async (): Promise<UnlockResult> => ({ ok: true, handle: "ada", call: openCall, receipt });
+const unlocked = async (): Promise<UnlockResult> => ({
+  ok: true,
+  handle: "ada",
+  call: openCall,
+  receipt,
+  signed: true,
+});
 
 test("a locked row shows the match, price and proof, and nothing of the side", async () => {
   const f = feed([feedEntry()], { unlock: unlocked });

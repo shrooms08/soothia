@@ -177,9 +177,12 @@ export async function sweepStake(
     const decision = decideSettlement(entry.subject, search, Number(pool.closeMs), nowMs);
     if (decision.action === "wait" || !(await mayTransact())) return;
 
-    if (decision.action === "void") {
+    // The contract charges its fee on the whole pot even when nobody lost, so winners
+    // would get back less than they staked. A refund is fairer, until the contract changes.
+    const losingSide = decision.action === "resolve" ? (decision.outcomeYes ? pool.no : pool.yes) : null;
+    if (decision.action === "void" || losingSide === 0n) {
       const digest = await chain!.voidPool(pool.id);
-      record(pool.id, "void", { digest, detail: decision.reason });
+      record(pool.id, "void", { digest, detail: decision.action === "void" ? decision.reason : "no_losing_stakes" });
       await drop(pool.id);
       return;
     }

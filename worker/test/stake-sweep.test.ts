@@ -415,3 +415,21 @@ test("no chain configured means no sweep", async () => {
   const env = { SOOTHIA_CACHE: { list: async () => assert.fail("should not list") } } as unknown as Env;
   assert.deepEqual(await sweepStake(env), { checked: 0, actions: [] });
 });
+
+test("a pool where nobody backed the losing side is voided, so winners aren't charged a fee", async () => {
+  const h = harness({ pool: pool({ yes: 2n * SUI, no: 0n }) });
+  h.index();
+  const result = await h.run(AFTER_MATCH);
+  assert.deepEqual(h.calls, [`void ${POOL}`]);
+  assert.equal(result.actions[0].detail, "no_losing_stakes");
+});
+
+test("a pool with stakes on both sides still resolves", async () => {
+  const h = harness({
+    pool: pool({ yes: 2n * SUI, no: SUI }),
+    after: pool({ ...RESOLVED_POOL, resolvedAtMs: BigInt(AFTER_MATCH.getTime()) }),
+  });
+  h.index();
+  await h.run(AFTER_MATCH);
+  assert.match(h.calls[0], /^resolve /);
+});

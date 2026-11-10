@@ -11,6 +11,7 @@ import type { PickRecord, Side, StakeRecord } from "../recall/records";
 import { identify, storeFor } from "../recall/routes";
 import { cacheGet, cachePut, kvPut } from "../store";
 import { pushStakeToFeed } from "../social/feed";
+import { isHidden } from "../social/premium";
 import { ADMIN_ROUTES } from "./admin";
 import { DRILL_ROUTES } from "./drill";
 import { stakeSettings, tatumStakeChain, type StakeChain, type StakeSettings } from "./chain";
@@ -249,6 +250,8 @@ async function buildRoute(context: Context, userKey: string): Promise<Response> 
   const pick = await loadPick(context, userKey, body.pickId);
   if (!pick.commit) refuse(400, "pick_not_committed");
   if (!(Date.parse(pick.fixture.startISO) - nowMs > MIN_KICKOFF_LEAD_MS)) refuse(409, "too_close_to_kickoff");
+  // A stake is public on Sui and names its side, so it would give a hidden call away.
+  if (isHidden(pick.premium, pick.fixture.startISO, nowMs)) refuse(409, "premium_stake_locked");
 
   const side = leanYes(pick);
   const identity = await identityOf(pick.fixture, pick.fixture.subject);

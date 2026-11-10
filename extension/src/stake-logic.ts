@@ -311,6 +311,11 @@ export function walletErrorText(
   message: string,
   nothingHappened = "Nothing was staked.",
 ): { text: string; retry: boolean } {
+  if (message.includes("wallet_untrusted_site"))
+    return {
+      text: "Wallets connect only on soothia.fun and ESPN pages, because other sites could fake what your wallet says. Open soothia.fun and try there.",
+      retry: false,
+    };
   if (/reject|denied|declined|cancel/i.test(message))
     return { text: `You cancelled in your wallet. ${nothingHappened}`, retry: true };
   if (/insufficient|not enough|no valid gas|gas (coin|balance)/i.test(message))

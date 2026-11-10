@@ -2,9 +2,11 @@
 // disconnect, and a debug-only "Test wallet" that connects and shows the address.
 
 import { button, el } from "./dom";
+import { walletErrorText } from "./stake-logic";
 import { SUI_WALLET_KEY } from "./messages";
 import type { WalletBridge } from "./wallet-client";
 import type { ConnectedWallet, WalletSummary } from "./wallet-protocol";
+import { currentSite } from "./wallet-site";
 
 export const shortAddress = (address: string): string => `${address.slice(0, 6)}…${address.slice(-4)}`;
 
@@ -54,7 +56,7 @@ export function createWalletSettings(bridge: WalletBridge, storage: WalletStorag
     try {
       wallets = (await bridge.call("list")) as WalletSummary[];
     } catch (error) {
-      show(problem(error));
+      show(walletErrorText(problem(error), "").text);
       return;
     }
     if (wallets.length === 0) {
@@ -84,7 +86,7 @@ export function createWalletSettings(bridge: WalletBridge, storage: WalletStorag
         address: string;
         walletName: string;
       };
-      connected = { address, walletId: wallet.id, walletName };
+      connected = { address, walletId: wallet.id, walletName, site: currentSite() };
       await storage.write(connected);
       render();
     } catch (error) {

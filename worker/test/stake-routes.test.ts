@@ -866,3 +866,12 @@ test("the Worker rate limits stake routes by IP", async () => {
   for (let i = 0; i < 30; i++) assert.equal((await hit()).status, 404);
   assert.equal((await hit()).status, 429);
 });
+
+test("a premium call can't be staked before kickoff, because the stake would show its side", async () => {
+  const h = harness({ picks: [pick({ premium: { priceMist: "10000000" } })] });
+  const { status, body } = await build(h);
+  assert.equal(status, 409);
+  assert.equal(body.error, "premium_stake_locked");
+  assert.deepEqual(h.created, []);
+  assert.deepEqual(h.built, []);
+});

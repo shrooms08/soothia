@@ -45,6 +45,8 @@ export interface ConnectedWallet {
   address: string;
   walletId: string;
   walletName: string;
+  /** The site it was connected on. Older saves have none. */
+  site?: string;
 }
 
 export interface MessageLike {

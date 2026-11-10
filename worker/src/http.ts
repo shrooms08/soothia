@@ -52,7 +52,12 @@ export function json(
 ): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "Content-Type": "application/json", ...corsHeaders(request), ...extraHeaders },
+    headers: {
+      "Content-Type": "application/json",
+      "X-Content-Type-Options": "nosniff",
+      ...corsHeaders(request),
+      ...extraHeaders,
+    },
   });
 }
 

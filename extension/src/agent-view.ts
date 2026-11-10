@@ -135,7 +135,9 @@ export function createAgentSection(host: AgentHost): HTMLElement {
           report(
             result?.error === "insufficient_balance"
               ? "There's too little here to send."
-              : "That didn't work. Please try again.",
+              : result?.error === "wallet_untrusted"
+                ? "Reconnect your wallet on soothia.fun or an ESPN page first: Settings, Disconnect, then Connect Sui wallet."
+                : "That didn't work. Please try again.",
           );
           return;
         }

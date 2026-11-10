@@ -5,6 +5,7 @@ import type { ExpectedTx } from "./tx-check";
 import { isOwnershipMessage, signChecked, signOnlyChecked, type TxChecker, type WalletBridge } from "./wallet-client";
 import type { ConnectedWallet, WalletSummary } from "./wallet-protocol";
 import { isConnectedWallet, type WalletStorage } from "./wallet-settings";
+import { currentSite } from "./wallet-site";
 
 export interface WalletAccess {
   current(): Promise<ConnectedWallet | null>;
@@ -37,7 +38,7 @@ export function createWalletAccess(bridge: WalletBridge, storage: WalletStorage,
         address: string;
         walletName: string;
       };
-      const connected: ConnectedWallet = { address, walletId: wallet.id, walletName };
+      const connected: ConnectedWallet = { address, walletId: wallet.id, walletName, site: currentSite() };
       await storage.write(connected);
       return connected;
     },

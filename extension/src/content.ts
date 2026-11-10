@@ -74,6 +74,7 @@ import { guarded, installGuards, isContextDead, safe } from "./guard";
 import { createStakeRow, type StakeRow } from "./stake-row";
 import { stakeTileIds } from "./stake-logic";
 import { createWalletAccess } from "./wallet-access";
+import { isWalletSite, untrustedSiteBridge } from "./wallet-site";
 import type { AgentRun } from "./agent";
 import { runUnlock, type AgentSettings, type PremiumCallResponse, type UnlockResult } from "./premium-logic";
 import type { WalletSummary } from "./wallet-protocol";
@@ -408,7 +409,11 @@ async function mount(): Promise<void> {
   }
   const recallField = recallFieldNode();
 
-  const walletBridge = createWalletBridge(() => chrome.runtime.getURL("wallet-bridge.js"));
+  // A hostile page can forge the bridge's answers, so it exists only on trusted sites.
+  const walletBridge =
+    location.protocol === "https:" && isWalletSite(location.hostname)
+      ? createWalletBridge(() => chrome.runtime.getURL("wallet-bridge.js"))
+      : untrustedSiteBridge;
   const walletAccess = createWalletAccess(walletBridge, chromeWalletStorage, checkInBackground);
   const walletSettings = createWalletSettings(walletBridge, chromeWalletStorage, () => {
     if (!card.hidden) layout();
