@@ -8,6 +8,7 @@ Total Recall: calls proven on Sui and remembered on Walrus Memory, lessons from 
 
 ### Fixed
 
+- Extension 0.16.5: on a match page with a preview article, the article went to `/detect` with the match, so the Worker drafted claims from the prose. Those claims had no fixture: "Make it premium" didn't show, and a call couldn't be settled by ESPN or backed. A page with a match now always asks for the match claims.
 - Extension 0.16.4: the orb didn't appear at all in 0.16.3. The new Link record field laid out the card while the card was still being built, before the orb's position was loaded, so mounting stopped with "Cannot access 'position' before initialization" and the script's guard hid it. The field no longer lays out while it is built, and a new test mounts the real content script from a cold start.
 
 ### Changed

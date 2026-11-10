@@ -73,6 +73,7 @@ import { describeFixture, findFixture } from "./fixture";
 import { guarded, installGuards, isContextDead, safe } from "./guard";
 import { createStakeRow, type StakeRow } from "./stake-row";
 import { stakeTileIds } from "./stake-logic";
+import { detectPage } from "./detect-page";
 import { createRecallField } from "./recall-field";
 import { createSettingsSection } from "./settings-view";
 import { createWalletAccess } from "./wallet-access";
@@ -1232,24 +1233,20 @@ async function mount(): Promise<void> {
       emitScanEvent({ done: "skipped", path: "none" });
       return;
     }
-    const page: PageContext =
-      read.kind === "page"
-        ? read.page
-        : {
-            url: watchedUrl.split("#")[0],
-            site: location.hostname.replace(/^www\./, ""),
-            title: document.title.slice(0, 300),
-            text: fixture ? fixture.evidence.join("\n") : "",
-          };
+    const page: PageContext = detectPage(read, fixture, {
+      url: watchedUrl.split("#")[0],
+      site: location.hostname.replace(/^www\./, ""),
+      title: document.title.slice(0, 300),
+    });
     const fixtureNote = fixture ? describeFixture(fixture) : "";
     setScan({
       read:
-        read.kind === "page"
+        read.kind === "page" && !fixture
           ? read.info
           : { site: page.site, chars: page.text.length, preview: fixtureNote.slice(0, 80) },
       state: refresh ? "running (scan again)" : "running",
       detect: null,
-      path: fixture && read.kind !== "page" ? "fixture" : "prose",
+      path: fixture ? "fixture" : "prose",
       fixture: fixtureNote,
     });
     const started = Date.now();
@@ -1279,7 +1276,7 @@ async function mount(): Promise<void> {
       render({ kind: "error", reason: result.reason });
       emitScanEvent({ done: "error" });
     } else {
-      const path = result.debug.path ?? (fixture && read.kind !== "page" ? "fixture" : "prose");
+      const path = result.debug.path ?? (fixture ? "fixture" : "prose");
       setScan({ state: "done", detect: result.debug, path: result.tiles.length === 0 ? "none" : path });
       if (result.tiles.length === 0) render({ kind: "empty" });
       else render({ kind: "tiles", tiles: result.tiles.slice(0, 3) });
